@@ -1283,11 +1283,11 @@ import membrosSkill from '../skills/membros.md?raw';
           </div>
           
           <div id="custom-api-fields" style="display: none; background: var(--bg-elevated); padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px dashed var(--border);">
-            <div class="form-group">
+            <div class="form-group" id="base-url-group">
               <label class="form-label">Base URL Completa</label>
               <input type="text" class="form-control" id="api-base-url-input" placeholder="Ex: https://api.together.xyz/v1/chat/completions" />
             </div>
-            <div class="form-group">
+            <div class="form-group" id="model-name-group">
               <label class="form-label">Nome do Modelo <span class="text-secondary" style="font-weight: normal;">(Opcional)</span></label>
               <input type="text" class="form-control" id="api-model-input" placeholder="Pode deixar em branco se não souber" />
             </div>
@@ -1459,7 +1459,7 @@ import membrosSkill from '../skills/membros.md?raw';
 
       if (['openai', 'groq', 'openrouter', 'deepseek', 'grok', 'custom'].includes(config.provider)) {
         let url = 'https://api.openai.com/v1/chat/completions';
-        let model = 'gpt-4o';
+        let model = config.model || 'gpt-4o';
         let headers: any = {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${config.key}`
@@ -1467,15 +1467,15 @@ import membrosSkill from '../skills/membros.md?raw';
         
         if (config.provider === 'groq') {
           url = 'https://api.groq.com/openai/v1/chat/completions';
-          model = 'llama3-70b-8192';
+          model = config.model || 'llama3-70b-8192';
         } else if (config.provider === 'openrouter') {
           url = 'https://openrouter.ai/api/v1/chat/completions';
-          model = 'anthropic/claude-3.5-sonnet'; // fallback default
+          model = config.model || 'anthropic/claude-3.5-sonnet'; // fallback default
           headers['HTTP-Referer'] = window.location.href;
           headers['X-Title'] = 'Painel de Conteúdo';
         } else if (config.provider === 'deepseek') {
           url = 'https://api.deepseek.com/chat/completions';
-          model = 'deepseek-chat';
+          model = config.model || 'deepseek-chat';
         } else if (config.provider === 'grok') {
           url = 'https://api.x.ai/v1/chat/completions';
           model = 'grok-beta';
@@ -1527,17 +1527,23 @@ import membrosSkill from '../skills/membros.md?raw';
         resultText = data.content[0].text;
 
       } else if (config.provider === 'gemini') {
-        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${config.key}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-            generationConfig: { temperature: 0.7 }
-          })
-        });
+        const geminiModel = (config.model && config.model.trim()) ? config.model.trim() : 'gemini-2.5-flash';
+        try {
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${config.key}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+              generationConfig: { temperature: 0.7 }
+            })
+          });
+        } catch(err) {
+          throw new Error('Falha na rede ou CORS. O modelo pode não estar liberado ainda para a sua chave.');
+        }
+        
         const data = await response.json();
         if (!response.ok) throw new Error(data.error?.message || 'Erro no Gemini');
         resultText = data.candidates[0].content.parts[0].text;
@@ -2052,9 +2058,21 @@ import membrosSkill from '../skills/membros.md?raw';
     function toggleCustomFields() {
       if (!customFields) return;
       const val = providerSelect.value;
+      const baseUrlGroup = document.getElementById('base-url-group');
+      
       if (val === 'custom') {
         customFields.style.display = 'block';
+        if (baseUrlGroup) baseUrlGroup.style.display = 'block';
         if (getKeyLink) getKeyLink.style.display = 'none';
+      } else if (val === 'gemini') {
+        customFields.style.display = 'block';
+        if (baseUrlGroup) baseUrlGroup.style.display = 'none';
+        const modelGroup = document.getElementById('model-name-group');
+        if (modelGroup) modelGroup.style.display = 'block';
+        if (getKeyLink) {
+          getKeyLink.style.display = 'flex';
+          getKeyLink.href = apiLinks[val] || '#';
+        }
       } else {
         customFields.style.display = 'none';
         if (getKeyLink) {
@@ -2133,7 +2151,32 @@ import membrosSkill from '../skills/membros.md?raw';
       } else {
         resultDiv.style.color = '#ef4444'; // danger red
         resultDiv.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
-        resultDiv.innerHTML = '❌ <strong>Falha na conexão.</strong> Verifique sua chave, tente novamente ou verifique se você tem saldo na plataforma.';
+        resultDiv.innerHTML = '❌ <strong>Falha na conexão.</strong> Verifique sua chave ou saldo.';
+        
+        if (provider === 'gemini') {
+          try {
+            resultDiv.innerHTML += '<br><br><span style="color:var(--text-secondary)">Buscando lista de modelos permitidos para essa chave...</span>';
+            const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key.trim()}`);
+            const listData = await listRes.json();
+            if (listData.models && listData.models.length > 0) {
+              const supportedModels = listData.models
+                .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+                .map((m: any) => m.name.replace('models/', ''));
+              
+              if (supportedModels.length > 0) {
+                 resultDiv.innerHTML = `⚠️ <strong>O modelo atual falhou, mas sua chave é válida!</strong><br><br>Estes são os modelos exatos permitidos para a sua chave:<br><br><div style="font-family:monospace; font-size:12px; line-height:1.6; color:var(--text-primary);"> • ${supportedModels.join('<br> • ')}</div><br>➡️ Copie um desses nomes e cole no campo "Nome do Modelo".`;
+                 resultDiv.style.color = '#eab308';
+                 resultDiv.style.backgroundColor = 'rgba(234, 179, 8, 0.1)';
+              } else {
+                 resultDiv.innerHTML += '<br><br>Sua chave é válida, mas não tem permissão para nenhum modelo de geração de texto (generateContent).';
+              }
+            } else if (listData.error) {
+               resultDiv.innerHTML += `<br><br>Erro ao listar modelos: ${listData.error.message}`;
+            }
+          } catch(e) {
+            console.error('Falha ao listar modelos', e);
+          }
+        }
       }
     });
   });
