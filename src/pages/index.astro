@@ -22,7 +22,7 @@ import membrosSkill from '../skills/membros.md?raw';
         <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <div class="mobile-brand">
-        <div class="sidebar-brand-icon" style="width: 28px; height: 28px; font-size: 13px;">S</div>
+        <img src="/logo.svg" alt="StudioOS" class="sidebar-brand-icon" style="width: 28px; height: 28px;" />
         <span style="font-weight: 600; font-size: 14px;">StudioOS</span>
       </div>
       <div style="width: 22px;"></div>
@@ -34,7 +34,7 @@ import membrosSkill from '../skills/membros.md?raw';
     <!-- ========== SIDEBAR ========== -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
-        <div class="sidebar-brand-icon">S</div>
+        <img src="/logo.svg" alt="StudioOS" class="sidebar-brand-icon" width="36" height="36" />
         <div>
           <div class="sidebar-brand-text">StudioOS</div>
           <div class="sidebar-brand-sub">11 ferramentas</div>
@@ -105,6 +105,16 @@ import membrosSkill from '../skills/membros.md?raw';
           <div class="nav-item" data-view="membros">
             <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
             <span>Área de Membros</span>
+          </div>
+        </nav>
+      </div>
+
+      <div>
+        <div class="nav-section-title">Histórico</div>
+        <nav class="nav-menu">
+          <div class="nav-item" data-view="historico">
+            <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span>Histórico de IA</span>
           </div>
         </nav>
       </div>
@@ -390,6 +400,10 @@ import membrosSkill from '../skills/membros.md?raw';
             <div class="form-group">
               <label class="form-label">Sobre o que é o conteúdo?</label>
               <textarea class="form-control" id="hook-tema" placeholder="Ex: Investir em FIIs com pouco dinheiro não compensa mais"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Promessa Principal</label>
+              <textarea class="form-control" id="hook-promessa" placeholder="Ex: Ficar rico rápido"></textarea>
             </div>
             <div class="form-group">
               <label class="form-label">Plataforma</label>
@@ -1128,6 +1142,124 @@ import membrosSkill from '../skills/membros.md?raw';
       </div>
 
       <!-- ================================ -->
+      <!-- VIEW: HISTÓRICO                  -->
+      <!-- ================================ -->
+      <div id="view-historico" class="view-section">
+        <div class="page-header flex justify-between items-center">
+          <div>
+            <h1 class="display">Histórico de IA</h1>
+            <p class="text-secondary">Todos os resultados gerados pelas ferramentas.</p>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+            <div id="custom-date-range" style="display: none; gap: 4px; align-items: center;">
+              <input type="datetime-local" id="custom-date-start" class="btn" style="width: 142px; padding: 0 8px; font-weight: 500; font-size: 12.5px; text-align: center;" title="De (Data/Hora)" />
+              <span class="text-secondary" style="font-size: 12px;">até</span>
+              <input type="datetime-local" id="custom-date-end" class="btn" style="width: 142px; padding: 0 8px; font-weight: 500; font-size: 12.5px; text-align: center;" title="Até (Data/Hora)" />
+            </div>
+            <div class="custom-select" id="wrapper-period-select">
+              <select id="history-period-select" style="display: none;">
+                <option value="all" selected>Todo Período</option>
+                <option value="today">Hoje</option>
+                <option value="7days">Últimos 7 dias</option>
+                <option value="30days">Últimos 30 dias</option>
+                <option value="custom">Personalizado...</option>
+              </select>
+              <button class="btn custom-select-btn" id="btn-period-select">
+                <span class="selected-text">Todo Período</span>
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="opacity: 0.5;"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <div class="dropdown-menu">
+                <div class="dropdown-item active" data-value="all">Todo Período</div>
+                <div class="dropdown-item" data-value="today">Hoje</div>
+                <div class="dropdown-item" data-value="7days">Últimos 7 dias</div>
+                <div class="dropdown-item" data-value="30days">Últimos 30 dias</div>
+                <div class="dropdown-item" data-value="custom">Personalizado...</div>
+              </div>
+            </div>
+
+            <div style="position: relative;" id="wrapper-export-all">
+              <button class="btn" id="btn-export-all" style="border-color: var(--border);" title="Exportar Todo o Histórico">
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right: 4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                Exportar Tudo
+              </button>
+              <div class="dropdown-menu" id="menu-export-all" style="right: 0; min-width: 140px;">
+                <div class="dropdown-item" data-format="md">Como .md</div>
+                <div class="dropdown-item" data-format="txt">Como .txt</div>
+                <div class="dropdown-item" data-format="doc">Como .doc</div>
+              </div>
+            </div>
+            <button class="btn" id="btn-acessar-lixeira" style="border-color: var(--border);">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right: 4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              Lixeira
+            </button>
+            <button class="btn" id="btn-limpar-historico" style="border-color: var(--danger); color: var(--danger);">Limpar Tudo</button>
+          </div>
+        </div>
+        
+        <div id="historico-empty" class="text-secondary" style="text-align: center; margin-top: 40px; padding: 40px; background: var(--bg-elevated); border-radius: 12px; border: 1px dashed var(--border);">
+          <svg style="width: 56px; height: 56px; margin: 0 auto 12px; opacity: 0.4;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <p>Nenhum histórico encontrado.</p>
+        </div>
+
+        <div id="historico-list" class="grid grid-1" style="gap: 16px; display: none;">
+          <!-- Items inserted via JS -->
+        </div>
+      </div>
+
+      <!-- ================================ -->
+      <!-- VIEW: LIXEIRA                    -->
+      <!-- ================================ -->
+      <div id="view-lixeira" class="view-section">
+        <div class="page-header flex justify-between items-center">
+          <div>
+            <h1 class="display">Lixeira</h1>
+            <p class="text-secondary">Itens apagados recentemente do seu histórico.</p>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+            <div id="custom-date-range-trash" style="display: none; gap: 4px; align-items: center;">
+              <input type="datetime-local" id="custom-date-start-trash" class="btn" style="width: 142px; padding: 0 8px; font-weight: 500; font-size: 12.5px; text-align: center;" title="De (Data/Hora)" />
+              <span class="text-secondary" style="font-size: 12px;">até</span>
+              <input type="datetime-local" id="custom-date-end-trash" class="btn" style="width: 142px; padding: 0 8px; font-weight: 500; font-size: 12.5px; text-align: center;" title="Até (Data/Hora)" />
+            </div>
+            <div class="custom-select" id="wrapper-period-select-trash">
+              <select id="trash-period-select" style="display: none;">
+                <option value="all" selected>Todo Período</option>
+                <option value="today">Hoje</option>
+                <option value="7days">Últimos 7 dias</option>
+                <option value="30days">Últimos 30 dias</option>
+                <option value="custom">Personalizado...</option>
+              </select>
+              <button class="btn custom-select-btn" id="btn-period-select-trash">
+                <span class="selected-text">Todo Período</span>
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="opacity: 0.5;"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <div class="dropdown-menu">
+                <div class="dropdown-item active" data-value="all">Todo Período</div>
+                <div class="dropdown-item" data-value="today">Hoje</div>
+                <div class="dropdown-item" data-value="7days">Últimos 7 dias</div>
+                <div class="dropdown-item" data-value="30days">Últimos 30 dias</div>
+                <div class="dropdown-item" data-value="custom">Personalizado...</div>
+              </div>
+            </div>
+            <button class="btn" id="btn-voltar-historico" style="border-color: var(--border);">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right: 4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+              Voltar
+            </button>
+            <button class="btn" id="btn-esvaziar-lixeira" style="border-color: var(--danger); color: var(--danger);">Esvaziar Lixeira</button>
+          </div>
+        </div>
+        
+        <div id="lixeira-empty" class="text-secondary" style="text-align: center; margin-top: 40px; padding: 40px; background: var(--bg-elevated); border-radius: 12px; border: 1px dashed var(--border);">
+          <svg style="width: 56px; height: 56px; margin: 0 auto 12px; opacity: 0.4;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+          <p>A lixeira está vazia.</p>
+        </div>
+
+        <div id="lixeira-list" class="grid grid-1" style="gap: 16px; display: none;">
+          <!-- Items inserted via JS -->
+        </div>
+      </div>
+
+      <!-- ================================ -->
       <!-- VIEW: CONFIGURAÇÕES              -->
       <!-- ================================ -->
       <div id="view-config" class="view-section">
@@ -1141,6 +1273,7 @@ import membrosSkill from '../skills/membros.md?raw';
             <select class="form-control" id="api-provider-select">
               <option value="openai">OpenAI (ChatGPT)</option>
               <option value="anthropic">Anthropic (Claude)</option>
+              <option value="grok">xAI (Grok)</option>
               <option value="gemini">Google (Gemini)</option>
               <option value="groq">Groq</option>
               <option value="openrouter">OpenRouter</option>
@@ -1161,7 +1294,13 @@ import membrosSkill from '../skills/membros.md?raw';
           </div>
 
           <div class="form-group">
-            <label class="form-label">Chave de API</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <label class="form-label" style="margin-bottom: 0;">Chave de API</label>
+              <a id="get-api-key-link" href="#" target="_blank" style="font-size: 13px; color: var(--accent); text-decoration: none; display: flex; align-items: center; gap: 4px;">
+                Obter chave de API
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              </a>
+            </div>
             <input type="password" class="form-control" id="api-key-input" placeholder="Cole sua chave aqui..." />
             <p class="text-secondary mt-8" style="font-size: 12px;">Sua chave fica salva <strong>apenas no seu navegador local</strong>. Ela nunca é enviada para os nossos servidores.</p>
           </div>
@@ -1170,6 +1309,22 @@ import membrosSkill from '../skills/membros.md?raw';
             <button class="btn" id="btn-test-key" style="background: var(--bg-elevated); border: 1px solid var(--border);">Testar Conexão</button>
           </div>
           <div id="test-connection-result" style="margin-top: 16px; font-size: 13px; display: none; padding: 12px; border-radius: 6px;"></div>
+        </div>
+        
+        <div class="card mt-24" style="max-width: 600px;">
+          <h3 class="card-title mb-16">Histórico & Lixeira</h3>
+          <div class="form-group">
+            <label class="form-label">Manter itens na lixeira por:</label>
+            <select class="form-control" id="trash-retention-select">
+              <option value="0">Apagar na hora (não usar lixeira)</option>
+              <option value="1">1 dia</option>
+              <option value="7">7 dias (Padrão)</option>
+              <option value="14">14 dias</option>
+              <option value="30">30 dias</option>
+            </select>
+            <p class="text-secondary mt-8" style="font-size: 12px;">Itens apagados do histórico ficarão na lixeira pelo tempo selecionado antes de serem excluídos permanentemente.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-save-trash-settings">Salvar Preferência</button>
         </div>
       </div>
 
@@ -1195,6 +1350,87 @@ import membrosSkill from '../skills/membros.md?raw';
   declare const marked: any;
 
   // ============================================
+  // TOAST NOTIFICATIONS
+  // ============================================
+  function showToast(message: string, type: 'error' | 'success' | 'warning' = 'error') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      container.style.position = 'fixed';
+      container.style.top = '24px';
+      container.style.right = '24px';
+      container.style.zIndex = '9999';
+      container.style.display = 'flex';
+      container.style.flexDirection = 'column';
+      container.style.gap = '12px';
+      document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    const bgColors = { error: '#ef4444', success: '#10b981', warning: '#f59e0b' };
+    toast.style.background = bgColors[type];
+    toast.style.color = 'white';
+    toast.style.padding = '14px 20px';
+    toast.style.borderRadius = '8px';
+    toast.style.boxShadow = '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1)';
+    toast.style.fontSize = '14px';
+    toast.style.fontWeight = '500';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-20px)';
+    toast.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+    toast.style.display = 'flex';
+    toast.style.alignItems = 'center';
+    toast.style.justifyContent = 'space-between';
+    toast.style.gap = '16px';
+    toast.style.maxWidth = '400px';
+
+    const msgSpan = document.createElement('span');
+    msgSpan.innerHTML = message;
+    toast.appendChild(msgSpan);
+
+    if (type === 'error' && (message.toLowerCase().includes('chave') || message.toLowerCase().includes('api') || message.toLowerCase().includes('ia'))) {
+      const btn = document.createElement('button');
+      btn.innerText = 'Configurar';
+      btn.style.background = 'rgba(255,255,255,0.2)';
+      btn.style.border = 'none';
+      btn.style.color = 'white';
+      btn.style.padding = '6px 12px';
+      btn.style.borderRadius = '6px';
+      btn.style.cursor = 'pointer';
+      btn.style.fontSize = '13px';
+      btn.style.fontWeight = '600';
+      btn.style.whiteSpace = 'nowrap';
+      
+      btn.onmouseover = () => btn.style.background = 'rgba(255,255,255,0.3)';
+      btn.onmouseout = () => btn.style.background = 'rgba(255,255,255,0.2)';
+      
+      btn.onclick = () => {
+        const configBtn = document.querySelector('[data-view="view-config"]') as HTMLElement;
+        if (configBtn) configBtn.click();
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      };
+      toast.appendChild(btn);
+    }
+
+    container.appendChild(toast);
+    
+    requestAnimationFrame(() => {
+      toast.style.opacity = '1';
+      toast.style.transform = 'translateY(0)';
+    });
+
+    setTimeout(() => {
+      if (toast.parentElement) {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        setTimeout(() => toast.remove(), 300);
+      }
+    }, 6000);
+  }
+
+  // ============================================
   // AI BACKEND (CLIENT-SIDE FETCH)
   // ============================================
   function getApiConfig() {
@@ -1208,8 +1444,8 @@ import membrosSkill from '../skills/membros.md?raw';
 
   async function callAI(systemPrompt: string, userMessage: string, buttonElement: HTMLElement) {
     const config = getApiConfig();
-    if (!config.key) {
-      alert('Por favor, configure sua Chave de API na aba "Configurações" primeiro.');
+    if (!config.key && config.provider !== 'custom') {
+      showToast('⚠️ A Chave de API não foi configurada. Você precisa dela para usar a IA.', 'error');
       return null;
     }
 
@@ -1221,7 +1457,7 @@ import membrosSkill from '../skills/membros.md?raw';
       let response;
       let resultText = '';
 
-      if (['openai', 'groq', 'openrouter', 'deepseek', 'custom'].includes(config.provider)) {
+      if (['openai', 'groq', 'openrouter', 'deepseek', 'grok', 'custom'].includes(config.provider)) {
         let url = 'https://api.openai.com/v1/chat/completions';
         let model = 'gpt-4o';
         let headers: any = {
@@ -1240,6 +1476,9 @@ import membrosSkill from '../skills/membros.md?raw';
         } else if (config.provider === 'deepseek') {
           url = 'https://api.deepseek.com/chat/completions';
           model = 'deepseek-chat';
+        } else if (config.provider === 'grok') {
+          url = 'https://api.x.ai/v1/chat/completions';
+          model = 'grok-beta';
         } else if (config.provider === 'custom') {
           url = config.baseUrl.trim();
           if (!url.endsWith('/chat/completions') && !url.endsWith('/messages')) {
@@ -1304,9 +1543,33 @@ import membrosSkill from '../skills/membros.md?raw';
         resultText = data.candidates[0].content.parts[0].text;
       }
 
+      if (resultText) {
+        try {
+          const activeView = document.querySelector('.main-content > .view-section.active');
+          const toolName = activeView?.querySelector('.display')?.textContent || 'Ferramenta IA';
+          // Ignorar chamadas de teste de API
+          if (userMessage !== 'Teste' && !systemPrompt.includes('assistente de teste')) {
+            const historyRaw = localStorage.getItem('ai_history');
+            const history = historyRaw ? JSON.parse(historyRaw) : [];
+            history.unshift({
+              id: Date.now().toString(),
+              date: new Date().toISOString(),
+              tool: toolName,
+              prompt: userMessage,
+              result: resultText
+            });
+            if (history.length > 50) history.pop();
+            localStorage.setItem('ai_history', JSON.stringify(history));
+            if (typeof (window as any).renderHistory === 'function') {
+              (window as any).renderHistory();
+            }
+          }
+        } catch(e) { console.error('Erro ao salvar histórico', e); }
+      }
+
       return resultText;
     } catch (error: any) {
-      alert('Erro na IA: ' + error.message);
+      showToast('⚠️ Erro na comunicação com a API da IA: ' + error.message, 'error');
       return null;
     } finally {
       buttonElement.innerText = originalText;
@@ -1348,6 +1611,7 @@ import membrosSkill from '../skills/membros.md?raw';
         switchView(viewId);
         navItems.forEach(n => n.classList.remove('active'));
         item.classList.add('active');
+        localStorage.setItem('ai_active_view', viewId);
         closeSidebar();
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
@@ -1361,8 +1625,18 @@ import membrosSkill from '../skills/membros.md?raw';
         navItems.forEach(n => {
           n.classList.toggle('active', n.getAttribute('data-view') === viewId);
         });
+        localStorage.setItem('ai_active_view', viewId);
       });
     });
+
+    // Restore last active view
+    const savedView = localStorage.getItem('ai_active_view');
+    if (savedView) {
+      switchView(savedView);
+      navItems.forEach(n => {
+        n.classList.toggle('active', n.getAttribute('data-view') === savedView);
+      });
+    }
 
     // Tab bars
     document.querySelectorAll('.tab-bar').forEach(bar => {
@@ -1624,10 +1898,18 @@ import membrosSkill from '../skills/membros.md?raw';
     document.getElementById('btn-membros')?.addEventListener('click', async () => {
       const btn = document.getElementById('btn-membros')!;
       const skill = (window as any).SKILLS.membros;
-      const tema = (document.getElementById('memb-tema') as HTMLInputElement).value;
-      const promessa = (document.getElementById('memb-nivel') as HTMLInputElement).value;
+      const fields = [
+        'mem-meta', 'mem-atual', 'mem-historico', 'mem-inscritos', 'mem-views',
+        'mem-unicos', 'mem-divisao', 'mem-shorts', 'mem-nicho', 'mem-cadencia',
+        'mem-live', 'mem-topflop', 'mem-adjacente', 'mem-venda'
+      ];
+      const data = fields.map(id => {
+        const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement;
+        return el ? el.value : '';
+      });
+      const promptData = `Meta: ${data[0]}\nAtual: ${data[1]}\nHistórico: ${data[2]}\nInscritos: ${data[3]}\nViews: ${data[4]}\nÚnicos: ${data[5]}\nDivisão: ${data[6]}\nShorts: ${data[7]}\nNicho: ${data[8]}\nCadência: ${data[9]}\nLive: ${data[10]}\nTop/Flop: ${data[11]}\nAdjacente: ${data[12]}\nVenda: ${data[13]}`;
       
-      const response = await callAI(skill, `Tema: ${tema}\nPromessa/Transformação: ${promessa}`, btn);
+      const response = await callAI(skill, `Formulário do Canal:\n${promptData}`, btn);
       if (!response) return;
 
       const el = document.getElementById('membros-resultado')!;
@@ -1641,8 +1923,8 @@ import membrosSkill from '../skills/membros.md?raw';
     document.getElementById('btn-gerar-titulos')?.addEventListener('click', async () => {
       const btn = document.getElementById('btn-gerar-titulos')!;
       const skill = (window as any).SKILLS.titulos;
-      const ideia = (document.getElementById('tit-ideia') as HTMLTextAreaElement).value;
-      const padroes = (document.getElementById('tit-padrao') as HTMLInputElement).value;
+      const ideia = (document.getElementById('tit-tema') as HTMLInputElement).value;
+      const padroes = (document.getElementById('tit-tops') as HTMLTextAreaElement).value + "\n" + (document.getElementById('tit-flops') as HTMLTextAreaElement).value;
       
       const response = await callAI(skill, `Ideia do vídeo: ${ideia}\nPadrões preferidos: ${padroes}`, btn);
       if (!response) return;
@@ -1664,7 +1946,7 @@ import membrosSkill from '../skills/membros.md?raw';
     document.getElementById('btn-gerar-hooks')?.addEventListener('click', async () => {
       const btn = document.getElementById('btn-gerar-hooks')!;
       const skill = (window as any).SKILLS.hooks;
-      const tema = (document.getElementById('hook-tema') as HTMLInputElement).value;
+      const tema = (document.getElementById('hook-tema') as HTMLTextAreaElement).value;
       const promessa = (document.getElementById('hook-promessa') as HTMLTextAreaElement).value;
       
       const response = await callAI(skill, `Tema: ${tema}\nPromessa Principal: ${promessa}`, btn);
@@ -1687,8 +1969,8 @@ import membrosSkill from '../skills/membros.md?raw';
     document.getElementById('btn-gerar-thumb')?.addEventListener('click', async () => {
       const btn = document.getElementById('btn-gerar-thumb')!;
       const skill = (window as any).SKILLS.thumbnail;
-      const titulo = (document.getElementById('thumb-titulo') as HTMLInputElement).value;
-      const contexto = (document.getElementById('thumb-ideia') as HTMLTextAreaElement).value;
+      const titulo = (document.getElementById('thumb-tema') as HTMLInputElement).value;
+      const contexto = (document.getElementById('thumb-tops') as HTMLTextAreaElement).value;
       
       const response = await callAI(skill, `Título: ${titulo}\nContexto: ${contexto}`, btn);
       if (!response) return;
@@ -1755,12 +2037,30 @@ import membrosSkill from '../skills/membros.md?raw';
     const baseUrlInput = document.getElementById('api-base-url-input') as HTMLInputElement;
     const modelInput = document.getElementById('api-model-input') as HTMLInputElement;
 
+    const getKeyLink = document.getElementById('get-api-key-link') as HTMLAnchorElement;
+
+    const apiLinks: Record<string, string> = {
+      openai: 'https://platform.openai.com/api-keys',
+      anthropic: 'https://console.anthropic.com/settings/keys',
+      gemini: 'https://aistudio.google.com/app/apikey',
+      groq: 'https://console.groq.com/keys',
+      openrouter: 'https://openrouter.ai/keys',
+      deepseek: 'https://platform.deepseek.com/api_keys',
+      grok: 'https://console.x.ai/'
+    };
+
     function toggleCustomFields() {
       if (!customFields) return;
-      if (providerSelect.value === 'custom') {
+      const val = providerSelect.value;
+      if (val === 'custom') {
         customFields.style.display = 'block';
+        if (getKeyLink) getKeyLink.style.display = 'none';
       } else {
         customFields.style.display = 'none';
+        if (getKeyLink) {
+          getKeyLink.style.display = 'flex';
+          getKeyLink.href = apiLinks[val] || '#';
+        }
       }
     }
 
@@ -1776,6 +2076,18 @@ import membrosSkill from '../skills/membros.md?raw';
       if (modelInput) modelInput.value = config.model;
       toggleCustomFields();
     }
+    
+    const trashRetentionSelect = document.getElementById('trash-retention-select') as HTMLSelectElement;
+    if (trashRetentionSelect) {
+      trashRetentionSelect.value = localStorage.getItem('ai_history_trash_days') || '7';
+    }
+    
+    document.getElementById('btn-save-trash-settings')?.addEventListener('click', () => {
+      if (trashRetentionSelect) {
+        localStorage.setItem('ai_history_trash_days', trashRetentionSelect.value);
+        alert('Preferência de lixeira salva!');
+      }
+    });
 
     document.getElementById('btn-save-key')?.addEventListener('click', () => {
       const provider = (document.getElementById('api-provider-select') as HTMLSelectElement).value;
@@ -1842,5 +2154,760 @@ import membrosSkill from '../skills/membros.md?raw';
       el.textContent = String(current + increment);
     }
   }
+
+  // ============================================
+  // HISTÓRICO DE IA
+  // ============================================
+  (window as any).getFilteredHistory = function() {
+    const historyRaw = localStorage.getItem('ai_history');
+    let history = historyRaw ? JSON.parse(historyRaw) : [];
+    
+    const periodSelect = document.getElementById('history-period-select') as HTMLSelectElement;
+    const period = periodSelect ? periodSelect.value : 'all';
+    
+    if (period !== 'all') {
+      const now = new Date();
+      now.setHours(0,0,0,0);
+      
+      history = history.filter((item: any) => {
+        const itemDate = new Date(item.date);
+        if (period === 'today') {
+           itemDate.setHours(0,0,0,0);
+           return itemDate.getTime() === now.getTime();
+        } else if (period === '7days') {
+           const cutoff = new Date(now);
+           cutoff.setDate(cutoff.getDate() - 7);
+           return itemDate >= cutoff;
+        } else if (period === '30days') {
+           const cutoff = new Date(now);
+           cutoff.setDate(cutoff.getDate() - 30);
+           return itemDate >= cutoff;
+        } else if (period === 'custom') {
+           const startInput = document.getElementById('custom-date-start') as HTMLInputElement;
+           const endInput = document.getElementById('custom-date-end') as HTMLInputElement;
+           const start = startInput && startInput.value ? new Date(startInput.value).getTime() : 0;
+           let end = endInput && endInput.value ? new Date(endInput.value).getTime() : Infinity;
+           
+           return itemDate.getTime() >= start && itemDate.getTime() <= end;
+        }
+        return true;
+      });
+    }
+    return history;
+  };
+
+  (window as any).getFilteredTrash = function() {
+    const trashDays = parseInt(localStorage.getItem('ai_history_trash_days') || '7');
+    const trashRaw = localStorage.getItem('ai_history_trash');
+    let trash = trashRaw ? JSON.parse(trashRaw) : [];
+    
+    const nowAbs = Date.now();
+    const cutoffAbs = nowAbs - (trashDays * 24 * 60 * 60 * 1000);
+    trash = trash.filter((item: any) => item.deletedAt && item.deletedAt > cutoffAbs);
+    localStorage.setItem('ai_history_trash', JSON.stringify(trash));
+    
+    const periodSelect = document.getElementById('trash-period-select') as HTMLSelectElement;
+    const period = periodSelect ? periodSelect.value : 'all';
+    
+    if (period !== 'all') {
+      const now = new Date();
+      now.setHours(0,0,0,0);
+      
+      trash = trash.filter((item: any) => {
+        const itemDate = new Date(item.date);
+        if (period === 'today') {
+           itemDate.setHours(0,0,0,0);
+           return itemDate.getTime() === now.getTime();
+        } else if (period === '7days') {
+           const cutoff = new Date(now);
+           cutoff.setDate(cutoff.getDate() - 7);
+           return itemDate >= cutoff;
+        } else if (period === '30days') {
+           const cutoff = new Date(now);
+           cutoff.setDate(cutoff.getDate() - 30);
+           return itemDate >= cutoff;
+        } else if (period === 'custom') {
+           const startInput = document.getElementById('custom-date-start-trash') as HTMLInputElement;
+           const endInput = document.getElementById('custom-date-end-trash') as HTMLInputElement;
+           const start = startInput && startInput.value ? new Date(startInput.value).getTime() : 0;
+           let end = endInput && endInput.value ? new Date(endInput.value).getTime() : Infinity;
+           return itemDate.getTime() >= start && itemDate.getTime() <= end;
+        }
+        return true;
+      });
+    }
+    return trash;
+  };
+
+  (window as any).renderHistory = function() {
+    const historyList = document.getElementById('historico-list');
+    const emptyState = document.getElementById('historico-empty');
+    if (!historyList || !emptyState) return;
+    
+    try {
+      const history = (window as any).getFilteredHistory();
+      
+      if (history.length === 0) {
+        emptyState.style.display = 'block';
+        historyList.style.display = 'none';
+        return;
+      }
+      
+      emptyState.style.display = 'none';
+      historyList.style.display = 'grid';
+      historyList.innerHTML = '';
+      
+      history.forEach((item: any) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.display = 'flex';
+        card.style.flexDirection = 'column';
+        card.style.gap = '12px';
+        
+        const dateStr = new Date(item.date).toLocaleString('pt-BR');
+        
+        let formattedResult = '';
+        try {
+          formattedResult = (window as any).marked ? (window as any).marked.parse(item.result) : item.result.replace(/</g, '&lt;').replace(/\n/g, '<br>');
+        } catch(e) {
+          formattedResult = item.result.replace(/</g, '&lt;').replace(/\n/g, '<br>');
+        }
+
+        card.innerHTML = `
+          <div class="flex justify-between items-center" style="border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <div class="flex items-center gap-8" style="gap: 8px; display: flex; align-items: center;">
+              <div class="badge badge-accent">${item.tool}</div>
+              <div class="text-muted" style="font-size: 11px;">${dateStr}</div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <div style="position: relative;" class="export-item-wrapper">
+                <button class="btn-export-item" style="padding: 4px; border: none; background: transparent; color: var(--accent); cursor: pointer; opacity: 0.7; transition: opacity 0.2s;" aria-label="Exportar item" title="Exportar item" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                </button>
+                <div class="dropdown-menu export-item-menu" style="right: 0; min-width: 120px;">
+                  <div class="dropdown-item" data-format="md">.md</div>
+                  <div class="dropdown-item" data-format="txt">.txt</div>
+                  <div class="dropdown-item" data-format="doc">.doc</div>
+                </div>
+              </div>
+              <button class="btn-delete-item" style="padding: 4px; border: none; background: transparent; color: var(--danger); cursor: pointer; opacity: 0.7; transition: opacity 0.2s;" aria-label="Apagar item" title="Apagar item" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
+          <div>
+            <div class="text-secondary mb-8" style="font-size: 12px; font-weight: 600; text-transform: uppercase;">Prompt / Contexto</div>
+            <div style="font-size: 13px; color: var(--text-secondary); max-height: 40px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+              ${item.prompt.replace(/</g, '&lt;')}
+            </div>
+          </div>
+          <div>
+            <div class="text-secondary mb-8" style="font-size: 12px; font-weight: 600; text-transform: uppercase;">Resultado</div>
+            <div class="parsed-markdown text-primary result-preview" style="font-size: 14px; max-height: 100px; overflow: hidden; position: relative;">
+              ${formattedResult}
+              <div class="result-fade" style="position: absolute; bottom: 0; left: 0; right: 0; height: 40px; background: linear-gradient(to top, var(--bg-elevated), transparent);"></div>
+            </div>
+          </div>
+          <button class="btn btn-outline btn-full mt-8 toggle-result">Ver Completo</button>
+        `;
+        
+        const btn = card.querySelector('.toggle-result') as HTMLButtonElement;
+        const preview = card.querySelector('.result-preview') as HTMLElement;
+        const fade = preview.querySelector('.result-fade') as HTMLElement;
+        const deleteBtn = card.querySelector('.btn-delete-item') as HTMLButtonElement;
+        const exportBtn = card.querySelector('.btn-export-item') as HTMLButtonElement;
+        const exportMenu = card.querySelector('.export-item-menu') as HTMLElement;
+        
+        exportBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          document.querySelectorAll('.dropdown-menu.show').forEach(m => {
+            if (m !== exportMenu) m.classList.remove('show');
+          });
+          exportMenu.classList.toggle('show');
+        });
+
+        exportMenu.querySelectorAll('.dropdown-item').forEach(opt => {
+          opt.addEventListener('click', (e) => {
+            e.stopPropagation();
+            exportMenu.classList.remove('show');
+            const format = opt.getAttribute('data-format')!;
+            (window as any).downloadHistory([item], format);
+          });
+        });
+        
+        btn.addEventListener('click', () => {
+          if (preview.style.maxHeight === '100px') {
+            preview.style.maxHeight = 'none';
+            if (fade) fade.style.display = 'none';
+            btn.textContent = 'Recolher';
+          } else {
+            preview.style.maxHeight = '100px';
+            if (fade) fade.style.display = 'block';
+            btn.textContent = 'Ver Completo';
+          }
+        });
+        
+        deleteBtn.addEventListener('click', () => {
+          if (confirm('Apagar este item do histórico?')) {
+            const historyRaw = localStorage.getItem('ai_history');
+            if (historyRaw) {
+              let currentHistory = JSON.parse(historyRaw);
+              currentHistory = currentHistory.filter((h: any) => h.id !== item.id);
+              localStorage.setItem('ai_history', JSON.stringify(currentHistory));
+              
+              const trashDays = parseInt(localStorage.getItem('ai_history_trash_days') || '7');
+              if (trashDays > 0) {
+                const trashRaw = localStorage.getItem('ai_history_trash');
+                const trash = trashRaw ? JSON.parse(trashRaw) : [];
+                item.deletedAt = Date.now();
+                trash.unshift(item);
+                localStorage.setItem('ai_history_trash', JSON.stringify(trash));
+              }
+              
+              (window as any).renderHistory();
+            }
+          }
+        });
+        
+        historyList.appendChild(card);
+      });
+    } catch (e) { console.error('Erro renderHistory', e); }
+  };
+
+  (window as any).renderTrash = function() {
+    const trashList = document.getElementById('lixeira-list');
+    const emptyState = document.getElementById('lixeira-empty');
+    if (!trashList || !emptyState) return;
+    
+    try {
+      const trash = (window as any).getFilteredTrash();
+      
+      if (trash.length === 0) {
+        emptyState.style.display = 'block';
+        trashList.style.display = 'none';
+        return;
+      }
+      
+      emptyState.style.display = 'none';
+      trashList.style.display = 'grid';
+      trashList.innerHTML = '';
+      
+      trash.forEach((item: any) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.display = 'flex';
+        card.style.flexDirection = 'column';
+        card.style.gap = '12px';
+        card.style.opacity = '0.8';
+        
+        card.innerHTML = `
+          <div class="flex justify-between items-center" style="border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <div class="flex items-center gap-8" style="gap: 8px; display: flex; align-items: center;">
+              <div class="badge badge-default" style="background: var(--bg-elevated); color: var(--text-secondary);">${item.tool}</div>
+              <div class="text-muted" style="font-size: 11px;">Apagado em: ${new Date(item.deletedAt).toLocaleString('pt-BR')}</div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <div style="position: relative;" class="export-item-wrapper">
+                <button class="btn-export-item" style="padding: 4px; border: none; background: transparent; color: var(--accent); cursor: pointer; opacity: 0.7; transition: opacity 0.2s;" aria-label="Exportar item" title="Exportar item" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                </button>
+                <div class="dropdown-menu export-item-menu" style="right: 0; min-width: 120px;">
+                  <div class="dropdown-item" data-format="md">.md</div>
+                  <div class="dropdown-item" data-format="txt">.txt</div>
+                  <div class="dropdown-item" data-format="doc">.doc</div>
+                </div>
+              </div>
+              <button class="btn-restore-item" style="padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: var(--text); cursor: pointer; font-size: 11px; transition: background 0.2s;" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background='transparent'">Restaurar</button>
+              <button class="btn-delete-forever" style="padding: 4px; border: none; background: transparent; color: var(--danger); cursor: pointer; opacity: 0.7; transition: opacity 0.2s;" title="Excluir pra sempre" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
+          <div>
+            <div class="text-secondary mb-8" style="font-size: 12px; font-weight: 600; text-transform: uppercase;">Prompt / Contexto</div>
+            <div style="font-size: 13px; color: var(--text-secondary); max-height: 40px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+              ${item.prompt.replace(/</g, '&lt;')}
+            </div>
+          </div>
+        `;
+        
+        const btnRestore = card.querySelector('.btn-restore-item') as HTMLButtonElement;
+        const btnDelete = card.querySelector('.btn-delete-forever') as HTMLButtonElement;
+        const exportBtn = card.querySelector('.btn-export-item') as HTMLButtonElement;
+        const exportMenu = card.querySelector('.export-item-menu') as HTMLElement;
+        
+        exportBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          document.querySelectorAll('.dropdown-menu.show').forEach(m => {
+            if (m !== exportMenu) m.classList.remove('show');
+          });
+          exportMenu.classList.toggle('show');
+        });
+
+        exportMenu.querySelectorAll('.dropdown-item').forEach(opt => {
+          opt.addEventListener('click', (e) => {
+            e.stopPropagation();
+            exportMenu.classList.remove('show');
+            const format = opt.getAttribute('data-format')!;
+            (window as any).downloadHistory([item], format);
+          });
+        });
+        
+        btnRestore.addEventListener('click', () => {
+          let t = JSON.parse(localStorage.getItem('ai_history_trash') || '[]');
+          t = t.filter((h: any) => h.id !== item.id);
+          localStorage.setItem('ai_history_trash', JSON.stringify(t));
+          
+          let h = JSON.parse(localStorage.getItem('ai_history') || '[]');
+          delete item.deletedAt;
+          h.unshift(item);
+          h.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          localStorage.setItem('ai_history', JSON.stringify(h));
+          
+          (window as any).renderTrash();
+        });
+        
+        btnDelete.addEventListener('click', () => {
+          if (confirm('Excluir este item permanentemente?')) {
+            let t = JSON.parse(localStorage.getItem('ai_history_trash') || '[]');
+            t = t.filter((h: any) => h.id !== item.id);
+            localStorage.setItem('ai_history_trash', JSON.stringify(t));
+            (window as any).renderTrash();
+          }
+        });
+        
+        trashList.appendChild(card);
+      });
+    } catch (e) { console.error('Erro renderTrash', e); }
+  };
+
+  (window as any).downloadHistory = function(items: any[], format: string) {
+    if (!items || items.length === 0) {
+      alert('Nada para exportar.');
+      return;
+    }
+
+    let content = '';
+    let mimeType = 'text/plain';
+    
+    if (format === 'doc') {
+      mimeType = 'application/msword';
+      content = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head><meta charset='utf-8'><title>Histórico de IA</title></head><body>
+      `;
+      items.forEach((item: any) => {
+        const dateStr = new Date(item.date).toLocaleString('pt-BR');
+        let htmlResult = '';
+        try {
+          htmlResult = (window as any).marked ? (window as any).marked.parse(item.result) : item.result.replace(/\n/g, '<br>');
+        } catch(e) {
+          htmlResult = item.result.replace(/\n/g, '<br>');
+        }
+        content += `
+          <h2 style="font-family: sans-serif; color: #333;">Ferramenta: ${item.tool}</h2>
+          <p style="font-family: sans-serif; font-size: 12px; color: #666;">Gerado em: ${dateStr}</p>
+          <h3 style="font-family: sans-serif; color: #555;">Contexto / Prompt:</h3>
+          <p style="font-family: sans-serif; background: #f4f4f4; padding: 10px;">${item.prompt.replace(/\n/g, '<br>')}</p>
+          <h3 style="font-family: sans-serif; color: #555;">Resultado:</h3>
+          <div style="font-family: sans-serif;">${htmlResult}</div>
+          <hr style="margin: 30px 0;">
+        `;
+      });
+      content += `</body></html>`;
+    } else {
+      items.forEach((item: any) => {
+        const dateStr = new Date(item.date).toLocaleString('pt-BR');
+        content += `# Ferramenta: ${item.tool}\n`;
+        content += `Gerado em: ${dateStr}\n\n`;
+        content += `## Contexto / Prompt\n${item.prompt}\n\n`;
+        content += `## Resultado\n${item.result}\n\n`;
+        content += `---\n\n`;
+      });
+    }
+
+    const filename = items.length === 1 
+      ? `StudioOS_${items[0].tool.replace(/\s+/g, '_')}.${format}` 
+      : `StudioOS_Historico_IA.${format}`;
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    (window as any).renderHistory();
+    (window as any).renderTrash();
+    
+    // Logic for custom dropdowns
+    document.querySelectorAll('.custom-select').forEach(wrapper => {
+      const btn = wrapper.querySelector('.custom-select-btn') as HTMLElement;
+      const menu = wrapper.querySelector('.dropdown-menu') as HTMLElement;
+      const items = wrapper.querySelectorAll('.dropdown-item');
+      const select = wrapper.querySelector('select') as HTMLSelectElement;
+      const textSpan = btn.querySelector('.selected-text') as HTMLElement;
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Close others
+        document.querySelectorAll('.dropdown-menu.show').forEach(m => {
+          if (m !== menu) m.classList.remove('show');
+        });
+        menu.classList.toggle('show');
+      });
+
+      items.forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const value = item.getAttribute('data-value')!;
+          
+          items.forEach(i => i.classList.remove('active'));
+          item.classList.add('active');
+          
+          textSpan.textContent = item.textContent;
+          select.value = value;
+          menu.classList.remove('show');
+          
+          select.dispatchEvent(new Event('change'));
+        });
+      });
+    });
+
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.dropdown-menu.show, .flatpickr-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+    });
+
+    document.getElementById('history-period-select')?.addEventListener('change', (e: any) => {
+      const customDiv = document.getElementById('custom-date-range');
+      if (customDiv) {
+        customDiv.style.display = e.target.value === 'custom' ? 'flex' : 'none';
+      }
+      (window as any).renderHistory();
+    });
+    
+    document.getElementById('custom-date-start')?.addEventListener('change', () => {
+      (window as any).renderHistory();
+    });
+    
+    document.getElementById('custom-date-end')?.addEventListener('change', () => {
+      (window as any).renderHistory();
+    });
+
+    document.getElementById('trash-period-select')?.addEventListener('change', (e: any) => {
+      const customDiv = document.getElementById('custom-date-range-trash');
+      if (customDiv) {
+        customDiv.style.display = e.target.value === 'custom' ? 'flex' : 'none';
+      }
+      (window as any).renderTrash();
+    });
+    
+    document.getElementById('custom-date-start-trash')?.addEventListener('change', () => {
+      (window as any).renderTrash();
+    });
+    
+    document.getElementById('custom-date-end-trash')?.addEventListener('change', () => {
+      (window as any).renderTrash();
+    });
+    
+    const btnExportAll = document.getElementById('btn-export-all');
+    const menuExportAll = document.getElementById('menu-export-all');
+    
+    btnExportAll?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.dropdown-menu.show').forEach(m => {
+        if (m !== menuExportAll) m.classList.remove('show');
+      });
+      menuExportAll?.classList.toggle('show');
+    });
+
+    menuExportAll?.querySelectorAll('.dropdown-item').forEach(opt => {
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menuExportAll?.classList.remove('show');
+        const format = opt.getAttribute('data-format')!;
+        const history = (window as any).getFilteredHistory();
+        if (history && history.length > 0) {
+          (window as any).downloadHistory(history, format);
+        } else {
+          alert('Nenhum item encontrado para exportar no período selecionado.');
+        }
+      });
+    });
+
+    document.getElementById('btn-limpar-historico')?.addEventListener('click', () => {
+      if (confirm('Tem certeza que deseja apagar todo o histórico?')) {
+        const trashDays = parseInt(localStorage.getItem('ai_history_trash_days') || '7');
+        if (trashDays > 0) {
+          const historyRaw = localStorage.getItem('ai_history');
+          const history = historyRaw ? JSON.parse(historyRaw) : [];
+          if (history.length > 0) {
+            const trashRaw = localStorage.getItem('ai_history_trash');
+            let trash = trashRaw ? JSON.parse(trashRaw) : [];
+            const now = Date.now();
+            const toTrash = history.map((h: any) => ({...h, deletedAt: now}));
+            trash = [...toTrash, ...trash];
+            localStorage.setItem('ai_history_trash', JSON.stringify(trash));
+          }
+        }
+        localStorage.removeItem('ai_history');
+        (window as any).renderHistory();
+      }
+    });
+
+    document.getElementById('btn-acessar-lixeira')?.addEventListener('click', () => {
+      (window as any).renderTrash();
+      document.querySelectorAll('.main-content > .view-section').forEach(s => s.classList.remove('active'));
+      const target = document.getElementById('view-lixeira');
+      if (target) target.classList.add('active');
+    });
+    
+    document.getElementById('btn-voltar-historico')?.addEventListener('click', () => {
+      (window as any).renderHistory();
+      document.querySelectorAll('.main-content > .view-section').forEach(s => s.classList.remove('active'));
+      const target = document.getElementById('view-historico');
+      if (target) target.classList.add('active');
+    });
+    
+    document.getElementById('btn-esvaziar-lixeira')?.addEventListener('click', () => {
+      if (confirm('Tem certeza que deseja esvaziar a lixeira pra sempre?')) {
+        localStorage.removeItem('ai_history_trash');
+        (window as any).renderTrash();
+      }
+    });
+
+    // Initialize Flatpickr for custom calendars
+    if (typeof (window as any).flatpickr !== 'undefined') {
+      const now = new Date();
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(now.getDate() - 7);
+
+      const Portuguese = {
+        weekdays: {
+          shorthand: ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"],
+          longhand: ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
+        },
+        months: {
+          shorthand: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
+          longhand: ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        },
+        rangeSeparator: " até ",
+        time_24hr: true
+      };
+
+      function centerCalendar(instance: any) {
+        if (!instance || !instance.calendarContainer) return;
+        const input = instance.altInput || instance.input;
+        if (!input) return;
+        const inputRect = input.getBoundingClientRect();
+        const cal = instance.calendarContainer;
+        const inputCenter = inputRect.left + (inputRect.width / 2) + window.scrollX;
+        const calWidth = cal.offsetWidth || 324;
+        let targetLeft = Math.round(inputCenter - (calWidth / 2));
+        
+        const maxLeft = window.innerWidth - calWidth - 10;
+        if (targetLeft < 10) targetLeft = 10;
+        if (targetLeft > maxLeft) targetLeft = maxLeft;
+
+        cal.style.left = targetLeft + 'px';
+        cal.style.right = 'auto';
+      }
+
+      function applySlideAnimation(instance: any) {
+        if (!instance || !instance.calendarContainer) return;
+        const cal = instance.calendarContainer;
+        const btnSpan = cal.querySelector('.flatpickr-month-btn span');
+
+        const prev = instance._lastMonthYear || { month: instance.currentMonth, year: instance.currentYear };
+        const prevIndex = prev.year * 12 + prev.month;
+        const currIndex = instance.currentYear * 12 + instance.currentMonth;
+        instance._lastMonthYear = { month: instance.currentMonth, year: instance.currentYear };
+
+        if (currIndex === prevIndex) return;
+
+        const animClass = currIndex > prevIndex ? 'slide-next' : 'slide-prev';
+
+        requestAnimationFrame(() => {
+          const dayContainer = cal.querySelector('.dayContainer');
+          if (dayContainer) {
+            dayContainer.classList.remove('slide-next', 'slide-prev');
+            void dayContainer.offsetWidth;
+            dayContainer.classList.add(animClass);
+          }
+          if (btnSpan) {
+            btnSpan.classList.remove('slide-next', 'slide-prev');
+            void btnSpan.offsetWidth;
+            btnSpan.classList.add(animClass);
+          }
+        });
+      }
+
+      const fpConfig = {
+        enableTime: true,
+        dateFormat: "Y-m-d\\TH:i",
+        altInput: true,
+        altFormat: "d/m/Y H:i",
+        locale: Portuguese,
+        time_24hr: true,
+        allowInput: true,
+        animate: true,
+        onOpen: function(selectedDates: any, dateStr: any, instance: any) {
+          instance._lastMonthYear = { month: instance.currentMonth, year: instance.currentYear };
+          document.querySelectorAll('.flatpickr-calendar.open').forEach((cal: any) => {
+            if (cal !== instance.calendarContainer) {
+              if (cal._flatpickr) cal._flatpickr.close();
+              cal.classList.remove('open');
+            }
+          });
+          centerCalendar(instance);
+          setTimeout(() => centerCalendar(instance), 10);
+        },
+        onChange: function() {
+          if (document.getElementById('view-historico')?.classList.contains('active')) {
+            (window as any).renderHistory();
+          } else {
+            (window as any).renderTrash();
+          }
+        },
+        onMonthChange: function(selectedDates: any, dateStr: any, instance: any) {
+          const btnSpan = instance.calendarContainer?.querySelector('.flatpickr-month-btn span');
+          if (btnSpan && instance.l10n.months.longhand[instance.currentMonth]) {
+            btnSpan.textContent = instance.l10n.months.longhand[instance.currentMonth];
+          }
+          applySlideAnimation(instance);
+        },
+        onYearChange: function(selectedDates: any, dateStr: any, instance: any) {
+          const btnSpan = instance.calendarContainer?.querySelector('.flatpickr-month-btn span');
+          if (btnSpan && instance.l10n.months.longhand[instance.currentMonth]) {
+            btnSpan.textContent = instance.l10n.months.longhand[instance.currentMonth];
+          }
+          applySlideAnimation(instance);
+        },
+        onClose: function(selectedDates: any, dateStr: any, instance: any) {
+          instance.calendarContainer?.querySelectorAll('.flatpickr-dropdown-menu.show').forEach((m: any) => m.classList.remove('show'));
+        },
+        onReady: function(selectedDates: any, dateStr: any, instance: any) {
+          instance._lastMonthYear = { month: instance.currentMonth, year: instance.currentYear };
+          const originalPosition = instance.positionCalendar;
+          instance.positionCalendar = function(customPosElem: any) {
+            if (originalPosition) originalPosition.call(instance, customPosElem);
+            centerCalendar(instance);
+          };
+
+          // Custom Year Dropdown + Typable Input
+          if (instance.currentYearElement) {
+            const numInputWrapper = instance.currentYearElement.parentNode as HTMLElement;
+            if (numInputWrapper) {
+              // Add custom toggle button
+              const yearToggle = document.createElement('div');
+              yearToggle.className = 'flatpickr-year-toggle';
+              yearToggle.title = 'Escolher ano';
+              yearToggle.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+              numInputWrapper.appendChild(yearToggle);
+
+              // Create year dropdown menu
+              const yearMenu = document.createElement('div');
+              yearMenu.className = 'flatpickr-dropdown-menu';
+
+              const currentYear = new Date().getFullYear();
+              for (let i = currentYear - 15; i <= currentYear + 15; i++) {
+                const item = document.createElement('div');
+                item.className = 'dropdown-item';
+                item.textContent = i.toString();
+                item.addEventListener('click', (e: any) => {
+                  e.stopPropagation();
+                  instance.changeYear(i);
+                  yearMenu.classList.remove('show');
+                });
+                yearMenu.appendChild(item);
+              }
+              numInputWrapper.appendChild(yearMenu);
+
+              yearToggle.addEventListener('click', (e: any) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const isShowing = yearMenu.classList.contains('show');
+                document.querySelectorAll('.dropdown-menu.show, .flatpickr-dropdown-menu.show').forEach((m: any) => m.classList.remove('show'));
+                if (!isShowing) {
+                  yearMenu.querySelectorAll('.dropdown-item').forEach((it: any) => {
+                    if (it.textContent === instance.currentYear.toString()) {
+                      it.classList.add('active');
+                      setTimeout(() => it.scrollIntoView({ block: 'nearest' }), 10);
+                    } else {
+                      it.classList.remove('active');
+                    }
+                  });
+                  yearMenu.classList.add('show');
+                }
+              });
+            }
+          }
+
+          // Custom Month Dropdown replacement
+          const monthSelect = instance.monthElements[0];
+          if (monthSelect) {
+            monthSelect.style.display = 'none';
+
+            const monthWrapper = document.createElement('div');
+            monthWrapper.className = 'custom-flatpickr-month-dropdown';
+
+            const btn = document.createElement('div');
+            btn.className = 'flatpickr-month-btn dropdown-toggle';
+            btn.title = 'Escolher mês';
+            btn.innerHTML = `<span>${instance.l10n.months.longhand[instance.currentMonth]}</span> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+            
+            const menu = document.createElement('div');
+            menu.className = 'flatpickr-dropdown-menu';
+            
+            instance.l10n.months.longhand.forEach((m: string, idx: number) => {
+              const item = document.createElement('div');
+              item.className = 'dropdown-item';
+              item.textContent = m;
+              item.addEventListener('click', (e: any) => {
+                e.stopPropagation();
+                instance.changeMonth(idx, false);
+                const btnSpan = btn.querySelector('span');
+                if (btnSpan) btnSpan.textContent = m;
+                menu.classList.remove('show');
+              });
+              menu.appendChild(item);
+            });
+
+            monthWrapper.appendChild(btn);
+            monthWrapper.appendChild(menu);
+            monthSelect.parentNode.insertBefore(monthWrapper, monthSelect);
+
+            btn.addEventListener('click', (e: any) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const isShowing = menu.classList.contains('show');
+              document.querySelectorAll('.dropdown-menu.show, .flatpickr-dropdown-menu.show').forEach((m: any) => m.classList.remove('show'));
+              if (!isShowing) {
+                menu.querySelectorAll('.dropdown-item').forEach((it: any, idx: number) => {
+                  if (idx === instance.currentMonth) {
+                    it.classList.add('active');
+                    setTimeout(() => it.scrollIntoView({ block: 'nearest' }), 10);
+                  } else {
+                    it.classList.remove('active');
+                  }
+                });
+                menu.classList.add('show');
+              }
+            });
+          }
+        }
+      };
+      
+      (window as any).flatpickr("#custom-date-start", { ...fpConfig, defaultDate: sevenDaysAgo });
+      (window as any).flatpickr("#custom-date-end", { ...fpConfig, defaultDate: now });
+      (window as any).flatpickr("#custom-date-start-trash", { ...fpConfig, defaultDate: sevenDaysAgo });
+      (window as any).flatpickr("#custom-date-end-trash", { ...fpConfig, defaultDate: now });
+    }
+  });
 </script>
 </Layout>
