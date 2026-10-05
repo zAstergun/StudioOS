@@ -1527,7 +1527,7 @@ import membrosSkill from '../skills/membros.md?raw';
         resultText = data.content[0].text;
 
       } else if (config.provider === 'gemini') {
-        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${config.key}`, {
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${config.key}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
