@@ -1,4 +1,4 @@
-# 🚀 Painel de Conteúdo (Content Dashboard)
+# 🚀 StudioOS
 
 Um painel de comando unificado, veloz e focado em produtividade para criadores de conteúdo (YouTube e Redes Sociais). O projeto integra ferramentas utilitárias — como um Teleprompter nativo — com um **Mentor IA** robusto, alimentado por *skills* específicas para transformar ideias brutas em peças de conteúdo de alta performance (alto CTR e retenção).
 
