@@ -1,26 +1,32 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import type { AstroCookies } from "astro";
 
-/**
- * Configure no arquivo `.env` (ou nas variáveis de ambiente da hospedagem):
- *
- *   PUBLIC_SUPABASE_URL=https://SEU-PROJETO.supabase.co
- *   PUBLIC_SUPABASE_ANON_KEY=sua-chave-publica
- *
- * Enquanto as variáveis não existirem, o painel roda em "modo demo":
- * a sessão é simulada localmente para você conseguir navegar no app.
- */
-const url = import.meta.env.PUBLIC_SUPABASE_URL?.trim();
-const anonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY?.trim();
-
-export const isSupabaseConfigured = Boolean(url && anonKey);
-
-export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createClient(url!, anonKey!, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        storageKey: "studioos.auth",
+export const createSupabaseClient = (cookies: AstroCookies) => {
+  return createServerClient(
+    import.meta.env.PUBLIC_SUPABASE_URL,
+    import.meta.env.PUBLIC_SUPABASE_ANON_KEY,
+    {
+      cookies: {
+        getAll() {
+          return cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookies.set(name, value, {
+                ...options,
+                path: '/',
+                secure: true,
+                httpOnly: true,
+                sameSite: 'lax',
+                domain: import.meta.env.DEV ? undefined : '.asterdev.me',
+              });
+            });
+          } catch (error) {
+            // Ignorado intencionalmente em ambiente de servidor Astro
+          }
+        },
       },
-    })
-  : null;
+    }
+  );
+};

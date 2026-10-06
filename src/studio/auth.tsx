@@ -7,7 +7,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { isSupabaseConfigured, supabase } from "./lib/supabase";
+import { createBrowserClient } from "@supabase/ssr";
+
+const url = import.meta.env.PUBLIC_SUPABASE_URL?.trim();
+const anonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY?.trim();
+
+export const isSupabaseConfigured = Boolean(url && anonKey);
+
+export const supabase = isSupabaseConfigured
+  ? createBrowserClient(url!, anonKey!)
+  : null;
 
 export type StudioUser = {
   id: string;

@@ -1,6 +1,14 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import StudioClient from '../studio/StudioClient';
+import { createSupabaseClient } from '../studio/lib/supabase';
+
+const supabase = createSupabaseClient(Astro.cookies);
+const { data, error } = await supabase.auth.getUser();
+
+if (error || !data?.user) {
+  return Astro.redirect('/login');
+}
 ---
 
 <Layout title="StudioOS — Sistema Operacional do Criador">

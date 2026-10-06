@@ -400,14 +400,37 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
     }
   };
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
     const em = email.trim();
 
     if (mode === "login") {
       if (!EMAIL_RE.test(em) || !password) return;
-      run(() => auth.signIn(em, password));
+      
+      setLoading(true);
+      setError(null);
+      try {
+        const formData = new FormData();
+        formData.append("email", em);
+        formData.append("password", password);
+
+        const res = await fetch("/api/login", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          const errText = await res.text();
+          setError(errText || "Falha no login");
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Algo deu errado");
+      } finally {
+        setLoading(false);
+      }
     } else if (mode === "signup") {
       if (!EMAIL_RE.test(em) || password.length < 8 || confirm !== password || name.trim().length < 2 || !terms) return;
       run(() => auth.signUp({ email: em, password, name: name.trim(), channel: channel.trim() || undefined }));
