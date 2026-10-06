@@ -15,7 +15,13 @@ const anonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY?.trim();
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
 export const supabase = isSupabaseConfigured
-  ? createBrowserClient(url!, anonKey!)
+  ? createBrowserClient(url!, anonKey!, {
+      cookieOptions: {
+        domain: import.meta.env.DEV ? undefined : '.asterdev.me',
+        path: '/',
+        sameSite: 'lax',
+      }
+    })
   : null;
 
 export type StudioUser = {

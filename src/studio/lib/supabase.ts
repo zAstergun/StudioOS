@@ -16,8 +16,8 @@ export const createSupabaseClient = (
           cookies.set(key, value, {
             ...options,
             path: '/',
-            secure: true,
-            httpOnly: true,
+            secure: !import.meta.env.DEV,
+            httpOnly: false,
             sameSite: 'lax',
             domain: import.meta.env.DEV ? undefined : '.asterdev.me',
           });
