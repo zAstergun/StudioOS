@@ -1,32 +1,41 @@
 import { createServerClient } from "@supabase/ssr";
 import type { AstroCookies } from "astro";
 
-export const createSupabaseClient = (cookies: AstroCookies) => {
-  return createServerClient(
-    import.meta.env.PUBLIC_SUPABASE_URL,
-    import.meta.env.PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() {
-          return cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookies.set(name, value, {
-                ...options,
-                path: '/',
-                secure: true,
-                httpOnly: true,
-                sameSite: 'lax',
-                domain: import.meta.env.DEV ? undefined : '.asterdev.me',
-              });
-            });
-          } catch (error) {
-            // Ignorado intencionalmente em ambiente de servidor Astro
-          }
-        },
+export const createSupabaseClient = (
+  cookies: AstroCookies,
+  supabaseUrl: string,
+  supabaseKey: string
+) => {
+  return createServerClient(supabaseUrl, supabaseKey, {
+    cookies: {
+      get(key) {
+        return cookies.get(key)?.value;
       },
-    }
-  );
+      set(key, value, options) {
+        try {
+          cookies.set(key, value, {
+            ...options,
+            path: '/',
+            secure: true,
+            httpOnly: true,
+            sameSite: 'lax',
+            domain: import.meta.env.DEV ? undefined : '.asterdev.me',
+          });
+        } catch (error) {
+          // Ignorado intencionalmente no ambiente de servidor Astro
+        }
+      },
+      remove(key, options) {
+        try {
+          cookies.delete(key, {
+            ...options,
+            path: '/',
+            domain: import.meta.env.DEV ? undefined : '.asterdev.me',
+          });
+        } catch (error) {
+          // Ignorado intencionalmente no ambiente de servidor Astro
+        }
+      },
+    },
+  });
 };
