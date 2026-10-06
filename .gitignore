@@ -33,3 +33,6 @@ ehthumbs.db
 .playwright-mcp/
 playwright-report/
 test-results/
+
+# Cloudflare Workers
+.wrangler/
