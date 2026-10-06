@@ -10,5 +10,9 @@
 	},
 	"observability": {
 		"enabled": true
+	},
+	"vars": {
+		"PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_VIlS708dlmCYT8IvYxj_1w_GfTB12Eg",
+		"PUBLIC_SUPABASE_URL": "https://yofvcyarznuvqntgslep.supabase.co"
 	}
 }
