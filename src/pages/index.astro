@@ -2,12 +2,12 @@
 import { createSupabaseClient } from '../studio/lib/supabase';
 import Layout from '../layouts/Layout.astro';
 import StudioClient from '../studio/StudioClient';
+import { env as cfEnv } from "cloudflare:workers";
 
-const runtime = (Astro.locals as any).runtime;
-const env = runtime?.env ?? import.meta.env;
+const env = cfEnv || import.meta.env;
 
-const supabaseUrl = env.PUBLIC_SUPABASE_URL;
-const supabaseKey = env.PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = env.PUBLIC_SUPABASE_URL || import.meta.env.PUBLIC_SUPABASE_URL;
+const supabaseKey = env.PUBLIC_SUPABASE_ANON_KEY || import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error("Variáveis do Supabase não encontradas no runtime.");
@@ -15,13 +15,9 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createSupabaseClient(Astro.cookies, supabaseUrl, supabaseKey);
 
-const { data, error } = await supabase.auth.getUser();
-
-if (error || !data?.user) {
-  return Astro.redirect('/login');
-}
-
-const userEmail = data.user.email;
+// Autenticação opcional: permitimos renderizar a página mesmo sem usuário
+const { data } = await supabase.auth.getUser();
+const userEmail = data?.user?.email || null;
 ---
 
 <Layout title="StudioOS — Sistema Operacional do Criador">

@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { createSupabaseClient } from "../../studio/lib/supabase";
+import { env as cfEnv } from "cloudflare:workers";
 
 export const POST: APIRoute = async ({ request, cookies, locals }) => {
   const formData = await request.formData();
@@ -10,11 +11,10 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     return new Response("Email e senha obrigatórios", { status: 400 });
   }
 
-  const runtime = (locals as any).runtime;
-  const env = runtime?.env ?? import.meta.env;
+  const env = cfEnv || import.meta.env;
 
-  const supabaseUrl = env.PUBLIC_SUPABASE_URL;
-  const supabaseKey = env.PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = env.PUBLIC_SUPABASE_URL || import.meta.env.PUBLIC_SUPABASE_URL;
+  const supabaseKey = env.PUBLIC_SUPABASE_ANON_KEY || import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
     return new Response("Erro interno de configuração.", { status: 500 });
