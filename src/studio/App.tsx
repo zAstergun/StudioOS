@@ -210,6 +210,7 @@ function ScrollProgress() {
 export default function App() {
   const auth = useAuth();
   const [view, setView] = useState("home");
+  const [protectedViewAfterLogin, setProtectedViewAfterLogin] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
   const [calib, setCalib] = useState<Calib>(() => loadCalib(!auth.user));
   const lastAuthId = useRef(auth.user?.id ?? null);
@@ -233,12 +234,26 @@ export default function App() {
   }, [calib]);
 
   useEffect(() => {
-    if (view === "login" && auth.user && !auth.recovering) setView("home");
-  }, [auth.recovering, auth.user, view]);
+    if (view === "login" && auth.user && !auth.recovering) {
+      setView(protectedViewAfterLogin ?? "home");
+      setProtectedViewAfterLogin(null);
+    }
+  }, [auth.recovering, auth.user, protectedViewAfterLogin, view]);
+
+  useLayoutEffect(() => {
+    if (!auth.user && (view === "historico" || view === "lixeira")) setView("home");
+  }, [auth.user, view]);
 
   const progress = useMemo(() => calibProgress(calib), [calib]);
 
   const go = (id: string) => {
+    if (!auth.user && (id === "historico" || id === "lixeira")) {
+      setProtectedViewAfterLogin(id);
+      setView("login");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (id !== "login" && id !== "historico" && id !== "lixeira") setProtectedViewAfterLogin(null);
     setView(id);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -278,6 +293,7 @@ export default function App() {
           progress={progress}
           historyCount={os.history.length}
           trashCount={os.trash.length}
+          authenticated={Boolean(auth.user)}
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -320,17 +336,18 @@ export default function App() {
           <main className="min-w-0 flex-1">
             {view === "login" ? (
               <div key="login">
-                <AuthScreen />
+                <AuthScreen accessRequired={Boolean(protectedViewAfterLogin)} />
               </div>
             ) : view === "home" ? (
               <>
                 <Console
                   onGo={go}
+                  demo={!auth.user}
                   stats={{
-                    ideias: os.history.filter((h) => h.tool === "rank" || h.tool === "ideia").length,
-                    roteiros: os.history.filter((h) => h.tool === "roteiro").length,
-                    posts: os.history.filter((h) => h.tool === "score").length,
-                    humanizados: os.history.filter((h) => h.tool === "humanizador").length,
+                    ideias: auth.user ? os.history.filter((h) => h.tool === "rank" || h.tool === "ideia").length : 1284,
+                    roteiros: auth.user ? os.history.filter((h) => h.tool === "roteiro").length : 642,
+                    posts: auth.user ? os.history.filter((h) => h.tool === "score").length : 3891,
+                    humanizados: auth.user ? os.history.filter((h) => h.tool === "humanizador").length : 2176,
                   }}
                 />
                 <Home onGo={go} progress={progress} niche={calib.niche} />

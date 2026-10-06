@@ -15,6 +15,7 @@ type Props = {
   progress: number;
   historyCount: number;
   trashCount: number;
+  authenticated: boolean;
 };
 
 export function Sidebar({
@@ -27,6 +28,7 @@ export function Sidebar({
   progress,
   historyCount,
   trashCount,
+  authenticated,
 }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -80,7 +82,7 @@ export function Sidebar({
             onClick={() => go("login")}
             icon="login"
             label="Entrar"
-            kicker="Conta opcional"
+            kicker="Acesse dados salvos"
             accent="signal"
           />
         </div>
@@ -130,18 +132,18 @@ export function Sidebar({
               onClick={() => go("historico")}
               icon="historico"
               label="Histórico"
-              kicker={`${historyCount} registro${historyCount === 1 ? "" : "s"}`}
+              kicker={authenticated ? `${historyCount} registro${historyCount === 1 ? "" : "s"}` : "entre para acessar"}
               accent="signal"
-              badge={historyCount}
+              badge={authenticated ? historyCount : undefined}
             />
             <NavItem
               active={active === "lixeira"}
               onClick={() => go("lixeira")}
               icon="trash"
               label="Lixeira"
-              kicker={trashCount ? `${trashCount} aguardando purge` : "vazia"}
+              kicker={authenticated ? (trashCount ? `${trashCount} aguardando purge` : "vazia") : "entre para acessar"}
               accent="oxide"
-              badge={trashCount}
+              badge={authenticated ? trashCount : undefined}
             />
           </div>
         </div>

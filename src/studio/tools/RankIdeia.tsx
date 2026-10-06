@@ -249,8 +249,15 @@ export function RankIdeia({ onBack, onGo, niche }: { onBack: () => void; onGo: (
             </div>
           </Card>
 
-          <Card title="Histórico do avaliador" note={`${recentRuns.length} recente(s)`} accent="bone">
-            {recentRuns.length ? (
+          <Card title="Histórico do avaliador" note={examples ? "acesso com conta" : `${recentRuns.length} recente(s)`} accent="bone">
+            {examples ? (
+              <div>
+                <p className="text-[12px] leading-relaxed text-bone-400">Entre para consultar e restaurar suas análises.</p>
+                <Button size="sm" variant="outline" className="mt-3" icon="login" onClick={() => onGo("historico")}>
+                  Entrar para acessar
+                </Button>
+              </div>
+            ) : recentRuns.length ? (
               <ul className="space-y-1.5">
                 {recentRuns.map((run) => {
                   const rating = run.content.match(/RATING:([\d.]+)\/10/);
@@ -286,13 +293,15 @@ export function RankIdeia({ onBack, onGo, niche }: { onBack: () => void; onGo: (
                 cada análise vira registro aqui
               </p>
             )}
-            <button
-              onClick={() => onGo("historico")}
-              className="mt-3 flex items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] text-ink-400 uppercase transition-colors hover:text-signal-400"
-            >
-              ver todo o histórico
-              <Icon name="arrow" className="h-3 w-3" strokeWidth={2.4} />
-            </button>
+            {!examples && (
+              <button
+                onClick={() => onGo("historico")}
+                className="mt-3 flex items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] text-ink-400 uppercase transition-colors hover:text-signal-400"
+              >
+                ver todo o histórico
+                <Icon name="arrow" className="h-3 w-3" strokeWidth={2.4} />
+              </button>
+            )}
           </Card>
 
           <Card title="Próximo passo" accent="mint">

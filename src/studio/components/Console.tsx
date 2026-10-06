@@ -111,7 +111,7 @@ function Counter({
           accent === "sky" && "text-sky-400"
         )}
       >
-        {v}
+        {v.toLocaleString("pt-BR")}
       </div>
       <div className="mt-2.5">
         <Meter value={meter} max={100} accent={accent} showValue={false} />
@@ -184,9 +184,11 @@ function Pipeline({ onGo }: { onGo: (id: string) => void }) {
 export function Console({
   onGo,
   stats,
+  demo = false,
 }: {
   onGo: (id: string) => void;
   stats: { ideias: number; roteiros: number; posts: number; humanizados: number };
+  demo?: boolean;
 }) {
   const [l, setL] = useState({ l: 0.55, r: 0.68 });
   useEffect(() => {
@@ -345,10 +347,10 @@ export function Console({
       {/* counters */}
       <div className="relative border-t border-ink-700/70 bg-ink-950/60">
         <div className="mx-auto flex max-w-[1400px] flex-col sm:flex-row">
-          <Counter value={stats.ideias} label="Ideias no banco" sub="rank + novas ideias regeneradas" accent="signal" meter={Math.min(100, stats.ideias * 9)} />
-          <Counter value={stats.roteiros} label="Roteiros criados" sub="montados na aba blocos" accent="sky" meter={Math.min(100, stats.roteiros * 12)} />
-          <Counter value={stats.posts} label="Posts avaliados" sub="laudos de 0 a 50 emitidos" accent="mint" meter={Math.min(100, stats.posts * 8)} />
-          <Counter value={stats.humanizados} label="Textos humanizados" sub="filtro anti-ia aplicado" accent="oxide" meter={Math.min(100, stats.humanizados * 11)} />
+          <Counter value={stats.ideias} label="Ideias no banco" sub={demo ? "número fictício · entre para salvar seus dados" : "rank + novas ideias regeneradas"} accent="signal" meter={Math.min(100, stats.ideias * 9)} />
+          <Counter value={stats.roteiros} label="Roteiros criados" sub={demo ? "número fictício · entre para salvar seus dados" : "montados na aba blocos"} accent="sky" meter={Math.min(100, stats.roteiros * 12)} />
+          <Counter value={stats.posts} label="Posts avaliados" sub={demo ? "número fictício · entre para salvar seus dados" : "laudos de 0 a 50 emitidos"} accent="mint" meter={Math.min(100, stats.posts * 8)} />
+          <Counter value={stats.humanizados} label="Textos humanizados" sub={demo ? "número fictício · entre para salvar seus dados" : "filtro anti-ia aplicado"} accent="oxide" meter={Math.min(100, stats.humanizados * 11)} />
         </div>
       </div>
 

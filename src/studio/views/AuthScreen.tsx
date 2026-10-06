@@ -338,7 +338,7 @@ function StudioPanel({ mode }: { mode: Mode }) {
 
 /* ------------------------------------------------------------ screen */
 
-export function AuthScreen() {
+export function AuthScreen({ accessRequired = false }: { accessRequired?: boolean }) {
   const auth = useAuth();
   const [mode, setMode] = useState<Mode>(auth.recovering ? "recover" : "login");
   const [email, setEmail] = useState("");
@@ -499,6 +499,14 @@ export function AuthScreen() {
                   {head.t}
                 </h2>
                 {head.d && <p className="mt-2 text-[14px] leading-relaxed text-bone-400">{head.d}</p>}
+
+                {accessRequired && mode !== "sent" && (
+                  <div className="mt-5">
+                    <Notice tone="info">
+                      Entre ou crie uma conta para acessar seu histÃ³rico, a lixeira e os dados salvos.
+                    </Notice>
+                  </div>
+                )}
 
                 {auth.demo && mode !== "sent" && (
                   <div className="mt-5">
