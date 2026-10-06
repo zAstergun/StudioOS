@@ -80,14 +80,14 @@ export function Sidebar({
           <NavItem
             active={active === "login"}
             onClick={() => go("login")}
-            icon="login"
-            label="Entrar"
-            kicker="Acesse dados salvos"
+            icon={authenticated ? "user" : "login"}
+            label={authenticated ? "Meu Perfil" : "Entrar"}
+            kicker={authenticated ? "Gerenciar conta" : "Acesse dados salvos"}
             accent="signal"
           />
         </div>
 
-        {GROUPS.map((g) => {
+        {GROUPS.map((g, index) => {
           const items = TOOLS.filter((t) => t.group === g);
           if (!items.length) return null;
           return (
@@ -98,7 +98,7 @@ export function Sidebar({
                 </span>
                 <span className="h-px flex-1 bg-ink-800" />
                 <span className="font-mono text-[9.5px] text-ink-500 tabular-nums">
-                  {items.length.toString().padStart(2, "0")}
+                  {(index + 1).toString().padStart(2, "0")}
                 </span>
               </div>
               <div className="space-y-0.5">
@@ -124,7 +124,7 @@ export function Sidebar({
               Sistema
             </span>
             <span className="h-px flex-1 bg-ink-800" />
-            <span className="font-mono text-[9.5px] text-ink-500 tabular-nums">02</span>
+            <span className="font-mono text-[9.5px] text-ink-500 tabular-nums">05</span>
           </div>
           <div className="space-y-0.5">
             <NavItem

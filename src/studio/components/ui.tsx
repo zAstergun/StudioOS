@@ -48,6 +48,7 @@ const P: Record<string, ReactNode> = {
   star: <><path d="m12 3 2.6 5.5 5.9.7-4.4 4 1.2 5.8L12 16.1 6.7 19l1.2-5.8-4.4-4 5.9-.7z" /></>,
   download: <><path d="M12 3.5v11" /><path d="m7.5 10 4.5 4.5L16.5 10" /><path d="M4 17.5V19a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-1.5" /></>,
   undo: <><path d="M8.5 5.5 4 10l4.5 4.5" /><path d="M4 10h9.5a6.5 6.5 0 0 1 0 13h-2" /></>,
+  user: <><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></>,
 };
 
 export function Icon({
