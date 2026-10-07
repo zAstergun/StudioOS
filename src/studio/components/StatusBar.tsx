@@ -31,32 +31,32 @@ export function StatusBar({
   onSignOut?: () => void;
 }) {
   return (
-    <div className="relative z-30 flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-ink-700/70 bg-ink-950/90 px-4 py-2 backdrop-blur-sm sm:px-6 lg:px-8">
-      <div className="flex items-center gap-2.5">
+    <div className="relative z-30 flex items-center gap-x-4 sm:gap-x-5 border-b border-ink-700/70 bg-ink-950/90 px-4 py-2 backdrop-blur-sm sm:px-6 lg:px-8 overflow-x-auto scrollbar-hide whitespace-nowrap">
+      <div className="flex shrink-0 items-center gap-2.5">
         <span className="on-air-dot h-2 w-2 rounded-full bg-oxide-400" />
         <span className="anim-blink font-mono text-[10px] font-bold tracking-[0.3em] text-oxide-400 uppercase">On air</span>
       </div>
-      <span className="hidden h-3 w-px bg-ink-600 sm:block" />
-      <span className="font-mono text-[10px] tracking-[0.18em] text-bone-400 uppercase">
+      <span className="hidden shrink-0 h-3 w-px bg-ink-600 sm:block" />
+      <span className="shrink-0 font-mono text-[10px] tracking-[0.18em] text-bone-400 uppercase">
         StudioOS <span className="text-ink-400">/</span> build 2.5.0
       </span>
       <button
         onClick={() => onGo("historico")}
-        className="group hidden items-center gap-1.5 rounded-full border border-mint-400/30 bg-mint-400/10 px-2.5 py-0.5 font-mono text-[9px] tracking-[0.12em] text-mint-300 uppercase transition-colors hover:border-mint-400/60 hover:bg-mint-400/20 md:flex"
+        className="group hidden shrink-0 items-center gap-1.5 rounded-full border border-mint-400/30 bg-mint-400/10 px-2.5 py-0.5 font-mono text-[9px] tracking-[0.12em] text-mint-300 uppercase transition-colors hover:border-mint-400/60 hover:bg-mint-400/20 md:flex"
       >
         <span className="h-1 w-1 rounded-full bg-mint-400" />
         novo: histórico & lixeira
         <Icon name="arrow" className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" strokeWidth={2.6} />
       </button>
-      <span className="hidden h-3 w-px bg-ink-600 sm:block" />
+      <span className="hidden shrink-0 h-3 w-px bg-ink-600 sm:block" />
       <span className={cn(
-        "flex items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] uppercase",
+        "flex shrink-0 items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] uppercase",
         demo ? "text-signal-400" : calibrated ? "text-mint-400" : "text-signal-400"
       )}>
         <Icon name={demo ? "eye" : calibrated ? "check" : "dial"} className="h-3.5 w-3.5" strokeWidth={2} />
         {demo ? "Dados de exemplo" : calibrated ? "Canal calibrado" : "Calibração pendente"}
       </span>
-      <div className="ml-auto flex items-center gap-4">
+      <div className="ml-auto flex shrink-0 items-center gap-4 pl-4 sm:pl-0">
         <Clock />
         {userName ? (
           <button
@@ -76,9 +76,9 @@ export function StatusBar({
             Entrar
           </button>
         )}
-        <span className="hidden items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] text-bone-400 uppercase sm:flex">
-          <Icon name="lock" className="h-3.5 w-3.5 text-mint-400" strokeWidth={1.8} />
-          Local-only
+        <span className="hidden shrink-0 items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] text-bone-400 uppercase sm:flex">
+          <Icon name="cloud" className="h-3.5 w-3.5 text-signal-400" strokeWidth={1.8} />
+          Cloud Sync
         </span>
       </div>
     </div>

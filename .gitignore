@@ -36,3 +36,9 @@ test-results/
 
 # Cloudflare Workers
 .wrangler/
+
+# Contextos
+contexto
+
+# Supabase
+supabase/.temp/

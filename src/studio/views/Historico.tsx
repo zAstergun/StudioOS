@@ -45,20 +45,25 @@ function timeAgo(ts: number) {
   return new Date(ts).toLocaleDateString("pt-BR");
 }
 
-const FILTERS = ["recentes", "favoritos", "ideias", "títulos", "posts", "estratégia"] as const;
+const FILTERS = ["recentes", "salvos", "ideias", "títulos", "posts", "estratégia"] as const;
 const TITLES_TOOLS = new Set(["titulos", "hooks"]);
 const POSTS_TOOLS = new Set(["humanizador", "score", "receita"]);
 const STRATEGY_TOOLS = new Set(["mentor", "membros"]);
 
 function matchesFilter(e: HistoryEntry, f: (typeof FILTERS)[number], fav: boolean) {
+  // Global filter: if toggle is on, hide non-favorites everywhere
+  if (fav && !e.favorite) return false;
+  
+  if (f === "salvos") return e.favorite;
   if (f === "recentes") return true;
-  if (f === "favoritos") return fav && e.favorite;
   if (f === "ideias") return e.tool === "rank" || e.tool === "ideia";
   if (f === "títulos") return TITLES_TOOLS.has(e.tool);
   if (f === "posts") return POSTS_TOOLS.has(e.tool);
   if (f === "estratégia") return STRATEGY_TOOLS.has(e.tool);
   return true;
 }
+
+import { useAuth } from "../auth";
 
 export function HistoricoX({
   onBack,
@@ -70,6 +75,7 @@ export function HistoricoX({
   initialTab?: "historico" | "lixeira";
 }) {
   const os = useStudioOS();
+  const auth = useAuth();
   const [tab, setTab] = useState<"historico" | "lixeira">(initialTab);
   const [fmt, setFmt] = useState<string>("todos");
   const [pill, setPill] = useState<(typeof FILTERS)[number]>("recentes");
@@ -145,18 +151,17 @@ export function HistoricoX({
             Histórico & Lixeira
           </h1>
           <p className="mt-3 text-[15px] leading-relaxed text-bone-400">
-            Toda execução é registrada como um bloco único — ferramenta, título, resumo e conteúdo
-            completo. O que você apaga vai para a lixeira e resiste até{` `}
-            <span className="text-bone-100">{retention === 1 ? "o fim do dia" : `${retention} dias`}</span>, antes de sumir
-            para sempre.
+            Toda execução é registrada localmente no seu dispositivo. O que você apaga vai para a lixeira e resiste até{` `}
+            <span className="text-bone-100">{retention === 1 ? "o fim do dia" : `${retention} dias`}</span>. 
+            Apenas os itens que você <b>salvar</b> serão sincronizados na nuvem para acesso em outros lugares.
           </p>
         </div>
 
         <div className="grid shrink-0 grid-cols-2 gap-px overflow-hidden rounded-lg border border-ink-700/80 bg-ink-700/60">
           {[
-            { k: "Itens", v: `${os.history.length}/${QUOTA}`, a: "text-signal-300" },
-            { k: "Favoritos", v: String(favCount), a: "text-bone-100" },
-            { k: "Lixeira", v: `${os.trash.length}/${TRASH_QUOTA}`, a: os.trash.length ? "text-oxide-400" : "text-mint-300" },
+            { k: "Itens", v: `${os.history.length}${auth.user ? "" : `/${QUOTA}`}`, a: "text-signal-300" },
+            { k: "Salvos na Nuvem", v: String(favCount), a: "text-bone-100" },
+            { k: "Lixeira", v: `${os.trash.length}${auth.user ? "" : `/${TRASH_QUOTA}`}`, a: os.trash.length ? "text-oxide-400" : "text-mint-300" },
             { k: "Expira em", v: retention === 1 ? "1d" : `${retention}d`, a: "text-sky-400" },
           ].map((m) => (
             <div key={m.k} className="bg-ink-900 px-4 py-3">
@@ -248,29 +253,31 @@ export function HistoricoX({
             )}
           >
             <span className="font-mono text-[10px] tracking-[0.1em] uppercase">{f}</span>
-            {f === "favoritos" && (
+            {f === "salvos" && (
               <span className="ml-1.5 text-[10px] text-ink-500 tabular-nums">{favCount}</span>
             )}
           </button>
         ))}
         <span className="mx-1 hidden h-4 w-px bg-ink-700 sm:block" />
-        <label className="flex cursor-pointer items-center gap-2 text-[11.5px] text-bone-400 transition-colors hover:text-bone-200">
+        <label className="flex cursor-pointer items-center gap-2 text-[11.5px] font-medium transition-colors">
           <button
             onClick={() => setShowFav((s) => !s)}
             className={cn(
-              "relative h-5 w-9 rounded-full border transition-colors duration-300",
-              showFav ? "border-mint-400/60 bg-mint-400/25" : "border-ink-700 bg-ink-900"
+              "relative h-5 w-9 rounded-full border transition-all duration-300",
+              showFav ? "border-signal-400/60 bg-signal-400/20" : "border-ink-700 bg-ink-900"
             )}
-            aria-label="Mostrar favoritos primeiro"
+            aria-label="Filtrar apenas salvos"
           >
             <span
               className={cn(
                 "absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full transition-all duration-300",
-                showFav ? "left-[18px] bg-mint-300" : "left-1 bg-ink-500"
+                showFav ? "left-[18px] bg-signal-400 shadow-[0_0_10px_rgba(242,179,61,0.5)]" : "left-1 bg-ink-500"
               )}
             />
           </button>
-          só favoritos ativos
+          <span className={cn("transition-colors", showFav ? "text-signal-300" : "text-ink-400 hover:text-bone-200")}>
+            filtrar apenas salvos
+          </span>
         </label>
         <div className="ml-auto flex gap-1">
           {(["recentes", "antigos", "score"] as const).map((s) => (
@@ -466,12 +473,14 @@ export function HistoricoX({
             </p>
           </Card>
 
-          <Card title="Ocupação" accent="signal">
-            <div className="space-y-3">
-              <Meter value={os.history.length} max={QUOTA} accent="signal" label="Histórico" />
-              <Meter value={os.trash.length} max={TRASH_QUOTA} accent="oxide" label="Lixeira" />
-            </div>
-          </Card>
+          {!auth.user && (
+            <Card title="Ocupação" accent="signal">
+              <div className="space-y-3">
+                <Meter value={os.history.length} max={QUOTA} accent="signal" label="Histórico" />
+                <Meter value={os.trash.length} max={TRASH_QUOTA} accent="oxide" label="Lixeira" />
+              </div>
+            </Card>
+          )}
 
           <Button
             variant="outline"
@@ -549,7 +558,7 @@ function HistoryRow({
             <span className="block truncate text-[13.5px] font-medium text-bone-100">
               {entry.title}
               {entry.favorite && (
-                <Icon name="star" className="ml-2 inline h-3 w-3 -translate-y-0.5 fill-signal-400 text-signal-400" strokeWidth={1} />
+                <Icon name="bookmark" className="ml-2 inline h-3 w-3 -translate-y-0.5 fill-signal-400 text-signal-400" strokeWidth={1} />
               )}
             </span>
             <span className="mt-0.5 block truncate text-[11px] text-ink-400">{entry.summary}</span>
@@ -629,14 +638,14 @@ function Actions({ entry, onGo }: { entry: HistoryEntry; onGo: (id: string) => v
         reabrir
       </button>
       <button
-        onClick={() => toggleFavorite(entry.id)}
+        onClick={() => toggleFavorite(entry)}
         className={cn(
           "rounded px-2 py-1 transition-colors",
           entry.favorite ? "text-signal-400" : "text-ink-500 hover:bg-ink-800 hover:text-signal-300"
         )}
-        title={entry.favorite ? "Remover dos favoritos" : "Favoritar"}
+        title={entry.favorite ? "Remover dos salvos" : "Salvar na nuvem"}
       >
-        <Icon name="star" className={cn("h-3.5 w-3.5", entry.favorite && "fill-signal-400")} strokeWidth={1.8} />
+        <Icon name="bookmark" className={cn("h-3.5 w-3.5", entry.favorite && "fill-signal-400")} strokeWidth={1.8} />
       </button>
       <button
         onClick={() => {

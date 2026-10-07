@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { saveToHistory } from "../history";
-import { useAuth } from "../auth";
+
 
 export type HistoryInput = {
   tool: string;
@@ -21,13 +21,11 @@ export function useAutosave(
   minLen = 10,
   delay = 2800
 ) {
-  const { user } = useAuth();
   const last = useRef<string>("");
   const fn = useRef(entry);
   fn.current = entry;
 
   useEffect(() => {
-    if (!user) return;
     const id = window.setTimeout(() => {
       try {
         const e = fn.current();
@@ -44,5 +42,5 @@ export function useAutosave(
     }, delay);
     return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, user]);
+  }, [...deps]);
 }

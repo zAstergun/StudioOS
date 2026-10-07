@@ -21,6 +21,7 @@ import { HistoricoX } from "./views/Historico";
 import { useStudioOS } from "./history";
 import { useAuth } from "./auth";
 import { AuthScreen } from "./views/AuthScreen";
+import PerfilScreen from "./views/PerfilScreen";
 
 const LS_CALIB = "studioos.calib.v1";
 
@@ -241,19 +242,19 @@ export default function App() {
   }, [auth.recovering, auth.user, protectedViewAfterLogin, view]);
 
   useLayoutEffect(() => {
-    if (!auth.user && (view === "historico" || view === "lixeira")) setView("home");
+    if (!auth.user && (view === "historico" || view === "lixeira" || view === "perfil")) setView("home");
   }, [auth.user, view]);
 
   const progress = useMemo(() => calibProgress(calib), [calib]);
 
   const go = (id: string) => {
-    if (!auth.user && (id === "historico" || id === "lixeira")) {
+    if (!auth.user && (id === "historico" || id === "lixeira" || id === "perfil")) {
       setProtectedViewAfterLogin(id);
       setView("login");
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    if (id !== "login" && id !== "historico" && id !== "lixeira") setProtectedViewAfterLogin(null);
+    if (id !== "login" && id !== "historico" && id !== "lixeira" && id !== "perfil") setProtectedViewAfterLogin(null);
     setView(id);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -267,6 +268,7 @@ export default function App() {
       config: "Provedor de IA — StudioOS",
       historico: "Histórico & Lixeira — StudioOS",
       lixeira: "Lixeira — StudioOS",
+      perfil: "Meu Perfil — StudioOS",
     };
     document.title = titles[view] ?? `${tool?.name ?? "StudioOS"} — StudioOS`;
   }, [view, tool]);
@@ -370,6 +372,7 @@ export default function App() {
                 {view === "score" && <ScorePost onBack={back} onGo={go} />}
                 {view === "mentor" && <Mentor onBack={back} onGo={go} niche={calib.niche} />}
                 {view === "membros" && <Membros onBack={back} onGo={go} />}
+                {view === "perfil" && <PerfilScreen onGo={go} />}
             {view === "wiki" && <Wiki onBack={back} onGo={go} />}
             {view === "historico" && <HistoricoX onBack={back} onGo={go} />}
             {view === "lixeira" && <HistoricoX onBack={back} onGo={go} initialTab="lixeira" />}

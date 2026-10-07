@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { AI_PROVIDERS, type AISettings } from "./ai";
+import { useAuth, supabase } from "./auth";
 
 /* ---------------------------------------------------------------- types */
 
@@ -86,12 +87,39 @@ export function daysLeft(entry: TrashEntry, retention: TrashRetentionDay) {
   return Math.max(0, Math.ceil(remaining / 86400000));
 }
 
-export function purgeTrash() {
+function mapFromSupabase(row: any): HistoryEntry | TrashEntry {
+  const base = {
+    id: row.id,
+    tool: row.tool,
+    toolName: row.tool_name,
+    title: row.title,
+    summary: row.summary,
+    tag: row.tag ?? undefined,
+    content: row.content,
+    createdAt: Number(row.created_at),
+    favorite: row.favorite,
+  };
+  if (row.deleted_at) {
+    return { ...base, deletedAt: Number(row.deleted_at) } as TrashEntry;
+  }
+  return base as HistoryEntry;
+}
+
+export async function purgeTrash() {
   const cfg = read<Partial<StudioConfig>>(CONFIG_KEY, {});
   const retention = cfg.trashDays ?? 30;
-  const trash = read<TrashEntry[]>(TRASH_KEY, []);
-  const kept = trash.filter((t) => daysLeft(t, retention) > 0);
-  if (kept.length !== trash.length) write(TRASH_KEY, kept);
+
+  const session = supabase ? await supabase.auth.getSession() : null;
+  const user = session?.data?.session?.user;
+
+  if (user && supabase) {
+    const cutoff = Date.now() - (retention * 86400000);
+    await supabase.from("studioos_history").delete().not("deleted_at", "is", null).lt("deleted_at", cutoff);
+  } else {
+    const trash = read<TrashEntry[]>(TRASH_KEY, []);
+    const kept = trash.filter((t) => daysLeft(t, retention) > 0);
+    if (kept.length !== trash.length) write(TRASH_KEY, kept);
+  }
 }
 
 export function makeEntry(
@@ -106,54 +134,150 @@ export function makeEntry(
 }
 
 /** push entry into history (called by tools) */
-export function saveToHistory(data: Omit<HistoryEntry, "id" | "createdAt" | "favorite">) {
+export async function saveToHistory(data: Omit<HistoryEntry, "id" | "createdAt" | "favorite">) {
   const entry = makeEntry(data);
   const history = read<HistoryEntry[]>(HIST_KEY, []);
-  // avoid exact duplicate runs
+  
   if (history[0] && history[0].tool === entry.tool && history[0].content === entry.content) {
     return entry;
   }
+  
   write(HIST_KEY, [entry, ...history].slice(0, QUOTA));
   window.dispatchEvent(new Event("studioos:history"));
   return entry;
 }
 
+/* ----------------------------------------------------- drop / trash ops */
+
+/** move a history entry to the trash bin */
+export async function dropToTrash(entry: HistoryEntry) {
+  const session = supabase ? await supabase.auth.getSession() : null;
+  const user = session?.data?.session?.user;
+
+  // Update local
+  const history = read<HistoryEntry[]>(HIST_KEY, []).filter((h) => h.id !== entry.id);
+  write(HIST_KEY, history);
+  const trash = read<TrashEntry[]>(TRASH_KEY, []);
+  write(TRASH_KEY, [{ ...entry, deletedAt: Date.now() }, ...trash].slice(0, TRASH_QUOTA));
+
+  // If it's saved in Supabase, mark deleted there too
+  if (user && supabase && entry.favorite) {
+    await supabase.from("studioos_history").update({ deleted_at: Date.now() }).eq("id", entry.id);
+  }
+
+  window.dispatchEvent(new Event("studioos:history"));
+}
+
+/** toggle favorite flag */
+export async function toggleFavorite(entry: HistoryEntry) {
+  const session = supabase ? await supabase.auth.getSession() : null;
+  const user = session?.data?.session?.user;
+  const nextFav = !entry.favorite;
+
+  // Update local
+  const history = read<HistoryEntry[]>(HIST_KEY, []);
+  const next = history.map((h) => (h.id === entry.id ? { ...h, favorite: nextFav } : h));
+  write(HIST_KEY, next);
+
+  // Sync to Supabase if logged in
+  if (user && supabase) {
+    if (nextFav) {
+      await supabase.from("studioos_history").upsert({
+        id: entry.id,
+        user_id: user.id,
+        tool: entry.tool,
+        tool_name: entry.toolName,
+        title: entry.title,
+        summary: entry.summary,
+        tag: entry.tag,
+        content: entry.content,
+        created_at: entry.createdAt,
+        favorite: true,
+      });
+    } else {
+      await supabase.from("studioos_history").delete().eq("id", entry.id);
+    }
+  }
+
+  window.dispatchEvent(new Event("studioos:history"));
+}
+
 /* ---------------------------------------------------------------- hook */
 
 export function useStudioOS() {
+  const { user } = useAuth();
   const [history, setHistory] = useState<HistoryEntry[]>(() => read(HIST_KEY, []));
-  const [trash, setTrash] = useState<TrashEntry[]>(() => {
-    purgeTrash();
-    return read(TRASH_KEY, []);
-  });
+  const [trash, setTrash] = useState<TrashEntry[]>(() => read(TRASH_KEY, []));
   const [config, setConfigState] = useState<StudioConfig>(loadConfig);
 
-  const reload = () => {
-    setHistory(read(HIST_KEY, []));
-    setTrash(read(TRASH_KEY, []));
+  const reload = useCallback(async () => {
+    let cloudHist: HistoryEntry[] = [];
+    let cloudTrash: TrashEntry[] = [];
+
+    if (user && supabase) {
+      const [{ data: hist }, { data: trsh }] = await Promise.all([
+        supabase.from("studioos_history").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
+        supabase.from("studioos_history").select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }),
+      ]);
+      if (hist) cloudHist = hist.map(mapFromSupabase) as HistoryEntry[];
+      if (trsh) cloudTrash = trsh.map(mapFromSupabase) as TrashEntry[];
+    }
+    
+    const localHist = read<HistoryEntry[]>(HIST_KEY, []);
+    const localTrash = read<TrashEntry[]>(TRASH_KEY, []);
+
+    const histMap = new Map<string, HistoryEntry>();
+    localHist.forEach(h => histMap.set(h.id, h));
+    cloudHist.forEach(h => histMap.set(h.id, h)); // Cloud overrides local
+
+    const trashMap = new Map<string, TrashEntry>();
+    localTrash.forEach(h => trashMap.set(h.id, h));
+    cloudTrash.forEach(h => trashMap.set(h.id, h));
+
+    setHistory(Array.from(histMap.values()).sort((a, b) => b.createdAt - a.createdAt));
+    setTrash(Array.from(trashMap.values()).sort((a, b) => b.deletedAt - a.deletedAt));
+
     setConfigState(loadConfig());
-  };
+  }, [user]);
 
   useEffect(() => {
     purgeTrash();
-    const id = window.setInterval(reload, POLL_MS);
+    reload();
+
+    let id: number | undefined;
+    if (!user) {
+      id = window.setInterval(reload, POLL_MS);
+    } else {
+      id = window.setInterval(reload, 3000);
+    }
+    
     const onEvt = () => reload();
     window.addEventListener("storage", reload);
     window.addEventListener("studioos:history", onEvt);
     return () => {
-      window.clearInterval(id);
+      if (id) window.clearInterval(id);
       window.removeEventListener("storage", reload);
       window.removeEventListener("studioos:history", onEvt);
     };
-  }, []);
+  }, [reload, user]);
 
   const api = useMemo(
     () => ({
-      clearHistory: () => {
+      clearHistory: async () => {
+        if (user && supabase) {
+          await supabase.from("studioos_history").delete().is("deleted_at", null);
+          reload();
+          return;
+        }
         write(HIST_KEY, []);
-        setHistory([]);
+        reload();
       },
-      restore: (id: string) => {
+      restore: async (id: string) => {
+        if (user && supabase) {
+          await supabase.from("studioos_history").update({ deleted_at: null }).eq("id", id);
+          reload();
+          return;
+        }
         const item = read<TrashEntry[]>(TRASH_KEY, []).find((t) => t.id === id);
         if (!item) return;
         const { deletedAt, ...rest } = item;
@@ -163,13 +287,23 @@ export function useStudioOS() {
         write(HIST_KEY, [rest, ...read<HistoryEntry[]>(HIST_KEY, [])].slice(0, QUOTA));
         reload();
       },
-      deleteForever: (id: string) => {
+      deleteForever: async (id: string) => {
+        if (user && supabase) {
+          await supabase.from("studioos_history").delete().eq("id", id);
+          reload();
+          return;
+        }
         write(TRASH_KEY, read<TrashEntry[]>(TRASH_KEY, []).filter((t) => t.id !== id));
         reload();
       },
-      emptyTrash: () => {
+      emptyTrash: async () => {
+        if (user && supabase) {
+          await supabase.from("studioos_history").delete().not("deleted_at", "is", null);
+          reload();
+          return;
+        }
         write(TRASH_KEY, []);
-        setTrash([]);
+        reload();
       },
       setApiKey: (key: string) => {
         const next = { ...config, apiKey: key };
@@ -203,27 +337,8 @@ export function useStudioOS() {
         }
       },
     }),
-    [config]
+    [config, reload, user]
   );
 
   return { history, trash, config, reload, ...api };
-}
-
-/* ----------------------------------------------------- drop / trash ops */
-
-/** move a history entry to the trash bin */
-export function dropToTrash(entry: HistoryEntry) {
-  const history = read<HistoryEntry[]>(HIST_KEY, []).filter((h) => h.id !== entry.id);
-  write(HIST_KEY, history);
-  const trash = read<TrashEntry[]>(TRASH_KEY, []);
-  write(TRASH_KEY, [{ ...entry, deletedAt: Date.now() }, ...trash].slice(0, TRASH_QUOTA));
-  window.dispatchEvent(new Event("studioos:history"));
-}
-
-/** toggle favorite flag */
-export function toggleFavorite(id: string) {
-  const history = read<HistoryEntry[]>(HIST_KEY, []);
-  const next = history.map((h) => (h.id === id ? { ...h, favorite: !h.favorite } : h));
-  write(HIST_KEY, next);
-  window.dispatchEvent(new Event("studioos:history"));
 }

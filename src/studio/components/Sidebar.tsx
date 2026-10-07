@@ -3,7 +3,7 @@ import { cn } from "../utils/cn";
 import { TOOLS, accentText, type Accent } from "../data";
 import { Icon } from "./ui";
 
-const GROUPS = ["Criação", "Publicação", "Estratégia", "Painel"] as const;
+const GROUPS = ["Criação", "Publicação", "Estratégia"] as const;
 
 type Props = {
   active: string;
@@ -76,14 +76,31 @@ export function Sidebar({
           accent="signal"
         />
 
-        <div className="mt-0.5">
+        <div className="mt-0.5 space-y-0.5">
           <NavItem
-            active={active === "login"}
-            onClick={() => go("login")}
+            active={active === "login" || active === "perfil"}
+            onClick={() => go(authenticated ? "perfil" : "login")}
             icon={authenticated ? "user" : "login"}
             label={authenticated ? "Meu Perfil" : "Entrar"}
             kicker={authenticated ? "Gerenciar conta" : "Acesse dados salvos"}
             accent="signal"
+          />
+          <NavItem
+            active={active === "historico"}
+            onClick={() => go("historico")}
+            icon="historico"
+            label="Histórico"
+            kicker={authenticated ? `${historyCount} registro${historyCount === 1 ? "" : "s"}` : "entre para acessar"}
+            accent="signal"
+            badge={authenticated ? historyCount : undefined}
+          />
+          <NavItem
+            active={active === "calibracao"}
+            onClick={() => go("calibracao")}
+            icon="dial"
+            label="Calibração do Canal"
+            kicker="Base de dados"
+            accent="bone"
           />
         </div>
 
@@ -124,17 +141,16 @@ export function Sidebar({
               Sistema
             </span>
             <span className="h-px flex-1 bg-ink-800" />
-            <span className="font-mono text-[9.5px] text-ink-500 tabular-nums">05</span>
+            <span className="font-mono text-[9.5px] text-ink-500 tabular-nums">04</span>
           </div>
           <div className="space-y-0.5">
             <NavItem
-              active={active === "historico"}
-              onClick={() => go("historico")}
-              icon="historico"
-              label="Histórico"
-              kicker={authenticated ? `${historyCount} registro${historyCount === 1 ? "" : "s"}` : "entre para acessar"}
-              accent="signal"
-              badge={authenticated ? historyCount : undefined}
+              active={active === "wiki"}
+              onClick={() => go("wiki")}
+              icon="book"
+              label="Wiki do Painel"
+              kicker="Ajuda"
+              accent="bone"
             />
             <NavItem
               active={active === "lixeira"}

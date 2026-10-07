@@ -367,7 +367,9 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
   };
 
   const pw = strength(password);
-  const emailErr = touched && !EMAIL_RE.test(email.trim()) ? "Informe um e-mail válido." : undefined;
+  const emailErr = touched && mode !== "login" && !EMAIL_RE.test(email.trim()) ? "Informe um e-mail válido." : 
+                   touched && mode === "login" && !email.trim() ? "Informe seu e-mail ou nome de usuário." : undefined;
+  
   const passErr =
     touched && (mode === "signup" || mode === "recover") && password.length < 8
       ? "Use pelo menos 8 caracteres."
@@ -406,7 +408,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
     const em = email.trim();
 
     if (mode === "login") {
-      if (!EMAIL_RE.test(em) || !password) return;
+      if (!em || !password) return;
       
       run(() => auth.signIn(em, password));
     } else if (mode === "signup") {
@@ -425,7 +427,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
   };
 
   const titles: Record<Mode, { k: string; t: string; d: string }> = {
-    login: { k: "01 · acesso", t: "Entrar no estúdio", d: "Use o e-mail e a senha da sua conta." },
+    login: { k: "01 · acesso", t: "Entrar no estúdio", d: "Use o e-mail/usuário e a senha da sua conta." },
     signup: { k: "02 · nova conta", t: "Criar conta", d: "Leva menos de um minuto. Sem cartão." },
     forgot: { k: "03 · recuperação", t: "Esqueci a senha", d: "Enviaremos um link para você definir uma nova senha." },
     magic: { k: "04 · link mágico", t: "Entrar sem senha", d: "Receba um link de acesso de uso único no seu e-mail." },
@@ -504,7 +506,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                 {accessRequired && mode !== "sent" && (
                   <div className="mt-5">
                     <Notice tone="info">
-                      Entre ou crie uma conta para acessar seu histÃ³rico, a lixeira e os dados salvos.
+                      Entre ou crie uma conta para acessar seu histórico, a lixeira e os dados salvos.
                     </Notice>
                   </div>
                 )}
@@ -556,11 +558,11 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                             className={inputCls(!!nameErr)}
                           />
                         </Field>
-                        <Field label="Canal" hint={<span className="text-[10.5px] text-ink-400">opcional</span>}>
+                        <Field label="Usuário" hint={<span className="text-[10.5px] text-ink-400">opcional</span>}>
                           <input
                             value={channel}
                             onChange={(e) => setChannel(e.target.value)}
-                            placeholder="@seucanal"
+                            placeholder="@usuario"
                             className={inputCls()}
                           />
                         </Field>
@@ -568,14 +570,14 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                     )}
 
                     {mode !== "recover" && (
-                      <Field label="E-mail" error={emailErr}>
+                      <Field label={mode === "login" ? "E-mail ou Nome de Usuário (@)" : "E-mail"} error={emailErr}>
                         <input
-                          type="email"
-                          inputMode="email"
+                          type={mode === "login" ? "text" : "email"}
+                          inputMode={mode === "login" ? "text" : "email"}
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          autoComplete="email"
-                          placeholder="voce@email.com"
+                          autoComplete="username"
+                          placeholder={mode === "login" ? "voce@email.com ou @usuario" : "voce@email.com"}
                           autoFocus
                           className={inputCls(!!emailErr)}
                         />

@@ -54,7 +54,14 @@ type AuthCtx = {
   sendMagicLink: (email: string) => Promise<Result>;
   resetPassword: (email: string) => Promise<Result>;
   updatePassword: (password: string) => Promise<Result>;
+  updateProfile: (name: string, channel: string) => Promise<Result>;
+  updateEmail: (email: string) => Promise<Result>;
+  updateAvatar: (file: File) => Promise<Result>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<Result>;
+  linkIdentity: (provider: OAuthProvider) => Promise<Result>;
+  unlinkIdentity: (identity_id: string) => Promise<Result>;
+  getIdentities: () => Promise<{ ok: true; data: any[] } | { ok: false; error: string }>;
 };
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -176,16 +183,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const redirectTo = typeof window !== "undefined" ? window.location.origin + window.location.pathname : undefined;
 
-  const signIn = useCallback<AuthCtx["signIn"]>(async (email, password) => {
+  const signIn = useCallback<AuthCtx["signIn"]>(async (identifier, password) => {
     if (!supabase) {
       await wait(650);
-      const rec = demoUsers().find((u) => u.email.toLowerCase() === email.toLowerCase());
-      if (!rec || rec.password !== password) return { ok: false, error: "E-mail ou senha incorretos." };
+      const isEmail = identifier.includes("@") && !identifier.startsWith("@");
+      const rec = demoUsers().find((u) => 
+        isEmail ? u.email.toLowerCase() === identifier.toLowerCase() : (u.channel || "").toLowerCase() === identifier.replace(/^@/, "").toLowerCase()
+      );
+      if (!rec || rec.password !== password) return { ok: false, error: "Usuário, e-mail ou senha incorretos." };
       const u = demoUserFrom(rec);
       localStorage.setItem(DEMO_KEY, JSON.stringify(u));
       setUser(u);
       return { ok: true };
     }
+
+    let email = identifier;
+    
+    // Se não for um e-mail válido (não tem @ no meio), assumimos que é um username
+    if (!identifier.includes("@") || identifier.startsWith("@")) {
+      const channelStr = identifier.replace(/^@/, "").trim();
+      const { data, error } = await supabase.rpc("get_email_by_channel", { p_channel: channelStr });
+      
+      if (error || !data) {
+        return { ok: false, error: "Usuário, e-mail ou senha incorretos." };
+      }
+      email = data;
+    }
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { ok: false, error: translate(error.message) };
     return { ok: true };
@@ -304,6 +328,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: true, message: "Senha atualizada." };
   }, []);
 
+  const updateProfile = useCallback<AuthCtx["updateProfile"]>(async (name, channel) => {
+    if (!supabase) {
+      await wait(600);
+      const raw = localStorage.getItem(DEMO_KEY);
+      if (raw) {
+        const u = JSON.parse(raw) as StudioUser;
+        u.name = name;
+        u.channel = channel;
+        localStorage.setItem(DEMO_KEY, JSON.stringify(u));
+        setUser(u);
+      }
+      return { ok: true, message: "Perfil atualizado." };
+    }
+
+    if (!user) return { ok: false, error: "Não autenticado." };
+
+    // Atualiza primeiro no DB para checar restrição de unicidade do @
+    const { error: dbError } = await supabase
+      .from("profiles")
+      .upsert({ id: user.id, full_name: name, channel: channel || null });
+
+    if (dbError) {
+      // 23505 é o código do Postgres para violação de UNIQUE constraint
+      if (dbError.code === "23505" || dbError.message.includes("unique")) {
+        return { ok: false, error: "Este @ já está em uso por outra pessoa. Escolha outro." };
+      }
+      return { ok: false, error: translate(dbError.message) };
+    }
+
+    const { data, error } = await supabase.auth.updateUser({
+      data: { full_name: name, channel: channel || null },
+    });
+    
+    if (error) return { ok: false, error: translate(error.message) };
+    if (data.user) {
+      setUser(mapUser(data.user as SbUser));
+    }
+    return { ok: true, message: "Perfil atualizado." };
+  }, [user]);
+
+  const updateEmail = useCallback<AuthCtx["updateEmail"]>(async (newEmail) => {
+    if (!supabase) {
+      await wait(600);
+      const raw = localStorage.getItem(DEMO_KEY);
+      if (raw) {
+        const u = JSON.parse(raw) as StudioUser;
+        u.email = newEmail;
+        localStorage.setItem(DEMO_KEY, JSON.stringify(u));
+        setUser(u);
+      }
+      return { ok: true, message: "E-mail atualizado." };
+    }
+
+    if (!user) return { ok: false, error: "Não autenticado." };
+
+    const { error } = await supabase.auth.updateUser({ email: newEmail });
+    
+    if (error) return { ok: false, error: translate(error.message) };
+    return { ok: true, message: "Enviamos um link de confirmação para o novo e-mail." };
+  }, [user]);
+
   const signOut = useCallback(async () => {
     if (!supabase) {
       localStorage.removeItem(DEMO_KEY);
@@ -312,6 +397,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     await supabase.auth.signOut();
     setUser(null);
+  }, []);
+
+  const deleteAccount = useCallback<AuthCtx["deleteAccount"]>(async () => {
+    if (!supabase) {
+      localStorage.removeItem(DEMO_KEY);
+      setUser(null);
+      return { ok: true, message: "Conta excluída (Modo Demo)." };
+    }
+    const { error } = await supabase.rpc("delete_user");
+    if (error) return { ok: false, error: translate(error.message) };
+    
+    await signOut();
+    return { ok: true, message: "Sua conta foi excluída permanentemente." };
+  }, [signOut]);
+
+  const updateAvatar = useCallback<AuthCtx["updateAvatar"]>(async (file) => {
+    if (!supabase || !user) return { ok: false, error: "Não autenticado." };
+    
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${user.id}-${Math.random()}.${fileExt}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(fileName, file, { upsert: true });
+      
+    if (uploadError) return { ok: false, error: "Falha ao enviar a imagem." };
+    
+    const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
+    
+    const { error: updateError } = await supabase.auth.updateUser({
+      data: { avatar_url: data.publicUrl }
+    });
+    
+    if (updateError) return { ok: false, error: translate(updateError.message) };
+    
+    setUser(prev => prev ? { ...prev, avatarUrl: data.publicUrl } : null);
+    return { ok: true, message: "Foto atualizada!" };
+  }, [user]);
+
+  const linkIdentity = useCallback<AuthCtx["linkIdentity"]>(async (provider) => {
+    if (!supabase) return { ok: false, error: "Disponível apenas com Supabase configurado." };
+    const { error } = await supabase.auth.linkIdentity({
+      provider,
+      options: { redirectTo }
+    });
+    if (error) return { ok: false, error: translate(error.message) };
+    return { ok: true };
+  }, [redirectTo]);
+
+  const unlinkIdentity = useCallback<AuthCtx["unlinkIdentity"]>(async (identity_id) => {
+    if (!supabase) return { ok: false, error: "Disponível apenas com Supabase configurado." };
+    const { error } = await supabase.auth.unlinkIdentity({ identity_id } as any);
+    if (error) return { ok: false, error: translate(error.message) };
+    return { ok: true, message: "Conta desvinculada com sucesso." };
+  }, []);
+
+  const getIdentities = useCallback<AuthCtx["getIdentities"]>(async () => {
+    if (!supabase) {
+      // Mock preenchido para visualização no modo demo
+      return {
+        ok: true,
+        data: [
+          {
+            identity_id: "mock-google-123",
+            provider: "google",
+            identity_data: { email: "teste.criador@gmail.com" }
+          },
+          {
+            identity_id: "mock-discord-456",
+            provider: "discord",
+            identity_data: { preferred_username: "criador_demo" }
+          }
+        ] as any
+      };
+    }
+    const { data, error } = await supabase.auth.getUserIdentities();
+    if (error) return { ok: false, error: translate(error.message) };
+    return { ok: true, data: data?.identities || [] };
   }, []);
 
   const value = useMemo<AuthCtx>(
@@ -326,9 +489,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sendMagicLink,
       resetPassword,
       updatePassword,
+      updateProfile,
+      updateEmail,
+      updateAvatar,
       signOut,
+      deleteAccount,
+      linkIdentity,
+      unlinkIdentity,
+      getIdentities,
     }),
-    [user, loading, demo, recovering, signIn, signUp, signInWithOAuth, sendMagicLink, resetPassword, updatePassword, signOut]
+    [user, loading, demo, recovering, signIn, signUp, signInWithOAuth, sendMagicLink, resetPassword, updatePassword, updateProfile, updateEmail, updateAvatar, signOut, deleteAccount, linkIdentity, unlinkIdentity, getIdentities]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
