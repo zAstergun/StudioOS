@@ -1,0 +1,74 @@
+---
+import { createSupabaseClient } from '../../studio/lib/supabase';
+import Layout from '../../layouts/Layout.astro';
+// @ts-ignore
+import { env as cfEnv } from "cloudflare:workers";
+
+const handle = Astro.params.handle;
+
+if (!handle) {
+  return new Response("Não encontrado", { status: 404 });
+}
+
+// O handle na URL agora não precisa ter @, se tiver a gente remove, caso contrário usamos ele mesmo.
+const channelStr = handle.startsWith('@') ? handle.substring(1) : handle;
+
+const env = cfEnv || import.meta.env;
+const supabaseUrl = env.PUBLIC_SUPABASE_URL || import.meta.env.PUBLIC_SUPABASE_URL;
+const supabaseKey = env.PUBLIC_SUPABASE_ANON_KEY || import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
+
+let profile = null;
+
+if (supabaseUrl && supabaseKey) {
+  const supabase = createSupabaseClient(Astro.cookies, supabaseUrl, supabaseKey);
+  // Busca na tabela profiles pelo canal escolhido
+  const { data, error } = await supabase.from('profiles').select('*').eq('channel', channelStr).single();
+  if (error) {
+    console.error("Supabase Error finding profile by channel:", error);
+  }
+  profile = data;
+} else {
+  // Mock para visualizar localmente no modo demo
+  profile = {
+    full_name: "Usuário Demo",
+    channel: channelStr,
+    avatar_url: null,
+  };
+}
+
+if (!profile) {
+  return new Response("Perfil não encontrado", { status: 404 });
+}
+---
+
+<Layout title={`${profile.full_name} (@${profile.channel}) | StudioOS`}>
+  <div class="min-h-screen bg-ink-950 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+    <!-- Efeitos de fundo -->
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-signal-400/5 rounded-full blur-[120px] pointer-events-none"></div>
+
+    <div class="max-w-md w-full bg-ink-900/80 backdrop-blur-md border border-ink-800 rounded-2xl p-10 text-center shadow-2xl relative z-10">
+      
+      <div class="h-28 w-28 mx-auto overflow-hidden rounded-full border-4 border-ink-800 bg-ink-950 mb-6 relative shadow-[0_0_40px_-10px_rgba(247,183,51,0.3)]">
+         {profile.avatar_url ? (
+            <img src={profile.avatar_url} alt={profile.full_name} class="absolute inset-0 h-full w-full object-cover" />
+         ) : (
+            <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(profile.full_name)}&background=random`} alt={profile.full_name} class="absolute inset-0 h-full w-full object-cover" />
+         )}
+      </div>
+
+      <h1 class="text-3xl font-display font-extrabold text-bone-50 mb-2">{profile.full_name}</h1>
+      
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-signal-400/10 px-3 py-1 font-mono text-[11px] tracking-widest text-signal-400 uppercase border border-signal-400/20 mb-8">
+        @{profile.channel}
+      </span>
+      
+      <p class="text-bone-400 text-[15px] leading-relaxed mb-10 max-w-[280px] mx-auto">
+        Criador de conteúdo digital usando o ecossistema StudioOS para gerenciar sua operação.
+      </p>
+
+      <a href="/" class="inline-flex items-center justify-center gap-2 rounded-md bg-signal-400 text-ink-950 px-6 py-3 font-semibold text-[14px] hover:bg-signal-300 hover:shadow-[0_10px_30px_-10px_rgba(247,183,51,0.6)] transition-all active:scale-[0.98] w-full">
+        Conhecer StudioOS
+      </a>
+    </div>
+  </div>
+</Layout>

@@ -6,7 +6,7 @@ import { MEMBERSHIP_SECTIONS } from "../data";
 import { useAutosave } from "./useAutosave";
 import { useExampleMode } from "../auth";
 
-const num = (s: string) => parseFloat(s.replace(/\./g, "").replace(",", ".")) || 0;
+const num = (s?: string) => parseFloat((s || "").replace(/\./g, "").replace(",", ".")) || 0;
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
@@ -46,7 +46,7 @@ export function Membros({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
     const unicos = num(answers["Espectadores únicos/mês?"]);
     const inscritos = num(answers["Quantos inscritos?"]);
     const meta = num(answers["Quanto quer ganhar/mês com membros?"]);
-    const recorrentesPct = parseFloat((answers["% novos / casuais / recorrentes?"].match(/(\d+)\s*$/) ?? ["0"])[1]) || 0;
+    const recorrentesPct = parseFloat(((answers["% novos / casuais / recorrentes?"] || "").match(/(\d+)\s*$/) ?? ["0"])[1]) || 0;
     const base = Math.max(unicos * (recorrentesPct / 100), inscritos * 0.12);
     const conv = Math.max(0, parseFloat(conversao.replace(",", ".")) || 0) / 100;
     const p = num(preco);
