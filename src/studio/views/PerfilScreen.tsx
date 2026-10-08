@@ -266,18 +266,18 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   const remainingItems = 5 - completedCount;
 
   const achievements = [
-    { id: "seq21", icon: "spark", label: "Sequência de 21 dias", desc: "Acessou o painel por 21 dias seguidos.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: true },
-    { id: "ideias200", icon: "target", label: "200 ideias ranqueadas", desc: "Mais de 200 ideias processadas no painel.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: true },
-    { id: "top4", icon: "star", label: "Top 4% do canal", desc: "Seu desempenho superou 96% dos criadores.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: true },
-    { id: "verified", icon: "check", label: "Conta verificada", desc: "Identidade confirmada com sucesso.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: true },
+    { id: "seq21", icon: "spark", label: "Sequência de 21 dias", desc: "Acessou o painel por 21 dias seguidos.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: isDemo || Number(userStats['streak']) >= 21 },
+    { id: "ideias200", icon: "target", label: "200 ideias ranqueadas", desc: "Mais de 200 ideias processadas no painel.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: isDemo || Number(userStats['ideias_ranqueadas']) >= 200 },
+    { id: "top4", icon: "star", label: "Top 4% do canal", desc: "Seu desempenho superou 96% dos criadores.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: isDemo || Number(userStats['top4']) === 1 },
+    { id: "verified", icon: "check", label: "Conta verificada", desc: "Identidade confirmada com sucesso.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: isDemo || !!user?.email_confirmed_at || Number(userStats['verified']) === 1 },
     { id: "onboarding", icon: "layers", label: "Primeiros Passos", desc: "Completou todas as tarefas de onboarding.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: completedCount === onboardingItems.length },
-    { id: "viral", icon: "bolt", label: "Post Viral", desc: "Atingiu 100k visualizações em um único post.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: false },
-    { id: "thumb", icon: "frame", label: "Mestre das Thumbnails", desc: "Aprovou 50 thumbnails no painel.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: false },
-    { id: "roteiro", icon: "book", label: "Roteirista Nato", desc: "Criou seu primeiro roteiro completo.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: false },
-    { id: "strategy", icon: "brain", label: "Mente Brilhante", desc: "Definiu o planejamento do trimestre.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: false },
-    { id: "collec", icon: "stack", label: "Colecionador", desc: "Salvou 500 referências no banco de ideias.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: false },
-    { id: "eng", icon: "eye", label: "Atenção Total", desc: "Manteve 60% de retenção no YouTube.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: false },
-    { id: "vet", icon: "clock", label: "Veterano", desc: "Completou 1 ano de estúdio.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: false },
+    { id: "viral", icon: "bolt", label: "Post Viral", desc: "Atingiu 100k visualizações em um único post.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: Number(userStats['viral']) === 1 },
+    { id: "thumb", icon: "frame", label: "Mestre das Thumbnails", desc: "Aprovou 50 thumbnails no painel.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(userStats['thumb_approved']) >= 50 },
+    { id: "roteiro", icon: "book", label: "Roteirista Nato", desc: "Criou seu primeiro roteiro completo.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: Number(userStats['producoes']) >= 1 || Number(userStats['tool_roteiro']) >= 1 },
+    { id: "strategy", icon: "brain", label: "Mente Brilhante", desc: "Definiu o planejamento do trimestre.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: Number(userStats['strategy_defined']) === 1 },
+    { id: "collec", icon: "stack", label: "Colecionador", desc: "Salvou 500 referências no banco de ideias.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: Number(userStats['references_saved']) >= 500 },
+    { id: "eng", icon: "eye", label: "Atenção Total", desc: "Manteve 60% de retenção no YouTube.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(userStats['high_retention']) === 1 },
+    { id: "vet", icon: "clock", label: "Veterano", desc: "Completou 1 ano de estúdio.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: Number(userStats['veteran']) === 1 },
   ];
   
   const unlockedCount = achievements.filter(a => a.unlocked).length;
@@ -484,38 +484,41 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
               <div className="mx-4 rounded-xl border border-[#232327] bg-[#0d0d0f] p-3.5">
                 <div className="mb-3 text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">Carga por dia da semana</div>
                 <div className="space-y-[7px]">
-                  {["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((label, i) => {
-                    const totals = [57, 121, 114, 110, 126, 120, 65];
-                    const maxWeek = 126;
-                    const filled = Math.round((totals[i] / maxWeek) * 18);
-                    return (
-                      <div key={label} className="flex items-center gap-3">
-                        <span className="w-7 font-mono text-[10px] uppercase tracking-widest text-[#8c8c94]">{label}</span>
-                        <div className="flex flex-1 gap-[3px]">
-                          {Array.from({ length: 18 }).map((_, c) => {
-                            const on = c < filled;
-                            const t = c / 18;
-                            const color = on ? (t > 0.65 ? "#F2604C" : t > 0.45 ? "#F2B33D" : "#2FD4A0") : "#1c1c20";
-                            return (
-                              <span
-                                key={c}
-                                className="h-[9px] flex-1 rounded-[2px] transition-all duration-500 ease-out"
-                                style={{ 
-                                  background: color, 
-                                  opacity: mounted ? (on ? 0.92 : 1) : 0,
-                                  transform: mounted ? "scaleY(1)" : "scaleY(0)",
-                                  transitionDelay: `${i * 40 + c * 20}ms`
-                                }}
-                              />
-                            );
-                          })}
+                  {(() => {
+                    const baseTotals = [57, 121, 114, 110, 126, 120, 65];
+                    const weekTotals = showZero ? [0,0,0,0,0,0,0] : (isDemo ? baseTotals : [0, 1, 2, 3, 4, 5, 6].map(d => Number(userStats[`dow_${d}`] || 0)));
+                    const maxWeek = Math.max(...weekTotals, 1);
+                    return ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((label, i) => {
+                      const filled = Math.round((weekTotals[i] / maxWeek) * 18);
+                      return (
+                        <div key={label} className="flex items-center gap-3">
+                          <span className="w-7 font-mono text-[10px] uppercase tracking-widest text-[#8c8c94]">{label}</span>
+                          <div className="flex flex-1 gap-[3px]">
+                            {Array.from({ length: 18 }).map((_, c) => {
+                              const on = c < filled;
+                              const t = c / 18;
+                              const color = on ? (t > 0.65 ? "#F2604C" : t > 0.45 ? "#F2B33D" : "#2FD4A0") : "#1c1c20";
+                              return (
+                                <span
+                                  key={c}
+                                  className="h-[9px] flex-1 rounded-[2px] transition-all duration-500 ease-out"
+                                  style={{ 
+                                    background: color, 
+                                    opacity: mounted ? (on ? 0.92 : 1) : 0,
+                                    transform: mounted ? "scaleY(1)" : "scaleY(0)",
+                                    transitionDelay: `${i * 40 + c * 20}ms`
+                                  }}
+                                />
+                              );
+                            })}
+                          </div>
+                          <span className="w-14 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">
+                            {isDemo ? `${Math.floor(weekTotals[i] / 60)}h${String(weekTotals[i] % 60).padStart(2, "0")}` : `${weekTotals[i]}×`}
+                          </span>
                         </div>
-                        <span className="w-14 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">
-                          {Math.floor(totals[i] / 60)}h{String(totals[i] % 60).padStart(2, "0")}
-                        </span>
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                 </div>
               </div>
 
@@ -556,25 +559,68 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                   <Icon name="dial" className="h-3 w-3 text-[#F2B33D]" />
                   <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">Ferramentas mais usadas</span>
                   <span className="h-px flex-1 bg-[#232327]" />
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2] tabular-nums">209 EXECUÇÕES</span>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2] tabular-nums">{getStat("total_runs", "209")} EXECUÇÕES</span>
                 </div>
                 <div className="space-y-2.5">
-                  {[
-                    { tool: "Rank de Ideia", runs: 71, share: 80, color: "#F2604C" },
-                    { tool: "Gerador de Hooks", runs: 54, share: 60, color: "#F2604C" },
-                    { tool: "Briefing Thumbnail", runs: 38, share: 45, color: "#F2B33D" },
-                    { tool: "Roteiro & Gravação", runs: 29, share: 35, color: "#2FD4A0" },
-                    { tool: "Receita Viral", runs: 17, share: 20, color: "#2FD4A0" }
-                  ].map((t, i) => (
-                    <div key={t.tool} className="flex items-center gap-3">
-                      <span className="w-5 font-mono text-[11px] text-[#7f7f88] tabular-nums">{String(i + 1).padStart(2, '0')}</span>
-                      <span className="w-[150px] shrink-0 truncate text-[12.5px] text-[#d3d3d8]">{t.tool}</span>
-                      <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#1c1c20]">
-                        <div className="h-full rounded-full transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]" style={{ width: mounted ? `${t.share}%` : '0%', background: t.color, transitionDelay: `${i * 120 + 400}ms` }} />
+                  {(() => {
+                    const demoTools = [
+                      { tool: "Rank de Ideia", runs: 71, share: 80, color: "#F2604C" },
+                      { tool: "Gerador de Hooks", runs: 54, share: 60, color: "#F2604C" },
+                      { tool: "Briefing Thumbnail", runs: 38, share: 45, color: "#F2B33D" },
+                      { tool: "Roteiro & Gravação", runs: 29, share: 35, color: "#2FD4A0" },
+                      { tool: "Receita Viral", runs: 17, share: 20, color: "#2FD4A0" }
+                    ];
+
+                    if (isDemo) return demoTools.map((t, i) => (
+                      <div key={t.tool} className="flex items-center gap-3">
+                        <span className="w-5 font-mono text-[11px] text-[#7f7f88] tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+                        <span className="w-[150px] shrink-0 truncate text-[12.5px] text-[#d3d3d8]">{t.tool}</span>
+                        <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#1c1c20]">
+                          <div className="h-full rounded-full transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]" style={{ width: mounted ? `${t.share}%` : '0%', background: t.color, transitionDelay: `${i * 120 + 400}ms` }} />
+                        </div>
+                        <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}×</span>
                       </div>
-                      <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}×</span>
-                    </div>
-                  ))}
+                    ));
+
+                    if (showZero) return <div className="text-[12px] text-[#8c8c94]">Nenhuma ferramenta utilizada ainda.</div>;
+
+                    const toolNames: Record<string, string> = {
+                      rank: "Rank de Ideia",
+                      hook: "Gerador de Hooks",
+                      briefing: "Briefing Thumbnail",
+                      roteiro: "Roteiro & Gravação",
+                      receita: "Receita Viral"
+                    };
+
+                    const tools = Object.entries(userStats)
+                      .filter(([k]) => k.startsWith('tool_'))
+                      .map(([k, v]) => ({ 
+                        id: k.replace('tool_', ''), 
+                        name: toolNames[k.replace('tool_', '')] || k.replace('tool_', ''),
+                        runs: Number(v) 
+                      }))
+                      .sort((a, b) => b.runs - a.runs)
+                      .slice(0, 5);
+
+                    if (tools.length === 0) return <div className="text-[12px] text-[#8c8c94]">Nenhuma ferramenta utilizada ainda.</div>;
+
+                    const maxRuns = Math.max(...tools.map(t => t.runs), 1);
+
+                    return tools.map((t, i) => {
+                      const share = Math.round((t.runs / maxRuns) * 100);
+                      const color = i < 2 ? "#F2604C" : i < 3 ? "#F2B33D" : "#2FD4A0";
+                      return (
+                        <div key={t.id} className="flex items-center gap-3">
+                          <span className="w-5 font-mono text-[11px] text-[#7f7f88] tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+                          <span className="w-[150px] shrink-0 truncate text-[12.5px] text-[#d3d3d8] capitalize">{t.name}</span>
+                          <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#1c1c20]">
+                            <div className="h-full rounded-full transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]" style={{ width: mounted ? `${share}%` : '0%', background: color, transitionDelay: `${i * 120 + 400}ms` }} />
+                          </div>
+                          <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}×</span>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
               

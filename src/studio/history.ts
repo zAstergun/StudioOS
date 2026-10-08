@@ -153,6 +153,13 @@ export async function saveToHistory(data: Omit<HistoryEntry, "id" | "createdAt" 
     supabase.rpc('increment_stat', { stat_name: 'total_runs' }).then();
     if (isIdeia) supabase.rpc('increment_stat', { stat_name: 'ideias_ranqueadas' }).then();
     if (isProducao) supabase.rpc('increment_stat', { stat_name: 'producoes' }).then();
+
+    const dow = new Date().getDay();
+    supabase.rpc('increment_stat', { stat_name: `dow_${dow}` }).then();
+
+    if (entry.tool) {
+      supabase.rpc('increment_stat', { stat_name: `tool_${entry.tool}` }).then();
+    }
   }
 
   return entry;
