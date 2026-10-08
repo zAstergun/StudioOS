@@ -100,8 +100,6 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
     }
   }, [user]);
 
-  // Se a conta for muito recente (criada há menos de 1 dia), ou não for a de teste, zeramos o mockup
-  const isNewAccount = user && (Date.now() - new Date(user.createdAt).getTime() < 1000 * 60 * 60 * 24);
   const isDemo = user?.email?.includes("teste") || user?.email?.includes("criador@") || false;
 
   const [userStats, setUserStats] = useState<Record<string, number>>({});
@@ -114,12 +112,12 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
     }
   }, [user]);
 
-  const showZero = isNewAccount && !isDemo && Object.keys(userStats).length === 0;
-
   const getStat = (key: string, demoVal: string) => {
     if (userStats[key] !== undefined) return userStats[key].toString();
-    return showZero ? "0" : demoVal;
+    return isDemo ? demoVal : "0";
   };
+
+  const showZero = !isDemo && Object.keys(userStats).length === 0;
 
   const [sessions, setSessions] = useState([
     { id: 1, name: "Chrome no Windows", location: "São Paulo, BR • 192.168.1.1", current: true, time: "Atual" },
