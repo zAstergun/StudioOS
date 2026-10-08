@@ -9,6 +9,7 @@ import { useAuth, supabase } from "../auth";
 interface Task {
   id: string;
   title: string;
+  description?: string;
   status: "todo" | "in_progress" | "done";
   assignee?: string;
   project_id: string;
@@ -27,8 +28,13 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
   
   const [showTaskModal, setShowTaskModal] = useState<Task["status"] | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [viewTaskModal, setViewTaskModal] = useState<Task | null>(null);
+  const [isEditingTaskDesc, setIsEditingTaskDesc] = useState(false);
+  const [editTaskDescContent, setEditTaskDescContent] = useState("");
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDeleteForeverModal, setShowDeleteForeverModal] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareChannel, setShareChannel] = useState("");
@@ -57,6 +63,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
         setTasks(data.map(d => ({
           id: d.id,
           title: d.title,
+          description: d.description,
           status: d.status as any,
           project_id: d.project_id
         })));
@@ -116,6 +123,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
       id: `t${Date.now()}`,
       project_id: project.id,
       title: newTaskTitle.trim(),
+      description: newTaskDescription.trim() || undefined,
       status: showTaskModal,
       assignee_id: user.id
     };
@@ -123,9 +131,44 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
     setTasks([...tasks, { ...newTask, status: newTask.status as any }]);
     setShowTaskModal(null);
     setNewTaskTitle("");
+    setNewTaskDescription("");
     if (supabase) {
       await supabase.from("studioos_tasks").insert([newTask]);
     }
+  };
+
+  const handleDeleteTask = (task: Task, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTaskToDelete(task);
+  };
+
+  const confirmDeleteTask = async () => {
+    if (!supabase || !taskToDelete) return;
+    
+    const taskId = taskToDelete.id;
+    setTaskToDelete(null);
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+    await supabase.from("studioos_tasks").delete().eq("id", taskId);
+  };
+
+  const handleDropTask = async (taskId: string, newStatus: Task["status"]) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || task.status === newStatus) return;
+
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+
+    if (supabase) {
+      await supabase.from("studioos_tasks").update({ status: newStatus }).eq("id", taskId);
+    }
+  };
+
+  const handleUpdateTaskDesc = async (taskId: string) => {
+    if (!supabase) return;
+    const desc = editTaskDescContent.trim() || undefined;
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, description: desc } : t));
+    setViewTaskModal(prev => prev ? { ...prev, description: desc } : null);
+    setIsEditingTaskDesc(false);
+    await supabase.from("studioos_tasks").update({ description: desc || null }).eq("id", taskId);
   };
 
   const handleAcceptApplication = async (appId: string) => {
@@ -363,9 +406,9 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
             const colTasks = tasks.filter(t => t.status === col.id);
             const cfg = COL_CONFIG[col.id];
             return (
-              <div key={col.id} className="flex flex-col">
+              <div key={col.id} className="flex flex-col overflow-hidden rounded-xl border border-ink-800/40 bg-ink-900/20">
                 {/* COLUMN HEADER */}
-                <div className="mb-3 flex items-center justify-between rounded-lg border border-ink-800/40 bg-ink-900/20 px-4 py-2.5">
+                <div className="flex items-center justify-between border-b border-ink-800/30 px-4 py-3.5">
                   <div className="flex items-center gap-2">
                     <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dotColor)} />
                     <h3 className="font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase">
@@ -381,19 +424,42 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                 </div>
                 
                 {/* TASKS */}
-                <div className="flex flex-1 flex-col gap-2">
+                <div 
+                  className="flex flex-1 flex-col gap-2 p-3 min-h-[150px]"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const taskId = e.dataTransfer.getData("text/plain");
+                    if (taskId) handleDropTask(taskId, col.id as any);
+                  }}
+                >
                   {colTasks.map(task => (
                     <article 
                       key={task.id} 
-                      className="group relative cursor-pointer overflow-hidden rounded-lg border border-ink-800/40 bg-ink-900/20 p-4 transition-all duration-200 hover:border-ink-700 hover:bg-ink-900/50"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", task.id);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onClick={() => setViewTaskModal(task)}
+                      className="group relative cursor-pointer overflow-hidden rounded-lg border border-ink-800/30 bg-ink-950/40 p-3.5 transition-all duration-200 hover:border-signal-400/50 hover:bg-signal-400/[0.02] hover:shadow-[0_0_20px_-5px_rgba(242,179,61,0.15)]"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className="min-w-0 flex-1 text-[13px] font-medium leading-snug text-bone-200">
                           {task.title}
                         </p>
-                        <button className="shrink-0 rounded p-1 text-ink-400 opacity-0 transition-all hover:bg-ink-800/60 hover:text-ink-300 group-hover:opacity-100">
-                          <Icon name="dial" className="h-3 w-3" strokeWidth={1.8} />
-                        </button>
+                        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <button 
+                            onClick={(e) => handleDeleteTask(task, e)}
+                            className="shrink-0 rounded p-1 text-ink-400 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                            title="Excluir tarefa"
+                          >
+                            <Icon name="trash" className="h-3 w-3" strokeWidth={1.8} />
+                          </button>
+                        </div>
                       </div>
                       {task.assignee && (
                         <div className="mt-2.5 flex items-center gap-2">
@@ -409,7 +475,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                   {/* ADD TASK BUTTON */}
                   <button 
                     onClick={() => setShowTaskModal(col.id as any)}
-                    className="group flex h-10 items-center justify-center gap-2 rounded-lg border border-dashed border-ink-800/40 text-ink-400 transition-all duration-200 hover:border-signal-400/30 hover:bg-signal-400/[0.03] hover:text-signal-400"
+                    className="group flex h-10 items-center justify-center gap-2 rounded-lg border border-dashed border-ink-800/40 text-ink-400 transition-all duration-200 hover:border-signal-400/30 hover:bg-signal-400/[0.03] hover:text-signal-400 mt-1"
                   >
                     <Icon name="plus" className="h-3.5 w-3.5" strokeWidth={1.5} />
                     <span className="font-mono text-[9px] tracking-[0.1em] uppercase opacity-70 group-hover:opacity-100 transition-opacity">Adicionar</span>
@@ -560,12 +626,12 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                   <h2 className="font-display text-lg font-bold text-bone-50">Nova Tarefa</h2>
                   <p className="mt-0.5 font-mono text-[9px] tracking-[0.12em] text-bone-300 uppercase">
                     Em: <span className="text-signal-400">
-                      {showTaskModal === 'todo' ? 'A Fazer' : showTaskModal === 'in_progress' ? 'Em Andamento' : 'Concluído'}
+                      {COL_CONFIG[showTaskModal].label}
                     </span>
                   </p>
                 </div>
                 <button 
-                  onClick={() => { setShowTaskModal(null); setNewTaskTitle(""); }}
+                  onClick={() => { setShowTaskModal(null); setNewTaskTitle(""); setNewTaskDescription(""); }}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-bone-300 transition-colors hover:bg-ink-800 hover:text-bone-200"
                 >
                   <Icon name="close" className="h-4 w-4" />
@@ -589,10 +655,23 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                 />
               </div>
 
+              <div className="mb-6">
+                <label className="mb-2 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
+                  Descrição (Opcional)
+                </label>
+                <textarea 
+                  value={newTaskDescription}
+                  onChange={(e) => setNewTaskDescription(e.target.value)}
+                  placeholder="Detalhes adicionais..."
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-ink-800/60 bg-ink-950/50 px-4 py-3 text-[13px] text-bone-100 placeholder:text-ink-400 transition-colors focus:border-signal-400/60 focus:outline-none focus:ring-1 focus:ring-signal-400/20"
+                />
+              </div>
+
               <div className="flex items-center justify-end gap-3">
                 <button 
                   type="button"
-                  onClick={() => { setShowTaskModal(null); setNewTaskTitle(""); }}
+                  onClick={() => { setShowTaskModal(null); setNewTaskTitle(""); setNewTaskDescription(""); }}
                   className="rounded-lg px-4 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-300 uppercase transition-colors hover:text-bone-200"
                 >
                   Cancelar
@@ -606,6 +685,103 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DETALHES DA TAREFA */}
+      {viewTaskModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/85 p-4 backdrop-blur-md"
+          onClick={(e) => { 
+            if (e.target === e.currentTarget) {
+              setViewTaskModal(null);
+              setIsEditingTaskDesc(false);
+            }
+          }}
+        >
+          <div className="relative w-full max-w-[420px] overflow-hidden rounded-xl border border-ink-800/40 bg-ink-900 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)]">
+            <div className="flex items-center justify-between border-b border-ink-800/30 px-5 py-3.5">
+              <div className="flex items-center gap-2.5">
+                <Icon name={COL_CONFIG[viewTaskModal.status].icon as any} className="h-3.5 w-3.5 text-bone-300" strokeWidth={1.8} />
+                <h3 className="font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase">
+                  Detalhes da Tarefa
+                </h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={cn(
+                  "rounded bg-ink-800/40 px-2 py-0.5 font-mono text-[8px] font-bold tracking-[0.1em] uppercase",
+                  COL_CONFIG[viewTaskModal.status].accent
+                )}>
+                  {COL_CONFIG[viewTaskModal.status].label}
+                </span>
+                <button 
+                  onClick={() => {
+                    setViewTaskModal(null);
+                    setIsEditingTaskDesc(false);
+                  }}
+                  className="text-ink-400 transition-colors hover:text-bone-200"
+                >
+                  <Icon name="close" className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <div className="mb-5">
+                <h3 className="mb-2 font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
+                  Título
+                </h3>
+                <p className="text-[15px] font-medium leading-snug text-bone-50">
+                  {viewTaskModal.title}
+                </p>
+              </div>
+              <div>
+                <h3 className="mb-2 font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
+                  Descrição
+                </h3>
+                {isEditingTaskDesc ? (
+                  <div className="animate-in fade-in zoom-in-95 duration-200">
+                    <textarea
+                      value={editTaskDescContent}
+                      onChange={(e) => setEditTaskDescContent(e.target.value)}
+                      className="w-full min-h-[100px] resize-none rounded-lg border border-signal-400/50 bg-ink-950/50 p-4 text-[13px] leading-relaxed text-bone-100 placeholder:text-ink-500 focus:outline-none"
+                      placeholder="Adicione uma descrição para a tarefa..."
+                      autoFocus
+                    />
+                    <div className="mt-2 flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setIsEditingTaskDesc(false)}
+                        className="rounded px-3 py-1.5 font-mono text-[9px] font-bold uppercase text-ink-400 transition-colors hover:text-bone-200"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => handleUpdateTaskDesc(viewTaskModal.id)}
+                        className="rounded bg-signal-400/10 px-3 py-1.5 font-mono text-[9px] font-bold uppercase text-signal-400 transition-colors hover:bg-signal-400/20"
+                      >
+                        Salvar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div 
+                    onClick={() => {
+                      setEditTaskDescContent(viewTaskModal.description || "");
+                      setIsEditingTaskDesc(true);
+                    }}
+                    className="group relative cursor-pointer rounded-lg border border-ink-800/60 bg-ink-950/50 p-4 min-h-[80px] transition-colors hover:border-signal-400/30 hover:bg-signal-400/[0.02]"
+                  >
+                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-bone-200">
+                      {viewTaskModal.description || <span className="italic text-ink-500">Adicionar descrição...</span>}
+                    </p>
+                    <div className="absolute right-3 top-3 opacity-0 transition-opacity group-hover:opacity-100">
+                      <Icon name="pencil" className="h-3.5 w-3.5 text-signal-400/70" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -822,6 +998,42 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                 className="flex-1 rounded-lg bg-red-500/10 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-red-500 uppercase transition-colors hover:bg-red-500 hover:text-white"
               >
                 Mover p/ Lixeira
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EXCLUIR TAREFA */}
+      {taskToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div 
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-red-500/20 bg-ink-950 shadow-[0_32px_64px_-12px_rgba(239,68,68,0.15)]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center justify-center p-8 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-500">
+                <Icon name="trash" className="h-6 w-6" strokeWidth={1.5} />
+              </div>
+              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Excluir Tarefa</h2>
+              <p className="text-[13px] leading-relaxed text-bone-300">
+                Tem certeza que deseja excluir a tarefa <strong className="text-bone-100">{taskToDelete.title}</strong>? 
+                Isso não pode ser desfeito.
+              </p>
+            </div>
+            
+            <div className="flex gap-3 border-t border-ink-800/50 bg-ink-900/30 p-5">
+              <button 
+                onClick={() => setTaskToDelete(null)}
+                className="flex-1 rounded-lg border border-ink-800 bg-transparent px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-50"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={confirmDeleteTask}
+                className="flex-1 rounded-lg bg-red-500/10 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-red-500 uppercase transition-colors hover:bg-red-500 hover:text-white"
+              >
+                Excluir
               </button>
             </div>
           </div>
