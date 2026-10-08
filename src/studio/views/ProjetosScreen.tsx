@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { Icon, Panel, Reveal, SectionHead } from "../components/ui";
 import { cn } from "../utils/cn";
 
-interface Project {
+import { ProjetoDetailScreen } from "./ProjetoDetailScreen";
+
+export interface Project {
   id: string;
   name: string;
   status: "active" | "planning" | "completed" | "archived";
@@ -59,10 +61,15 @@ const mockProjects: Project[] = [
 export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
   const [mounted, setMounted] = useState(false);
   const [filter, setFilter] = useState<"all" | "active" | "completed">("all");
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  if (selectedProject) {
+    return <ProjetoDetailScreen project={selectedProject} onBack={() => setSelectedProject(null)} />;
+  }
 
   const filtered = mockProjects.filter(p => {
     if (filter === "active") return p.status === "active" || p.status === "planning";
@@ -131,6 +138,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
           {filtered.map((proj, i) => (
             <Panel 
               key={proj.id} 
+              onClick={() => setSelectedProject(proj)}
               className="group relative cursor-pointer overflow-hidden border border-ink-800 bg-ink-900/40 p-5 transition-all duration-500 hover:-translate-y-1 hover:border-ink-600 hover:bg-ink-900/80 hover:shadow-xl"
             >
               {/* TOP BAR */}
