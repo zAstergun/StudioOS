@@ -47,7 +47,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
       if (!supabase) return;
       const { data, error } = await supabase
         .from("studioos_projects")
-        .select("*, project_members(user_id)")
+        .select("*, studioos_project_members(user_id)")
         .order("created_at", { ascending: false });
         
       if (!error && data) {
@@ -61,7 +61,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
           completedTasks: 0,
           color: d.color,
           owner_id: d.owner_id,
-          isShared: d.owner_id !== user.id || (d.project_members && d.project_members.length > 0)
+          isShared: d.owner_id !== user.id || (d.studioos_project_members && d.studioos_project_members.length > 0)
         })));
       }
     };
