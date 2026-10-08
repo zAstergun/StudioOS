@@ -91,7 +91,7 @@ export function HistoricoX({
     async function fetchTrashedProjects() {
       if (!auth.user) return;
       const { data, error } = await supabase
-        .from("projects")
+        .from("studioos_projects")
         .select("*")
         .eq("status", "trashed")
         .order("created_at", { ascending: false });
@@ -413,7 +413,7 @@ export function HistoricoX({
                       onToggle={() => setExpanded(expanded === t.id ? null : t.id)}
                       onRestore={() => {
                         if (t.tool === 'projetos') {
-                          supabase.from('projects').update({ status: 'planning' }).eq('id', t.id).then(() => {
+                          supabase.from('studioos_projects').update({ status: 'planning' }).eq('id', t.id).then(() => {
                             setTrashedProjects(prev => prev.filter(p => p.id !== t.id));
                           });
                         } else {
@@ -423,7 +423,7 @@ export function HistoricoX({
                       onDestroy={() => {
                         if (window.confirm("Excluir permanentemente? Não dá para desfazer.")) {
                           if (t.tool === 'projetos') {
-                            supabase.from('projects').delete().eq('id', t.id).then(() => {
+                            supabase.from('studioos_projects').delete().eq('id', t.id).then(() => {
                               setTrashedProjects(prev => prev.filter(p => p.id !== t.id));
                             });
                           } else {

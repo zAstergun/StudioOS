@@ -48,7 +48,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
     const fetchTasks = async () => {
       if (!supabase) return;
       const { data, error } = await supabase
-        .from("tasks")
+        .from("studioos_tasks")
         .select("*")
         .eq("project_id", project.id)
         .order("created_at", { ascending: true });
@@ -71,7 +71,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
 
     const fetchNotes = async () => {
       if (!supabase) return;
-      const { data } = await supabase.from('project_notes').select('*').eq('project_id', project.id).order('created_at', { ascending: false });
+      const { data } = await supabase.from('studioos_project_notes').select('*').eq('project_id', project.id).order('created_at', { ascending: false });
       if (data && data.length > 0) {
         const authorIds = Array.from(new Set(data.map(d => d.author_id)));
         const { data: profiles } = await supabase.from('profiles').select('id, full_name, channel, avatar_url').in('id', authorIds);
@@ -90,15 +90,15 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
     if (!supabase) return;
 
     const channelTasks = supabase.channel(`tasks_${project.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${project.id}` }, fetchTasks)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_tasks', filter: `project_id=eq.${project.id}` }, fetchTasks)
       .subscribe();
 
     const channelApps = supabase.channel(`apps_${project.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_applications', filter: `project_id=eq.${project.id}` }, fetchApps)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_project_applications', filter: `project_id=eq.${project.id}` }, fetchApps)
       .subscribe();
 
     const channelNotes = supabase.channel(`notes_${project.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_notes', filter: `project_id=eq.${project.id}` }, fetchNotes)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_project_notes', filter: `project_id=eq.${project.id}` }, fetchNotes)
       .subscribe();
 
     return () => {
@@ -124,7 +124,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
     setShowTaskModal(null);
     setNewTaskTitle("");
     if (supabase) {
-      await supabase.from("tasks").insert([newTask]);
+      await supabase.from("studioos_tasks").insert([newTask]);
     }
   };
 
@@ -135,7 +135,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
 
   const handleSaveNote = async () => {
     if (!newNoteContent.trim() || !supabase || !user) return;
-    const { data, error } = await supabase.from('project_notes').insert({
+    const { data, error } = await supabase.from('studioos_project_notes').insert({
       project_id: project.id,
       author_id: user.id,
       content: newNoteContent.trim()
@@ -154,14 +154,14 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
   const handleDeleteNote = async (noteId: string) => {
     if (!supabase) return;
     setNotes(prev => prev.filter(n => n.id !== noteId));
-    await supabase.from('project_notes').delete().eq('id', noteId);
+    await supabase.from('studioos_project_notes').delete().eq('id', noteId);
   };
 
   const handleUpdateNote = async (noteId: string) => {
     if (!supabase || !editNoteContent.trim()) return;
     setNotes(prev => prev.map(n => n.id === noteId ? { ...n, content: editNoteContent.trim() } : n));
     setEditingNote(null);
-    await supabase.from('project_notes').update({ content: editNoteContent.trim() }).eq('id', noteId);
+    await supabase.from('studioos_project_notes').update({ content: editNoteContent.trim() }).eq('id', noteId);
   };
 
   const handleDeleteProject = async () => {
@@ -175,7 +175,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
 
   const handleRestoreProject = async () => {
     if (!supabase || project.owner_id !== user?.id) return;
-    await supabase.from("projects").update({ status: "planning" }).eq("id", project.id);
+    await supabase.from("studioos_projects").update({ status: "planning" }).eq("id", project.id);
     onBack();
   };
 
@@ -814,7 +814,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
               <button 
                 onClick={async () => {
                   if (supabase) {
-                    await supabase.from("projects").update({ status: "trashed" }).eq("id", project.id);
+                    await supabase.from("studioos_projects").update({ status: "trashed" }).eq("id", project.id);
                   }
                   setShowDeleteModal(false);
                   onBack();
@@ -856,7 +856,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
               <button 
                 onClick={async () => {
                   if (supabase) {
-                    await supabase.from("projects").delete().eq("id", project.id);
+                    await supabase.from("studioos_projects").delete().eq("id", project.id);
                   }
                   setShowDeleteForeverModal(false);
                   onBack();
