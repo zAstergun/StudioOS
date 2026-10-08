@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { cn } from "../utils/cn";
+import { supabase } from "../auth";
 import { TOOL_BY_ID, accentSoft, type Accent } from "../data";
 import {
   daysLeft,
@@ -83,6 +84,35 @@ export function HistoricoX({
   const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sort, setSort] = useState<"recentes" | "antigos" | "score">("recentes");
+  const [trashedProjects, setTrashedProjects] = useState<TrashEntry[]>([]);
+
+  useEffect(() => {
+    async function fetchTrashedProjects() {
+      if (!auth.user) return;
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("status", "trashed")
+        .order("updated_at", { ascending: false });
+
+      if (!error && data) {
+        setTrashedProjects(
+          data.map((p) => ({
+            id: p.id,
+            tool: "projetos",
+            toolName: "Projetos",
+            title: p.name,
+            summary: "Projeto excluído da área de trabalho",
+            content: "Um projeto complexo com Kanban e configurações.",
+            createdAt: new Date(p.created_at).getTime(),
+            deletedAt: new Date(p.updated_at).getTime(),
+            favorite: false,
+          }))
+        );
+      }
+    }
+    fetchTrashedProjects();
+  }, [auth.user]);
 
   const toolsInHistory = useMemo(
     () => Array.from(new Set(os.history.map((h) => h.tool))),
@@ -110,13 +140,13 @@ export function HistoricoX({
   }, [os.history, fmt, pill, showFav, q, sort]);
 
   const listTrash = useMemo(() => {
-    let l: TrashEntry[] = os.trash;
+    let l: TrashEntry[] = [...os.trash, ...trashedProjects];
     if (fmt !== "todos") l = l.filter((t) => t.tool === fmt);
     if (q.trim()) l = l.filter((t) => (t.title + t.summary + t.content).toLowerCase().includes(q.toLowerCase()));
     return [...l].sort((a, b) =>
       sort === "antigos" ? a.deletedAt - b.deletedAt : b.deletedAt - a.deletedAt
     );
-  }, [os.trash, fmt, q, sort]);
+  }, [os.trash, trashedProjects, fmt, q, sort]);
 
   const retention = os.config.trashDays;
 
@@ -380,10 +410,24 @@ export function HistoricoX({
                       retention={retention}
                       expanded={expanded === t.id}
                       onToggle={() => setExpanded(expanded === t.id ? null : t.id)}
-                      onRestore={() => os.restore(t.id)}
+                      onRestore={() => {
+                        if (t.tool === 'projetos') {
+                          supabase.from('projects').update({ status: 'planning' }).eq('id', t.id).then(() => {
+                            setTrashedProjects(prev => prev.filter(p => p.id !== t.id));
+                          });
+                        } else {
+                          os.restore(t.id);
+                        }
+                      }}
                       onDestroy={() => {
                         if (window.confirm("Excluir permanentemente? Não dá para desfazer.")) {
-                          os.deleteForever(t.id);
+                          if (t.tool === 'projetos') {
+                            supabase.from('projects').delete().eq('id', t.id).then(() => {
+                              setTrashedProjects(prev => prev.filter(p => p.id !== t.id));
+                            });
+                          } else {
+                            os.deleteForever(t.id);
+                          }
                         }
                       }}
                       onGo={onGo}

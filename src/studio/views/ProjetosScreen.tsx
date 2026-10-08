@@ -8,7 +8,7 @@ import { useAuth, supabase } from "../auth";
 export interface Project {
   id: string;
   name: string;
-  status: "active" | "planning" | "completed" | "archived";
+  status: "active" | "planning" | "completed" | "archived" | "trashed";
   progress: number;
   lastUpdate: string;
   tasksCount: number;
@@ -73,7 +73,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
   const filtered = projects.filter(p => {
     if (filter === "active") return p.status === "active" || p.status === "planning";
     if (filter === "completed") return p.status === "completed";
-    return true;
+    return p.status !== "trashed";
   });
 
   const activeCount = projects.filter(p => p.status === "active" || p.status === "planning").length;
@@ -193,16 +193,38 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                 >
                   <Icon name={proj.status === 'completed' ? 'check' : 'layers'} className="h-4 w-4" />
                 </div>
-                <div className="flex flex-col items-end gap-1.5">
-                  <span className={cn(
-                    "rounded px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider",
-                    proj.status === 'active' ? "bg-signal-400/10 text-signal-400" :
-                    proj.status === 'planning' ? "bg-bone-400/10 text-bone-400" :
-                    "bg-ink-800 text-ink-400"
+                
+                <div className="relative flex flex-col items-end gap-1.5">
+                  {/* DELETE BUTTON (Shows on hover) */}
+                  {user?.id === proj.owner_id && (
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!supabase) return;
+                        await supabase.from("projects").update({ status: "trashed" }).eq("id", proj.id);
+                      }}
+                      className="absolute right-0 top-0 z-10 flex h-full items-center justify-center rounded bg-red-500/10 px-3 text-red-400/70 opacity-0 transition-all hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100"
+                      title="Mover para Lixeira"
+                    >
+                      <Icon name="trash" className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+
+                  {/* STATUS & DATE (Hides on hover) */}
+                  <div className={cn(
+                    "flex flex-col items-end gap-1.5 transition-opacity duration-300",
+                    user?.id === proj.owner_id && "group-hover:opacity-0"
                   )}>
-                    {proj.status === 'active' ? 'Ativo' : proj.status === 'planning' ? 'Planejamento' : 'Concluído'}
-                  </span>
-                  <span className="font-mono text-[9px] text-ink-500">{proj.lastUpdate}</span>
+                    <span className={cn(
+                      "rounded px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider",
+                      proj.status === 'active' ? "bg-signal-400/10 text-signal-400" :
+                      proj.status === 'planning' ? "bg-bone-400/10 text-bone-400" :
+                      "bg-ink-800 text-ink-400"
+                    )}>
+                      {proj.status === 'active' ? 'Ativo' : proj.status === 'planning' ? 'Planejamento' : 'Concluído'}
+                    </span>
+                    <span className="font-mono text-[9px] text-ink-500">{proj.lastUpdate}</span>
+                  </div>
                 </div>
               </div>
 

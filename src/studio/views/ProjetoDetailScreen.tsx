@@ -117,12 +117,35 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
 
   const handleSaveNote = async () => {
     if (!newNoteContent.trim() || !supabase || !user) return;
-    await supabase.from('project_notes').insert({
+    const { error } = await supabase.from('project_notes').insert({
       project_id: project.id,
       author_id: user.id,
       content: newNoteContent.trim()
     });
+    if (error) {
+      alert("Erro ao salvar nota: " + error.message);
+      return;
+    }
     setNewNoteContent("");
+  };
+
+  const handleDeleteProject = async () => {
+    if (!supabase || project.owner_id !== user?.id) return;
+    if (project.status === "trashed") {
+      const confirm = window.confirm("Tem certeza que deseja excluir este projeto PERMANENTEMENTE? Isso não pode ser desfeito.");
+      if (!confirm) return;
+      await supabase.from("projects").delete().eq("id", project.id);
+      onBack();
+    } else {
+      await supabase.from("projects").update({ status: "trashed" }).eq("id", project.id);
+      onBack();
+    }
+  };
+
+  const handleRestoreProject = async () => {
+    if (!supabase || project.owner_id !== user?.id) return;
+    await supabase.from("projects").update({ status: "planning" }).eq("id", project.id);
+    onBack();
   };
 
   const handleSubmitShare = async (e: React.FormEvent) => {
@@ -190,27 +213,56 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            {user?.id === project.owner_id && (
+            {user?.id === project.owner_id && project.status === "trashed" && (
+              <>
+                <button 
+                  onClick={handleRestoreProject}
+                  className="relative flex h-10 items-center justify-center rounded border border-ink-800 bg-ink-900/50 px-4 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-200 uppercase transition-colors hover:border-ink-600 hover:text-white"
+                >
+                  <Icon name="arrow" className="mr-2 h-3.5 w-3.5 text-ink-400 rotate-180" />
+                  Restaurar
+                </button>
+                <button 
+                  onClick={handleDeleteProject}
+                  className="relative flex h-10 items-center justify-center rounded border border-red-500/30 bg-red-500/10 px-4 font-mono text-[11px] font-bold tracking-[0.1em] text-red-400 uppercase transition-colors hover:bg-red-500/20 hover:text-red-300"
+                >
+                  <Icon name="trash" className="mr-2 h-3.5 w-3.5" />
+                  Excluir Definitivamente
+                </button>
+              </>
+            )}
+            {user?.id === project.owner_id && project.status !== "trashed" && (
+              <>
+                <button 
+                  onClick={handleDeleteProject}
+                  className="relative flex h-10 w-10 items-center justify-center rounded border border-ink-800 bg-ink-900/50 text-ink-400 transition-colors hover:border-red-500/50 hover:text-red-400"
+                  title="Mover para Lixeira"
+                >
+                  <Icon name="trash" className="h-4 w-4" />
+                </button>
+                <button 
+                  onClick={() => setShowShareModal(true)}
+                  className="relative flex h-10 items-center justify-center rounded border border-ink-800 bg-ink-900/50 px-4 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-200 uppercase transition-colors hover:border-ink-600 hover:text-white"
+                >
+                  {applications.length > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-signal-400 text-[8px] font-bold text-ink-950">
+                      {applications.length}
+                    </span>
+                  )}
+                  <Icon name="user" className="mr-2 h-3.5 w-3.5 text-ink-400" />
+                  Compartilhar
+                </button>
+              </>
+            )}
+            {project.status !== "trashed" && (
               <button 
-                onClick={() => setShowShareModal(true)}
-                className="relative flex h-10 items-center justify-center rounded border border-ink-800 bg-ink-900/50 px-4 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-200 uppercase transition-colors hover:border-ink-600 hover:text-white"
+                onClick={() => setShowTaskModal("todo")}
+                className="group flex h-10 items-center justify-center gap-2 rounded bg-signal-400 px-5 font-mono text-[11px] font-bold tracking-[0.1em] text-ink-950 uppercase transition-transform hover:-translate-y-0.5"
               >
-                {applications.length > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-signal-400 text-[8px] font-bold text-ink-950">
-                    {applications.length}
-                  </span>
-                )}
-                <Icon name="user" className="mr-2 h-3.5 w-3.5 text-ink-400" />
-                Compartilhar
+                <Icon name="plus" className="h-3.5 w-3.5 transition-transform group-hover:rotate-90" strokeWidth={2.5} />
+                Nova Tarefa
               </button>
             )}
-            <button 
-              onClick={() => setShowTaskModal("todo")}
-              className="group flex h-10 items-center justify-center gap-2 rounded bg-signal-400 px-5 font-mono text-[11px] font-bold tracking-[0.1em] text-ink-950 uppercase transition-transform hover:-translate-y-0.5"
-            >
-              <Icon name="plus" className="h-3.5 w-3.5 transition-transform group-hover:rotate-90" strokeWidth={2.5} />
-              Nova Tarefa
-            </button>
           </div>
         </div>
       </Reveal>
