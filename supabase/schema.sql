@@ -103,6 +103,16 @@ create table if not exists public.studioos_history (
 -- Ativar RLS (Segurança a nível de linha)
 alter table public.studioos_history enable row level security;
 
+
+-- Funcao para verificar dono do projeto sem causar recursao nas politicas
+create or replace function public.is_project_owner(p_project_id text)
+returns boolean
+language sql
+security definer set search_path = public
+as $$
+  select exists(select 1 from public.studioos_projects where id = p_project_id and owner_id = auth.uid());
+$$;
+
 -- Políticas de acesso (O usuário só vê, cria e edita o próprio histórico)
 drop policy if exists "Usuários podem ver seu próprio histórico" on public.studioos_history;
 create policy "Usuários podem ver seu próprio histórico" 
@@ -210,19 +220,19 @@ create policy "Membros visíveis para a equipe"
 on public.studioos_project_members for select
 using (
   user_id = auth.uid() or 
-  exists (select 1 from public.studioos_projects where id = public.studioos_project_members.project_id and owner_id = auth.uid()) or
+  public.is_project_owner(public.studioos_project_members.project_id) or
   exists (select 1 from public.studioos_project_members pm where pm.project_id = public.studioos_project_members.project_id and pm.user_id = auth.uid())
 );
 
 drop policy if exists "Apenas o dono do projeto pode adicionar membros" on public.studioos_project_members;
 create policy "Apenas o dono do projeto pode adicionar membros"
 on public.studioos_project_members for insert
-with check (exists (select 1 from public.studioos_projects where id = project_id and owner_id = auth.uid()));
+with check (public.is_project_owner(project_id));
 
 drop policy if exists "Apenas o dono pode remover membros" on public.studioos_project_members;
 create policy "Apenas o dono pode remover membros"
 on public.studioos_project_members for delete
-using (exists (select 1 from public.studioos_projects where id = project_id and owner_id = auth.uid()));
+using (public.is_project_owner(project_id));
 
 -- Políticas para Tarefas
 drop policy if exists "Tarefas visíveis para dono e membros" on public.studioos_tasks;
@@ -237,7 +247,7 @@ drop policy if exists "Tarefas inseríveis por dono e membros" on public.studioo
 create policy "Tarefas inseríveis por dono e membros"
 on public.studioos_tasks for insert
 with check (
-  exists (select 1 from public.studioos_projects where id = project_id and owner_id = auth.uid()) or 
+  public.is_project_owner(project_id) or 
   exists (select 1 from public.studioos_project_members where project_id = public.studioos_tasks.project_id and user_id = auth.uid())
 );
 
@@ -289,7 +299,7 @@ begin
 end;
 $body$;
 
--- Tabela de Aplica��es para Projeto
+-- Tabela de Aplica��es para Projeto
 create table if not exists public.studioos_project_applications (
   id uuid primary key default gen_random_uuid(),
   project_id text references public.studioos_projects(id) on delete cascade not null,
@@ -304,7 +314,7 @@ alter table public.studioos_project_applications enable row level security;
 
 create policy "Dono pode ver aplicacoes"
 on public.studioos_project_applications for select
-using (exists (select 1 from public.studioos_projects where id = project_id and owner_id = auth.uid()));
+using (public.is_project_owner(project_id));
 
 create policy "Usuario pode ver suas aplicacoes"
 on public.studioos_project_applications for select
@@ -316,11 +326,11 @@ with check (user_id = auth.uid());
 
 create policy "Dono pode gerenciar aplicacoes"
 on public.studioos_project_applications for update
-using (exists (select 1 from public.studioos_projects where id = project_id and owner_id = auth.uid()));
+using (public.is_project_owner(project_id));
 
 create policy "Dono pode deletar aplicacoes"
 on public.studioos_project_applications for delete
-using (exists (select 1 from public.studioos_projects where id = project_id and owner_id = auth.uid()));
+using (public.is_project_owner(project_id));
 
 create or replace function apply_for_project(p_project_id text, p_role text)
 returns boolean
@@ -414,14 +424,14 @@ alter table public.studioos_project_notes enable row level security;
 create policy "Notas visiveis para equipe"
 on public.studioos_project_notes for select
 using (
-  exists (select 1 from public.studioos_projects where id = project_id and owner_id = auth.uid()) or 
+  public.is_project_owner(project_id) or 
   exists (select 1 from public.studioos_project_members where project_id = public.studioos_project_notes.project_id and user_id = auth.uid())
 );
 
 create policy "Membros podem criar notas"
 on public.studioos_project_notes for insert
 with check (
-  exists (select 1 from public.studioos_projects where id = project_id and owner_id = auth.uid()) or 
+  public.is_project_owner(project_id) or 
   exists (select 1 from public.studioos_project_members where project_id = public.studioos_project_notes.project_id and user_id = auth.uid())
 );
 
@@ -433,5 +443,5 @@ create policy "Dono e Autores podem deletar"
 on public.studioos_project_notes for delete
 using (
   author_id = auth.uid() or
-  exists (select 1 from public.studioos_projects where id = project_id and owner_id = auth.uid())
+  public.is_project_owner(project_id)
 );
