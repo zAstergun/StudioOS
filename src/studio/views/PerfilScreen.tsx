@@ -87,6 +87,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
+
   const [readWiki, setReadWiki] = useState(false);
   const [hasProject, setHasProject] = useState(false);
   const [hasPrefs, setHasPrefs] = useState(false);

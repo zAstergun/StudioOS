@@ -41,7 +41,11 @@ test-results/
 contexto
 
 # Supabase
+<<<<<<< HEAD
 supabase/.temp/
 # Next.js artifacts
 .next/
 .vercel/
+=======
+supabase/.temp/
+>>>>>>> bffb926082274d4ce2784cb70e3c1a620befc391
