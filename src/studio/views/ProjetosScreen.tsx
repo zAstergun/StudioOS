@@ -46,7 +46,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
     const fetchProjects = async () => {
       if (!supabase) return;
       const { data, error } = await supabase
-        .from("projects")
+        .from("studioos_projects")
         .select("*, project_members(user_id)")
         .order("created_at", { ascending: false });
         
@@ -71,7 +71,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
     if (!supabase) return;
 
     const channel = supabase.channel('projects_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, fetchProjects)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_projects' }, fetchProjects)
       .subscribe();
 
     return () => {
@@ -133,7 +133,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
 
     // Inserção no Supabase
     if (supabase) {
-      const { error } = await supabase.from("projects").insert([newProject]);
+      const { error } = await supabase.from("studioos_projects").insert([newProject]);
       if (error) {
         console.error("Erro ao criar projeto:", error);
         alert("Erro ao criar projeto: " + error.message);
@@ -522,7 +522,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
               <button 
                 onClick={async () => {
                   if (supabase) {
-                    await supabase.from("projects").update({ status: "trashed" }).eq("id", projectToDelete.id);
+                    await supabase.from("studioos_projects").update({ status: "trashed" }).eq("id", projectToDelete.id);
                   }
                   setProjectToDelete(null);
                 }}
