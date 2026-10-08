@@ -1,32 +1,19 @@
-create or replace function public.is_project_owner(p_project_id text)
-returns boolean
-language sql
-security definer set search_path = public
-as $$
-  select exists(select 1 from public.studioos_projects where id = p_project_id and owner_id = auth.uid());
-$$;
+DROP POLICY IF EXISTS "Membros visíveis para a equipe" ON public.studioos_project_members;
+DROP POLICY IF EXISTS "Apenas o dono do projeto pode adicionar membros" ON public.studioos_project_members;
+DROP POLICY IF EXISTS "Apenas o dono pode remover membros" ON public.studioos_project_members;
 
-DO $$ 
-DECLARE
-    pol record;
-BEGIN
-    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'studioos_project_members' AND schemaname = 'public' LOOP
-        EXECUTE format('DROP POLICY IF EXISTS %I ON public.studioos_project_members', pol.policyname);
-    END LOOP;
-END $$;
-
-create policy "Membros visíveis para a equipe"
-on public.studioos_project_members for select
-using (
-  user_id = auth.uid() or 
-  public.is_project_owner(public.studioos_project_members.project_id) or
-  exists (select 1 from public.studioos_project_members pm where pm.project_id = public.studioos_project_members.project_id and pm.user_id = auth.uid())
+CREATE POLICY "Membros visíveis para a equipe"
+ON public.studioos_project_members FOR SELECT
+USING (
+  user_id = auth.uid() OR 
+  public.is_project_owner(project_id) OR
+  EXISTS (SELECT 1 FROM public.studioos_project_members pm WHERE pm.project_id = studioos_project_members.project_id AND pm.user_id = auth.uid())
 );
 
-create policy "Apenas o dono do projeto pode adicionar membros"
-on public.studioos_project_members for insert
-with check (public.is_project_owner(project_id));
+CREATE POLICY "Apenas o dono do projeto pode adicionar membros"
+ON public.studioos_project_members FOR INSERT
+WITH CHECK (public.is_project_owner(project_id));
 
-create policy "Apenas o dono pode remover membros"
-on public.studioos_project_members for delete
-using (public.is_project_owner(project_id));
+CREATE POLICY "Apenas o dono pode remover membros"
+ON public.studioos_project_members FOR DELETE
+USING (public.is_project_owner(project_id));
