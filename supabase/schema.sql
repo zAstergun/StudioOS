@@ -105,6 +105,16 @@ alter table public.studioos_history enable row level security;
 
 
 -- Funcao para verificar dono do projeto sem causar recursao nas politicas
+
+-- Funcao para verificar se usuario e membro
+create or replace function public.is_project_member(pid text)
+returns boolean
+language sql
+security definer set search_path = public
+as $$
+  select exists(select 1 from public.studioos_project_members where project_id = pid and user_id = auth.uid());
+$$;
+
 create or replace function public.is_project_owner(p_project_id text)
 returns boolean
 language sql
@@ -221,7 +231,7 @@ on public.studioos_project_members for select
 using (
   user_id = auth.uid() or 
   public.is_project_owner(public.studioos_project_members.project_id) or
-  exists (select 1 from public.studioos_project_members pm where pm.project_id = public.studioos_project_members.project_id and pm.user_id = auth.uid())
+  public.is_project_member(project_id)
 );
 
 drop policy if exists "Apenas o dono do projeto pode adicionar membros" on public.studioos_project_members;
