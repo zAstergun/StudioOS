@@ -1,5 +1,5 @@
--- StudioOS · tabela de perfis (opcional, mas recomendada)
--- Execute no Supabase: SQL Editor → New query → Run
+﻿-- StudioOS Â· tabela de perfis (opcional, mas recomendada)
+-- Execute no Supabase: SQL Editor â†’ New query â†’ Run
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
@@ -12,23 +12,23 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
--- Adiciona restrição para garantir que o @ seja único na tabela
+-- Adiciona restriÃ§Ã£o para garantir que o @ seja Ãºnico na tabela
 alter table public.profiles drop constraint if exists profiles_channel_key;
 alter table public.profiles add constraint profiles_channel_key unique (channel);
 
-drop policy if exists "Perfil visível para o próprio usuário" on public.profiles;
-drop policy if exists "Perfis são visíveis publicamente" on public.profiles;
+drop policy if exists "Perfil visÃ­vel para o prÃ³prio usuÃ¡rio" on public.profiles;
+drop policy if exists "Perfis sÃ£o visÃ­veis publicamente" on public.profiles;
 
-create policy "Perfis são visíveis publicamente"
+create policy "Perfis sÃ£o visÃ­veis publicamente"
   on public.profiles for select
   using (true);
 
-drop policy if exists "Perfil editável pelo próprio usuário" on public.profiles;
-create policy "Perfil editável pelo próprio usuário"
+drop policy if exists "Perfil editÃ¡vel pelo prÃ³prio usuÃ¡rio" on public.profiles;
+create policy "Perfil editÃ¡vel pelo prÃ³prio usuÃ¡rio"
   on public.profiles for update
   using (auth.uid() = id);
 
--- Função para o login por username (necessária para buscar o email pelo canal)
+-- FunÃ§Ã£o para o login por username (necessÃ¡ria para buscar o email pelo canal)
 create or replace function public.get_email_by_channel(p_channel text)
 returns text
 language plpgsql
@@ -48,7 +48,7 @@ end;
 $$;
 
 -- Cria o perfil automaticamente no cadastro, usando os metadados enviados
--- pelo formulário (full_name, channel), pelo Google (name, avatar_url, picture)
+-- pelo formulÃ¡rio (full_name, channel), pelo Google (name, avatar_url, picture)
 -- ou pelo Discord (global_name, user_name, full_name, avatar_url)
 create or replace function public.handle_new_user()
 returns trigger
@@ -85,7 +85,7 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
--- Tabela de Histórico e Lixeira (StudioOS)
+-- Tabela de HistÃ³rico e Lixeira (StudioOS)
 create table if not exists public.studioos_history (
   id text primary key,
   user_id uuid references auth.users(id) on delete cascade not null,
@@ -100,31 +100,31 @@ create table if not exists public.studioos_history (
   deleted_at bigint
 );
 
--- Ativar RLS (Segurança a nível de linha)
+-- Ativar RLS (SeguranÃ§a a nÃ­vel de linha)
 alter table public.studioos_history enable row level security;
 
--- Políticas de acesso (O usuário só vê, cria e edita o próprio histórico)
-drop policy if exists "Usuários podem ver seu próprio histórico" on public.studioos_history;
-create policy "Usuários podem ver seu próprio histórico" 
+-- PolÃ­ticas de acesso (O usuÃ¡rio sÃ³ vÃª, cria e edita o prÃ³prio histÃ³rico)
+drop policy if exists "UsuÃ¡rios podem ver seu prÃ³prio histÃ³rico" on public.studioos_history;
+create policy "UsuÃ¡rios podem ver seu prÃ³prio histÃ³rico" 
 on public.studioos_history for select 
 using (auth.uid() = user_id);
 
-drop policy if exists "Usuários podem criar seu próprio histórico" on public.studioos_history;
-create policy "Usuários podem criar seu próprio histórico" 
+drop policy if exists "UsuÃ¡rios podem criar seu prÃ³prio histÃ³rico" on public.studioos_history;
+create policy "UsuÃ¡rios podem criar seu prÃ³prio histÃ³rico" 
 on public.studioos_history for insert 
 with check (auth.uid() = user_id);
 
-drop policy if exists "Usuários podem atualizar seu próprio histórico" on public.studioos_history;
-create policy "Usuários podem atualizar seu próprio histórico" 
+drop policy if exists "UsuÃ¡rios podem atualizar seu prÃ³prio histÃ³rico" on public.studioos_history;
+create policy "UsuÃ¡rios podem atualizar seu prÃ³prio histÃ³rico" 
 on public.studioos_history for update 
 using (auth.uid() = user_id);
 
-drop policy if exists "Usuários podem excluir seu próprio histórico" on public.studioos_history;
-create policy "Usuários podem excluir seu próprio histórico" 
+drop policy if exists "UsuÃ¡rios podem excluir seu prÃ³prio histÃ³rico" on public.studioos_history;
+create policy "UsuÃ¡rios podem excluir seu prÃ³prio histÃ³rico" 
 on public.studioos_history for delete 
 using (auth.uid() = user_id);
 
--- Função para o usuário deletar a própria conta
+-- FunÃ§Ã£o para o usuÃ¡rio deletar a prÃ³pria conta
 create or replace function public.delete_user()
 returns void
 language sql
@@ -133,20 +133,20 @@ as $$
   delete from auth.users where id = auth.uid();
 $$;
 
--- Configuração do Storage de Avatares
+-- ConfiguraÃ§Ã£o do Storage de Avatares
 insert into storage.buckets (id, name, public) values ('avatars', 'avatars', true) on conflict do nothing;
 
-drop policy if exists "Avatares são publicamente visíveis" on storage.objects;
-create policy "Avatares são publicamente visíveis" on storage.objects for select using (bucket_id = 'avatars');
+drop policy if exists "Avatares sÃ£o publicamente visÃ­veis" on storage.objects;
+create policy "Avatares sÃ£o publicamente visÃ­veis" on storage.objects for select using (bucket_id = 'avatars');
 
-drop policy if exists "Usuários podem subir seus avatares" on storage.objects;
-create policy "Usuários podem subir seus avatares" on storage.objects for insert with check (bucket_id = 'avatars' and auth.uid()::text = owner::text);
+drop policy if exists "UsuÃ¡rios podem subir seus avatares" on storage.objects;
+create policy "UsuÃ¡rios podem subir seus avatares" on storage.objects for insert with check (bucket_id = 'avatars' and auth.uid()::text = owner::text);
 
-drop policy if exists "Usuários podem atualizar seus avatares" on storage.objects;
-create policy "Usuários podem atualizar seus avatares" on storage.objects for update with check (bucket_id = 'avatars' and auth.uid()::text = owner::text);
+drop policy if exists "UsuÃ¡rios podem atualizar seus avatares" on storage.objects;
+create policy "UsuÃ¡rios podem atualizar seus avatares" on storage.objects for update with check (bucket_id = 'avatars' and auth.uid()::text = owner::text);
 
-drop policy if exists "Usuários podem deletar seus avatares" on storage.objects;
-create policy "Usuários podem deletar seus avatares" on storage.objects for delete using (bucket_id = 'avatars' and auth.uid()::text = owner::text);
+drop policy if exists "UsuÃ¡rios podem deletar seus avatares" on storage.objects;
+create policy "UsuÃ¡rios podem deletar seus avatares" on storage.objects for delete using (bucket_id = 'avatars' and auth.uid()::text = owner::text);
 
 -- Tabela de Projetos
 create table if not exists public.projects (
@@ -183,30 +183,30 @@ alter table public.projects enable row level security;
 alter table public.project_members enable row level security;
 alter table public.tasks enable row level security;
 
--- Políticas para Projetos (Dono ou Membro)
-drop policy if exists "Projetos visíveis para dono e membros" on public.projects;
-create policy "Projetos visíveis para dono e membros"
+-- PolÃ­ticas para Projetos (Dono ou Membro)
+drop policy if exists "Projetos visÃ­veis para dono e membros" on public.projects;
+create policy "Projetos visÃ­veis para dono e membros"
 on public.projects for select
 using (auth.uid() = owner_id or exists (select 1 from public.project_members where project_id = public.projects.id and user_id = auth.uid()));
 
-drop policy if exists "Projetos editáveis por dono e membros" on public.projects;
-create policy "Projetos editáveis por dono e membros"
+drop policy if exists "Projetos editÃ¡veis por dono e membros" on public.projects;
+create policy "Projetos editÃ¡veis por dono e membros"
 on public.projects for update
 using (auth.uid() = owner_id or exists (select 1 from public.project_members where project_id = public.projects.id and user_id = auth.uid()));
 
-drop policy if exists "Projetos criáveis pelo usuário" on public.projects;
-create policy "Projetos criáveis pelo usuário"
+drop policy if exists "Projetos criÃ¡veis pelo usuÃ¡rio" on public.projects;
+create policy "Projetos criÃ¡veis pelo usuÃ¡rio"
 on public.projects for insert
 with check (auth.uid() = owner_id);
 
-drop policy if exists "Projetos deletáveis pelo dono" on public.projects;
-create policy "Projetos deletáveis pelo dono"
+drop policy if exists "Projetos deletÃ¡veis pelo dono" on public.projects;
+create policy "Projetos deletÃ¡veis pelo dono"
 on public.projects for delete
 using (auth.uid() = owner_id);
 
--- Políticas para Membros
-drop policy if exists "Membros visíveis para a equipe" on public.project_members;
-create policy "Membros visíveis para a equipe"
+-- PolÃ­ticas para Membros
+drop policy if exists "Membros visÃ­veis para a equipe" on public.project_members;
+create policy "Membros visÃ­veis para a equipe"
 on public.project_members for select
 using (
   user_id = auth.uid() or 
@@ -224,54 +224,54 @@ create policy "Apenas o dono pode remover membros"
 on public.project_members for delete
 using (exists (select 1 from public.projects where id = project_id and owner_id = auth.uid()));
 
--- Políticas para Tarefas
-drop policy if exists "Tarefas visíveis para dono e membros" on public.tasks;
-create policy "Tarefas visíveis para dono e membros"
+-- PolÃ­ticas para Tarefas
+drop policy if exists "Tarefas visÃ­veis para dono e membros" on public.tasks;
+create policy "Tarefas visÃ­veis para dono e membros"
 on public.tasks for select
 using (
   exists (select 1 from public.projects where id = public.tasks.project_id and owner_id = auth.uid()) or 
   exists (select 1 from public.project_members where project_id = public.tasks.project_id and user_id = auth.uid())
 );
 
-drop policy if exists "Tarefas inseríveis por dono e membros" on public.tasks;
-create policy "Tarefas inseríveis por dono e membros"
+drop policy if exists "Tarefas inserÃ­veis por dono e membros" on public.tasks;
+create policy "Tarefas inserÃ­veis por dono e membros"
 on public.tasks for insert
 with check (
   exists (select 1 from public.projects where id = project_id and owner_id = auth.uid()) or 
   exists (select 1 from public.project_members where project_id = public.tasks.project_id and user_id = auth.uid())
 );
 
-drop policy if exists "Tarefas editáveis por dono e membros" on public.tasks;
-create policy "Tarefas editáveis por dono e membros"
+drop policy if exists "Tarefas editÃ¡veis por dono e membros" on public.tasks;
+create policy "Tarefas editÃ¡veis por dono e membros"
 on public.tasks for update
 using (
   exists (select 1 from public.projects where id = public.tasks.project_id and owner_id = auth.uid()) or 
   exists (select 1 from public.project_members where project_id = public.tasks.project_id and user_id = auth.uid())
 );
 
-drop policy if exists "Tarefas deletáveis por dono e membros" on public.tasks;
-create policy "Tarefas deletáveis por dono e membros"
+drop policy if exists "Tarefas deletÃ¡veis por dono e membros" on public.tasks;
+create policy "Tarefas deletÃ¡veis por dono e membros"
 on public.tasks for delete
 using (
   exists (select 1 from public.projects where id = public.tasks.project_id and owner_id = auth.uid()) or 
   exists (select 1 from public.project_members where project_id = public.tasks.project_id and user_id = auth.uid())
 );
 
--- Ativar realtime (para colaboração online)
+-- Ativar realtime (para colaboraÃ§Ã£o online)
 alter publication supabase_realtime add table public.projects;
 alter publication supabase_realtime add table public.tasks;
 alter publication supabase_realtime add table public.project_members;
 
--- Função para adicionar membro por @canal
+-- FunÃ§Ã£o para adicionar membro por @canal
 create or replace function public.add_member_by_channel(p_project_id text, p_channel text, p_role text default 'editor')
 returns boolean
 language plpgsql
 security definer set search_path = public
-as $body
+as $body$
 declare
   v_user_id uuid;
 begin
-  -- Checa se quem chama é o dono do projeto
+  -- Checa se quem chama Ã© o dono do projeto
   if not exists (select 1 from public.projects where id = p_project_id and owner_id = auth.uid()) then
     return false;
   end if;
@@ -287,9 +287,9 @@ begin
 
   return true;
 end;
-$body;
+$body$;
 
--- Tabela de Aplica��es para Projeto
+-- Tabela de Aplicações para Projeto
 create table if not exists public.project_applications (
   id uuid primary key default gen_random_uuid(),
   project_id text references public.projects(id) on delete cascade not null,
