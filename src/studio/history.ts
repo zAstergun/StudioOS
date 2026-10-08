@@ -150,9 +150,9 @@ export async function saveToHistory(data: Omit<HistoryEntry, "id" | "createdAt" 
     const isIdeia = entry.tool === 'rank' || entry.toolName === 'Rank de Ideia';
     const isProducao = entry.tool === 'roteiro' || entry.toolName?.includes('Roteiro');
     
-    supabase.rpc('increment_stat', { stat_name: 'total_runs' }).catch(() => {});
-    if (isIdeia) supabase.rpc('increment_stat', { stat_name: 'ideias_ranqueadas' }).catch(() => {});
-    if (isProducao) supabase.rpc('increment_stat', { stat_name: 'producoes' }).catch(() => {});
+    supabase.rpc('increment_stat', { stat_name: 'total_runs' }).then();
+    if (isIdeia) supabase.rpc('increment_stat', { stat_name: 'ideias_ranqueadas' }).then();
+    if (isProducao) supabase.rpc('increment_stat', { stat_name: 'producoes' }).then();
   }
 
   return entry;
