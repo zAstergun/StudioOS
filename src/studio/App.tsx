@@ -242,19 +242,19 @@ export default function App() {
   }, [auth.recovering, auth.user, protectedViewAfterLogin, view]);
 
   useLayoutEffect(() => {
-    if (!auth.user && (view === "historico" || view === "lixeira" || view === "perfil")) setView("home");
+    if (!auth.user && (view === "historico" || view === "lixeira" || view === "perfil" || view === "projetos")) setView("home");
   }, [auth.user, view]);
 
   const progress = useMemo(() => calibProgress(calib), [calib]);
 
   const go = (id: string) => {
-    if (!auth.user && (id === "historico" || id === "lixeira" || id === "perfil")) {
+    if (!auth.user && (id === "historico" || id === "lixeira" || id === "perfil" || id === "projetos")) {
       setProtectedViewAfterLogin(id);
       setView("login");
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    if (id !== "login" && id !== "historico" && id !== "lixeira" && id !== "perfil") setProtectedViewAfterLogin(null);
+    if (id !== "login" && id !== "historico" && id !== "lixeira" && id !== "perfil" && id !== "projetos") setProtectedViewAfterLogin(null);
     setView(id);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };

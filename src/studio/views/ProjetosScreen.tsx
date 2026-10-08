@@ -3,6 +3,7 @@ import { Icon, Panel, Reveal, SectionHead } from "../components/ui";
 import { cn } from "../utils/cn";
 
 import { ProjetoDetailScreen } from "./ProjetoDetailScreen";
+import { useAuth, supabase } from "../auth";
 
 export interface Project {
   id: string;
@@ -13,63 +14,54 @@ export interface Project {
   tasksCount: number;
   completedTasks: number;
   color: string;
+  owner_id?: string;
 }
 
-const initialProjects: Project[] = [
-  {
-    id: "p1",
-    name: "Especial Fim de Ano",
-    status: "active",
-    progress: 65,
-    lastUpdate: "Há 2 horas",
-    tasksCount: 12,
-    completedTasks: 8,
-    color: "#F2604C"
-  },
-  {
-    id: "p2",
-    name: "Série Produtividade Máxima",
-    status: "planning",
-    progress: 15,
-    lastUpdate: "Ontem, 18:30",
-    tasksCount: 24,
-    completedTasks: 3,
-    color: "#F2B33D"
-  },
-  {
-    id: "p3",
-    name: "Rebranding do Canal",
-    status: "active",
-    progress: 40,
-    lastUpdate: "Há 3 dias",
-    tasksCount: 45,
-    completedTasks: 18,
-    color: "#2FD4A0"
-  },
-  {
-    id: "p4",
-    name: "Setup Tour 2026",
-    status: "completed",
-    progress: 100,
-    lastUpdate: "Semana passada",
-    tasksCount: 8,
-    completedTasks: 8,
-    color: "#6E93F5"
-  }
-];
-
 export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
+  const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [filter, setFilter] = useState<"all" | "active" | "completed">("all");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectColor, setNewProjectColor] = useState("#F2604C");
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    if (!user) return;
+
+    const fetchProjects = async () => {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .order("created_at", { ascending: false });
+        
+      if (!error && data) {
+        setProjects(data.map(d => ({
+          id: d.id,
+          name: d.name,
+          status: d.status as any,
+          progress: d.progress,
+          lastUpdate: d.last_update,
+          tasksCount: 0,
+          completedTasks: 0,
+          color: d.color,
+          owner_id: d.owner_id
+        })));
+      }
+    };
+
+    fetchProjects();
+
+    const channel = supabase.channel('projects_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, fetchProjects)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   if (selectedProject) {
     return <ProjetoDetailScreen project={selectedProject} onBack={() => setSelectedProject(null)} />;
@@ -83,25 +75,40 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
 
   const activeCount = projects.filter(p => p.status === "active" || p.status === "planning").length;
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProjectName.trim()) return;
+    if (!newProjectName.trim() || !user) return;
 
-    const newProject: Project = {
-      id: `p${Date.now()}`,
+    const newId = `p${Date.now()}`;
+    const newProject = {
+      id: newId,
       name: newProjectName.trim(),
       status: "planning",
       progress: 0,
-      lastUpdate: "Agora mesmo",
-      tasksCount: 0,
-      completedTasks: 0,
-      color: newProjectColor
+      last_update: "Agora mesmo",
+      color: newProjectColor,
+      owner_id: user.id
     };
 
-    setProjects([newProject, ...projects]);
+    // Atualização otimista
+    setProjects([{
+      id: newProject.id,
+      name: newProject.name,
+      status: newProject.status as any,
+      progress: newProject.progress,
+      lastUpdate: newProject.last_update,
+      tasksCount: 0,
+      completedTasks: 0,
+      color: newProject.color,
+      owner_id: newProject.owner_id
+    }, ...projects]);
+
     setNewProjectName("");
     setNewProjectColor("#F2604C");
     setShowModal(false);
+
+    // Inserção no Supabase
+    await supabase.from("projects").insert([newProject]);
   };
 
   return (

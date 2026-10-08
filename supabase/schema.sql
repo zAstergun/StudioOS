@@ -147,3 +147,144 @@ create policy "Usuários podem atualizar seus avatares" on storage.objects for u
 
 drop policy if exists "Usuários podem deletar seus avatares" on storage.objects;
 create policy "Usuários podem deletar seus avatares" on storage.objects for delete using (bucket_id = 'avatars' and auth.uid()::text = owner::text);
+
+-- Tabela de Projetos
+create table if not exists public.projects (
+  id text primary key,
+  name text not null,
+  status text not null default 'planning',
+  progress integer not null default 0,
+  last_update text not null,
+  color text not null default '#F2604C',
+  owner_id uuid references auth.users(id) on delete cascade not null,
+  created_at timestamptz not null default now()
+);
+
+-- Tabela de Membros do Projeto (para compartilhamento)
+create table if not exists public.project_members (
+  project_id text references public.projects(id) on delete cascade not null,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  role text not null default 'editor',
+  primary key (project_id, user_id)
+);
+
+-- Tabela de Tarefas
+create table if not exists public.tasks (
+  id text primary key,
+  project_id text references public.projects(id) on delete cascade not null,
+  title text not null,
+  status text not null default 'todo',
+  assignee_id uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- Ativar RLS
+alter table public.projects enable row level security;
+alter table public.project_members enable row level security;
+alter table public.tasks enable row level security;
+
+-- Políticas para Projetos (Dono ou Membro)
+drop policy if exists "Projetos visíveis para dono e membros" on public.projects;
+create policy "Projetos visíveis para dono e membros"
+on public.projects for select
+using (auth.uid() = owner_id or exists (select 1 from public.project_members where project_id = public.projects.id and user_id = auth.uid()));
+
+drop policy if exists "Projetos editáveis por dono e membros" on public.projects;
+create policy "Projetos editáveis por dono e membros"
+on public.projects for update
+using (auth.uid() = owner_id or exists (select 1 from public.project_members where project_id = public.projects.id and user_id = auth.uid()));
+
+drop policy if exists "Projetos criáveis pelo usuário" on public.projects;
+create policy "Projetos criáveis pelo usuário"
+on public.projects for insert
+with check (auth.uid() = owner_id);
+
+drop policy if exists "Projetos deletáveis pelo dono" on public.projects;
+create policy "Projetos deletáveis pelo dono"
+on public.projects for delete
+using (auth.uid() = owner_id);
+
+-- Políticas para Membros
+drop policy if exists "Membros visíveis para a equipe" on public.project_members;
+create policy "Membros visíveis para a equipe"
+on public.project_members for select
+using (
+  user_id = auth.uid() or 
+  exists (select 1 from public.projects where id = public.project_members.project_id and owner_id = auth.uid()) or
+  exists (select 1 from public.project_members pm where pm.project_id = public.project_members.project_id and pm.user_id = auth.uid())
+);
+
+drop policy if exists "Apenas o dono do projeto pode adicionar membros" on public.project_members;
+create policy "Apenas o dono do projeto pode adicionar membros"
+on public.project_members for insert
+with check (exists (select 1 from public.projects where id = project_id and owner_id = auth.uid()));
+
+drop policy if exists "Apenas o dono pode remover membros" on public.project_members;
+create policy "Apenas o dono pode remover membros"
+on public.project_members for delete
+using (exists (select 1 from public.projects where id = project_id and owner_id = auth.uid()));
+
+-- Políticas para Tarefas
+drop policy if exists "Tarefas visíveis para dono e membros" on public.tasks;
+create policy "Tarefas visíveis para dono e membros"
+on public.tasks for select
+using (
+  exists (select 1 from public.projects where id = public.tasks.project_id and owner_id = auth.uid()) or 
+  exists (select 1 from public.project_members where project_id = public.tasks.project_id and user_id = auth.uid())
+);
+
+drop policy if exists "Tarefas inseríveis por dono e membros" on public.tasks;
+create policy "Tarefas inseríveis por dono e membros"
+on public.tasks for insert
+with check (
+  exists (select 1 from public.projects where id = project_id and owner_id = auth.uid()) or 
+  exists (select 1 from public.project_members where project_id = public.tasks.project_id and user_id = auth.uid())
+);
+
+drop policy if exists "Tarefas editáveis por dono e membros" on public.tasks;
+create policy "Tarefas editáveis por dono e membros"
+on public.tasks for update
+using (
+  exists (select 1 from public.projects where id = public.tasks.project_id and owner_id = auth.uid()) or 
+  exists (select 1 from public.project_members where project_id = public.tasks.project_id and user_id = auth.uid())
+);
+
+drop policy if exists "Tarefas deletáveis por dono e membros" on public.tasks;
+create policy "Tarefas deletáveis por dono e membros"
+on public.tasks for delete
+using (
+  exists (select 1 from public.projects where id = public.tasks.project_id and owner_id = auth.uid()) or 
+  exists (select 1 from public.project_members where project_id = public.tasks.project_id and user_id = auth.uid())
+);
+
+-- Ativar realtime (para colaboração online)
+alter publication supabase_realtime add table public.projects;
+alter publication supabase_realtime add table public.tasks;
+alter publication supabase_realtime add table public.project_members;
+
+-- Função para adicionar membro por @canal
+create or replace function public.add_member_by_channel(p_project_id text, p_channel text, p_role text default 'editor')
+returns boolean
+language plpgsql
+security definer set search_path = public
+as $body
+declare
+  v_user_id uuid;
+begin
+  -- Checa se quem chama é o dono do projeto
+  if not exists (select 1 from public.projects where id = p_project_id and owner_id = auth.uid()) then
+    return false;
+  end if;
+
+  select id into v_user_id from public.profiles where channel = p_channel;
+  if v_user_id is null then
+    return false;
+  end if;
+
+  insert into public.project_members (project_id, user_id, role)
+  values (p_project_id, v_user_id, p_role)
+  on conflict do nothing;
+
+  return true;
+end;
+$body;

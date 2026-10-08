@@ -4,26 +4,85 @@ import { cn } from "../utils/cn";
 
 import { type Project } from "./ProjetosScreen";
 
+import { useAuth, supabase } from "../auth";
+
 interface Task {
   id: string;
   title: string;
   status: "todo" | "in_progress" | "done";
   assignee?: string;
+  project_id: string;
 }
 
 export function ProjetoDetailScreen({ project, onBack }: { project: Project, onBack: () => void }) {
+  const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    if (!user || !project.id) return;
 
-  const mockTasks: Task[] = [
-    { id: "t1", title: "Roteiro: Episódio 1", status: "done", assignee: "Você" },
-    { id: "t2", title: "Gravação de B-Rolls", status: "in_progress", assignee: "Você" },
-    { id: "t3", title: "Criar Thumbnail", status: "todo", assignee: "Designer" },
-    { id: "t4", title: "Edição do vídeo", status: "todo" },
-  ];
+    const fetchTasks = async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("project_id", project.id)
+        .order("created_at", { ascending: true });
+
+      if (!error && data) {
+        setTasks(data.map(d => ({
+          id: d.id,
+          title: d.title,
+          status: d.status as any,
+          project_id: d.project_id
+        })));
+      }
+    };
+
+    fetchTasks();
+
+    const channel = supabase.channel(`tasks_${project.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${project.id}` }, fetchTasks)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, project.id]);
+
+  const handleAddTask = async (status: Task["status"]) => {
+    if (!user) return;
+    const title = window.prompt("Nome da nova tarefa:");
+    if (!title) return;
+
+    const newTask = {
+      id: `t${Date.now()}`,
+      project_id: project.id,
+      title,
+      status,
+      assignee_id: user.id
+    };
+
+    setTasks([...tasks, { ...newTask, status: newTask.status as any }]);
+    await supabase.from("tasks").insert([newTask]);
+  };
+
+  const handleShare = async () => {
+    const channel = window.prompt("Digite o @canal do usuário que deseja convidar:");
+    if (!channel) return;
+    
+    const { data, error } = await supabase.rpc("add_member_by_channel", {
+      p_project_id: project.id,
+      p_channel: channel
+    });
+
+    if (error || !data) {
+      alert("Não foi possível convidar este canal. Verifique se o arroba está correto e se o usuário já fez login no StudioOS.");
+    } else {
+      alert("Usuário adicionado com sucesso ao projeto!");
+    }
+  };
 
   const columns = [
     { id: "todo", label: "A Fazer" },
@@ -70,10 +129,15 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <button className="flex h-10 items-center justify-center rounded border border-ink-800 bg-ink-900/50 px-4 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-200 uppercase transition-colors hover:border-ink-600 hover:text-white">
-              <Icon name="dial" className="mr-2 h-3.5 w-3.5 text-ink-400" />
-              Configurações
-            </button>
+            {user?.id === project.owner_id && (
+              <button 
+                onClick={handleShare}
+                className="flex h-10 items-center justify-center rounded border border-ink-800 bg-ink-900/50 px-4 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-200 uppercase transition-colors hover:border-ink-600 hover:text-white"
+              >
+                <Icon name="user" className="mr-2 h-3.5 w-3.5 text-ink-400" />
+                Compartilhar
+              </button>
+            )}
             <button className="group flex h-10 items-center justify-center gap-2 rounded bg-signal-400 px-5 font-mono text-[11px] font-bold tracking-[0.1em] text-ink-950 uppercase transition-transform hover:-translate-y-0.5">
               <Icon name="plus" className="h-3.5 w-3.5 transition-transform group-hover:rotate-90" strokeWidth={2.5} />
               Nova Tarefa
@@ -102,7 +166,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
       {/* KANBAN BOARD */}
       <Reveal delay={200} className="grid gap-6 sm:grid-cols-3">
         {columns.map((col) => {
-          const colTasks = mockTasks.filter(t => t.status === col.id);
+          const colTasks = tasks.filter(t => t.status === col.id);
           return (
             <div key={col.id} className="flex flex-col gap-4">
               <div className="flex items-center justify-between border-b border-ink-800 pb-3">
@@ -139,7 +203,10 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                   </Panel>
                 ))}
 
-                <button className="flex h-[52px] items-center justify-center rounded-lg border border-dashed border-ink-800 text-ink-500 transition-colors hover:border-signal-400/50 hover:bg-signal-400/5 hover:text-signal-400">
+                <button 
+                  onClick={() => handleAddTask(col.id as any)}
+                  className="flex h-[52px] items-center justify-center rounded-lg border border-dashed border-ink-800 text-ink-500 transition-colors hover:border-signal-400/50 hover:bg-signal-400/5 hover:text-signal-400"
+                >
                   <Icon name="plus" className="h-4 w-4" />
                 </button>
               </div>
