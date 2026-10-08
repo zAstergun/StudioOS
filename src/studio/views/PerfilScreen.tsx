@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import Cropper from "react-easy-crop";
 import { Panel, Reveal, Icon, Button, Input, Label, Select } from "../components/ui";
-import { useAuth } from "../auth";
+import { useAuth, supabase } from "../auth";
 
 const getCroppedImg = async (imageSrc: string, pixelCrop: any): Promise<File | null> => {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -87,25 +87,49 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Onboarding tracking states
   const [readWiki, setReadWiki] = useState(false);
   const [hasProject, setHasProject] = useState(false);
   const [hasPrefs, setHasPrefs] = useState(false);
 
   useEffect(() => {
-    setReadWiki(localStorage.getItem("studioos.onboarding.readWiki") === "true");
-    setHasProject(localStorage.getItem("studioos.onboarding.hasProject") === "true");
-    setHasPrefs(localStorage.getItem("studioos.onboarding.hasPrefs") === "true");
-  }, []);
+    if (user) {
+      setReadWiki(localStorage.getItem(`studioos.onboarding.readWiki.${user.id}`) === "true");
+      setHasProject(localStorage.getItem(`studioos.onboarding.hasProject.${user.id}`) === "true");
+      setHasPrefs(localStorage.getItem(`studioos.onboarding.hasPrefs.${user.id}`) === "true");
+    }
+  }, [user]);
+
+  // Se a conta for muito recente (criada há menos de 1 dia), ou não for a de teste, zeramos o mockup
+  const isNewAccount = user && (Date.now() - new Date(user.createdAt).getTime() < 1000 * 60 * 60 * 24);
+  const isDemo = user?.email?.includes("teste") || user?.email?.includes("criador@") || false;
+
+  const [userStats, setUserStats] = useState<Record<string, number>>({});
+  
+  useEffect(() => {
+    if (user && supabase) {
+      supabase.from('profiles').select('stats').eq('id', user.id).single().then(({ data }: { data: any }) => {
+        if (data?.stats) setUserStats(data.stats);
+      });
+    }
+  }, [user]);
+
+  const showZero = isNewAccount && !isDemo && Object.keys(userStats).length === 0;
+
+  const getStat = (key: string, demoVal: string) => {
+    if (userStats[key] !== undefined) return userStats[key].toString();
+    return showZero ? "0" : demoVal;
+  };
 
   const [sessions, setSessions] = useState([
     { id: 1, name: "Chrome no Windows", location: "São Paulo, BR • 192.168.1.1", current: true, time: "Atual" },
-    { id: 2, name: "Safari no iPhone", location: "São Paulo, BR • 10.0.0.5", current: false, time: "Ontem" }
+    ...(showZero ? [] : [{ id: 2, name: "Safari no iPhone", location: "São Paulo, BR • 10.0.0.5", current: false, time: "Ontem" }])
   ]);
 
   const handleSavePersonalInfo = async () => {
     setSaving(true);
-    await updateProfile(name, channel.replace(/^@/, ""));
+    const res = await updateProfile(name, channel.replace(/^@/, ""));
+    if (!res.ok) alert(res.error);
+    else alert(res.message);
     setSaving(false);
   };
 
@@ -308,9 +332,9 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
 
           <div className="mt-5 flex flex-wrap items-center gap-x-7 gap-y-2">
             {[
-              ["142", "produções"],
-              ["214", "ideias ranqueadas"],
-              ["4.8/5", "nota média"],
+              [getStat("producoes", "142"), "produções"],
+              [getStat("ideias_ranqueadas", "214"), "ideias ranqueadas"],
+              [showZero ? "-" : "4.8/5", "nota média"],
             ].map(([v, l]) => (
               <div key={l} className="flex items-baseline gap-2">
                 <span className="font-display text-[16px] font-bold text-bone-50 tabular-nums">{v}</span>
@@ -499,10 +523,10 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
               {/* 2x2 Grid */}
               <div className="mt-4 grid grid-cols-1 gap-px border-t border-[#232327] bg-[#232327] sm:grid-cols-2">
                 {[
-                  { label: "SESSÕES NO MÊS", value: "128", vcolor: "#2FD4A0", delta: "+12%", dtone: "#2FD4A0", hint: "VS. 114 NO MÊS ANTERIOR" },
-                  { label: "HORAS EM ESTÚDIO", value: "46h", suffix: " 20m", vcolor: "#2FD4A0", delta: "+8%", dtone: "#2FD4A0", hint: "META MENSAL: 40H" },
-                  { label: "IDEIAS RANQUEADAS", value: "214", vcolor: "#F2604C", delta: "-3%", dtone: "#F2604C", hint: "MÉDIA 6,8 IDEIAS/DIA" },
-                  { label: "SEQUÊNCIA ATUAL", value: "12", suffix: " dias", vcolor: "#F2B33D", delta: "+4", dtone: "#F2B33D", hint: "RECORDE: 21 DIAS" }
+                  { label: "USO DE FERRAMENTAS", value: getStat("total_runs", "128"), vcolor: "#2FD4A0", delta: showZero ? "-" : "+12%", dtone: "#2FD4A0", hint: showZero ? "" : "Nº DE VEZES EXECUTADAS" },
+                  { label: "HORAS EM ESTÚDIO", value: showZero ? "0h" : "46h", suffix: showZero ? "" : " 20m", vcolor: "#2FD4A0", delta: showZero ? "-" : "+8%", dtone: "#2FD4A0", hint: "META MENSAL: 40H" },
+                  { label: "IDEIAS RANQUEADAS", value: getStat("ideias_ranqueadas", "214"), vcolor: "#F2604C", delta: showZero ? "-" : "-3%", dtone: "#F2604C", hint: showZero ? "" : "MÉDIA 6,8 IDEIAS/DIA" },
+                  { label: "SEQUÊNCIA ATUAL", value: showZero ? "1" : "12", suffix: showZero ? " dia" : " dias", vcolor: "#F2B33D", delta: showZero ? "-" : "+4", dtone: "#F2B33D", hint: "RECORDE: 21 DIAS" }
                 ].map((m, i) => (
                   <div 
                     key={m.label} 

@@ -144,6 +144,17 @@ export async function saveToHistory(data: Omit<HistoryEntry, "id" | "createdAt" 
   
   write(HIST_KEY, [entry, ...history].slice(0, QUOTA));
   window.dispatchEvent(new Event("studioos:history"));
+
+  // Track runs in cloud profile stats (if logged in)
+  if (supabase) {
+    const isIdeia = entry.tool === 'rank' || entry.toolName === 'Rank de Ideia';
+    const isProducao = entry.tool === 'roteiro' || entry.toolName?.includes('Roteiro');
+    
+    supabase.rpc('increment_stat', { stat_name: 'total_runs' }).catch(() => {});
+    if (isIdeia) supabase.rpc('increment_stat', { stat_name: 'ideias_ranqueadas' }).catch(() => {});
+    if (isProducao) supabase.rpc('increment_stat', { stat_name: 'producoes' }).catch(() => {});
+  }
+
   return entry;
 }
 
@@ -223,16 +234,18 @@ export function useStudioOS() {
       if (trsh) cloudTrash = trsh.map(mapFromSupabase) as TrashEntry[];
     }
     
-    const localHist = read<HistoryEntry[]>(HIST_KEY, []);
-    const localTrash = read<TrashEntry[]>(TRASH_KEY, []);
-
     const histMap = new Map<string, HistoryEntry>();
-    localHist.forEach(h => histMap.set(h.id, h));
-    cloudHist.forEach(h => histMap.set(h.id, h)); // Cloud overrides local
-
     const trashMap = new Map<string, TrashEntry>();
-    localTrash.forEach(h => trashMap.set(h.id, h));
-    cloudTrash.forEach(h => trashMap.set(h.id, h));
+
+    if (user && supabase) {
+      cloudHist.forEach(h => histMap.set(h.id, h));
+      cloudTrash.forEach(h => trashMap.set(h.id, h));
+    } else {
+      const localHist = read<HistoryEntry[]>(HIST_KEY, []);
+      const localTrash = read<TrashEntry[]>(TRASH_KEY, []);
+      localHist.forEach(h => histMap.set(h.id, h));
+      localTrash.forEach(h => trashMap.set(h.id, h));
+    }
 
     setHistory(Array.from(histMap.values()).sort((a, b) => b.createdAt - a.createdAt));
     setTrash(Array.from(trashMap.values()).sort((a, b) => b.deletedAt - a.deletedAt));
