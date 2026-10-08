@@ -326,12 +326,12 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
           </div>
 
           <p className="mt-2 max-w-[62ch] text-[13.5px] leading-relaxed text-bone-400">
-            Criador de conteúdo usando o StudioOS. Transformando ideias cruas em produções publicadas com o auxílio de ferramentas conectadas e com número e critério em cada etapa.
+            Criador de conteúdo usando o StudioOS. Transformando ideias cruas em projetos publicados com o auxílio de ferramentas conectadas e com número e critério em cada etapa.
           </p>
 
           <div className="mt-5 flex flex-wrap items-center gap-x-7 gap-y-2">
             {[
-              [getStat("producoes", "142"), "produções"],
+              [getStat("projetos", "142"), "projetos"],
               [getStat("ideias_ranqueadas", "214"), "ideias ranqueadas"],
               [showZero ? "-" : "4.8/5", "nota média"],
             ].map(([v, l]) => (
