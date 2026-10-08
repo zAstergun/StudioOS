@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { cn } from "../utils/cn";
 import { TOOLS, accentText, type Accent } from "../data";
 import { Icon } from "./ui";
+import { useAuth, supabase } from "../auth";
 
 const GROUPS = ["Criação", "Publicação", "Estratégia"] as const;
 
@@ -30,6 +31,8 @@ export function Sidebar({
   trashCount,
   authenticated,
 }: Props) {
+  const auth = useAuth();
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -85,7 +88,7 @@ export function Sidebar({
             kicker={authenticated ? "Gerenciar conta" : "Acesse dados salvos"}
             accent="signal"
           />
-          {authenticated && (
+          {authenticated && !!supabase && auth.user?.provider !== "demo" && (
             <NavItem
               active={active === "projetos"}
               onClick={() => go("projetos")}

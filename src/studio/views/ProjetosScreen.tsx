@@ -32,6 +32,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
     if (!user) return;
 
     const fetchProjects = async () => {
+      if (!supabase) return;
       const { data, error } = await supabase
         .from("projects")
         .select("*")
@@ -54,12 +55,14 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
 
     fetchProjects();
 
+    if (!supabase) return;
+
     const channel = supabase.channel('projects_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, fetchProjects)
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase!.removeChannel(channel);
     };
   }, [user]);
 
@@ -108,7 +111,13 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
     setShowModal(false);
 
     // Inserção no Supabase
-    await supabase.from("projects").insert([newProject]);
+    if (supabase) {
+      const { error } = await supabase.from("projects").insert([newProject]);
+      if (error) {
+        console.error("Erro ao criar projeto:", error);
+        alert("Erro ao criar projeto: " + error.message);
+      }
+    }
   };
 
   return (

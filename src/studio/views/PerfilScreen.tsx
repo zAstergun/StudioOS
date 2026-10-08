@@ -315,7 +315,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                {name || "Usuário"}
              </h1>
              <span className="font-mono text-[13px] text-signal-400">
-               {channel ? (channel.startsWith('@') ? channel : `@${channel}`) : "@usuario"}
+               {channel ? (channel.startsWith('@') ? channel : `@${channel}`) : <span className="text-signal-400">@usuario</span>}
              </span>
              <span className="flex items-center gap-1 rounded-full border border-signal-400/35 bg-signal-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.11em] text-signal-400">
                 <Icon name="check" className="h-3 w-3" strokeWidth={2.4} /> Verificado

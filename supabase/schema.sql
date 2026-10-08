@@ -288,3 +288,150 @@ begin
   return true;
 end;
 $body;
+
+-- Tabela de Aplicações para Projeto
+create table if not exists public.project_applications (
+  id uuid primary key default gen_random_uuid(),
+  project_id text references public.projects(id) on delete cascade not null,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  role text not null default 'editor',
+  status text not null default 'pending',
+  created_at timestamptz not null default now(),
+  unique(project_id, user_id)
+);
+
+alter table public.project_applications enable row level security;
+
+create policy "Dono pode ver aplicacoes"
+on public.project_applications for select
+using (exists (select 1 from public.projects where id = project_id and owner_id = auth.uid()));
+
+create policy "Usuario pode ver suas aplicacoes"
+on public.project_applications for select
+using (user_id = auth.uid());
+
+create policy "Qualquer um logado pode aplicar"
+on public.project_applications for insert
+with check (user_id = auth.uid());
+
+create policy "Dono pode gerenciar aplicacoes"
+on public.project_applications for update
+using (exists (select 1 from public.projects where id = project_id and owner_id = auth.uid()));
+
+create policy "Dono pode deletar aplicacoes"
+on public.project_applications for delete
+using (exists (select 1 from public.projects where id = project_id and owner_id = auth.uid()));
+
+create or replace function apply_for_project(p_project_id text, p_role text)
+returns boolean
+language plpgsql
+security definer
+as $body$
+begin
+  insert into public.project_applications (project_id, user_id, role)
+  values (p_project_id, auth.uid(), p_role)
+  on conflict (project_id, user_id) do update set status = 'pending', role = p_role;
+  return true;
+end;
+$body$;
+
+create or replace function accept_application(p_application_id uuid)
+returns boolean
+language plpgsql
+security definer
+as $body$
+declare
+  v_project_id text;
+  v_user_id uuid;
+  v_role text;
+  v_owner_id uuid;
+begin
+  select project_id, user_id, role into v_project_id, v_user_id, v_role
+  from public.project_applications
+  where id = p_application_id;
+
+  if not found then return false; end if;
+
+  select owner_id into v_owner_id
+  from public.projects
+  where id = v_project_id;
+
+  if v_owner_id != auth.uid() then return false; end if;
+
+  insert into public.project_members (project_id, user_id, role)
+  values (v_project_id, v_user_id, v_role)
+  on conflict (project_id, user_id) do update set role = v_role;
+
+  update public.project_applications
+  set status = 'accepted'
+  where id = p_application_id;
+  
+  return true;
+end;
+$body$;
+create or replace function get_project_applications(p_project_id text)
+returns table(
+  id uuid,
+  user_id uuid,
+  role text,
+  status text,
+  created_at timestamptz,
+  channel text,
+  name text,
+  avatar_url text
+)
+language plpgsql
+security definer
+as $body$
+begin
+  if not exists (select 1 from public.projects where projects.id = p_project_id and owner_id = auth.uid()) then
+    return;
+  end if;
+
+  return query
+  select 
+    pa.id, pa.user_id, pa.role, pa.status, pa.created_at,
+    p.channel, p.name, p.avatar_url
+  from public.project_applications pa
+  join public.profiles p on p.id = pa.user_id
+  where pa.project_id = p_project_id and pa.status = 'pending'
+  order by pa.created_at asc;
+end;
+$body$;
+
+-- Tabela de Notas do Projeto
+create table if not exists public.project_notes (
+  id uuid primary key default gen_random_uuid(),
+  project_id text references public.projects(id) on delete cascade not null,
+  author_id uuid references auth.users(id) on delete cascade not null,
+  content text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.project_notes enable row level security;
+
+create policy "Notas visiveis para equipe"
+on public.project_notes for select
+using (
+  exists (select 1 from public.projects where id = project_id and owner_id = auth.uid()) or 
+  exists (select 1 from public.project_members where project_id = public.project_notes.project_id and user_id = auth.uid())
+);
+
+create policy "Membros podem criar notas"
+on public.project_notes for insert
+with check (
+  exists (select 1 from public.projects where id = project_id and owner_id = auth.uid()) or 
+  exists (select 1 from public.project_members where project_id = public.project_notes.project_id and user_id = auth.uid())
+);
+
+create policy "Autores podem editar notas"
+on public.project_notes for update
+using (author_id = auth.uid());
+
+create policy "Dono e Autores podem deletar"
+on public.project_notes for delete
+using (
+  author_id = auth.uid() or
+  exists (select 1 from public.projects where id = project_id and owner_id = auth.uid())
+);

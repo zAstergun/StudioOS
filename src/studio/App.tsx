@@ -19,7 +19,7 @@ import { Membros } from "./tools/Membros";
 import { Calibracao, Config, Wiki, calibProgress, emptyCalib, type Calib } from "./tools/Painel";
 import { HistoricoX } from "./views/Historico";
 import { useStudioOS } from "./history";
-import { useAuth } from "./auth";
+import { useAuth, supabase } from "./auth";
 import { AuthScreen } from "./views/AuthScreen";
 import PerfilScreen from "./views/PerfilScreen";
 import { ProjetosScreen } from "./views/ProjetosScreen";
@@ -242,8 +242,36 @@ export default function App() {
   }, [auth.recovering, auth.user, protectedViewAfterLogin, view]);
 
   useLayoutEffect(() => {
-    if (!auth.user && (view === "historico" || view === "lixeira" || view === "perfil" || view === "projetos")) setView("home");
+    const isRealUser = auth.user && auth.user.provider !== "demo";
+    if (!auth.user && (view === "historico" || view === "lixeira" || view === "perfil")) setView("home");
+    if (!isRealUser && view === "projetos") setView("home");
   }, [auth.user, view]);
+
+  useEffect(() => {
+    if (auth.loading || !supabase) return;
+    const url = new URL(window.location.href);
+    const inviteId = url.searchParams.get("invite");
+    const role = url.searchParams.get("role") || "editor";
+    
+    if (inviteId) {
+      if (!auth.user) {
+        setProtectedViewAfterLogin("projetos");
+        setView("login");
+      } else {
+        supabase.rpc("apply_for_project", { p_project_id: inviteId, p_role: role }).then(({error}: {error: any}) => {
+          if (!error) {
+            alert("Acesso solicitado com sucesso! Aguarde o dono do projeto aceitar sua solicitação.");
+            url.searchParams.delete("invite");
+            url.searchParams.delete("role");
+            window.history.replaceState({}, document.title, url.toString());
+            setView("projetos");
+          } else {
+            alert("Erro ao solicitar acesso: O projeto não existe ou você já solicitou/possui acesso.");
+          }
+        });
+      }
+    }
+  }, [auth.loading, auth.user]);
 
   const progress = useMemo(() => calibProgress(calib), [calib]);
 
