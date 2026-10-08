@@ -430,6 +430,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { avatar_url: data.publicUrl }
     });
     
+    // Sincroniza com a tabela pública de perfis
+    await supabase.from("profiles").upsert({ id: user.id, avatar_url: data.publicUrl });
+    
     if (updateError) return { ok: false, error: translate(updateError.message) };
     
     setUser(prev => prev ? { ...prev, avatarUrl: data.publicUrl } : null);

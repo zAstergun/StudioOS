@@ -28,6 +28,7 @@ const TOOL_ACCENTS: Record<string, Accent> = {
   mentor: "sky",
   membros: "plum",
   ideia: "signal",
+  projetos: "signal",
 };
 
 function accentOf(entry: { tool: string }): Accent {
@@ -93,19 +94,19 @@ export function HistoricoX({
         .from("projects")
         .select("*")
         .eq("status", "trashed")
-        .order("updated_at", { ascending: false });
+        .order("created_at", { ascending: false });
 
       if (!error && data) {
         setTrashedProjects(
           data.map((p) => ({
             id: p.id,
             tool: "projetos",
-            toolName: "Projetos",
+            toolName: "Projeto",
             title: p.name,
             summary: "Projeto excluído da área de trabalho",
-            content: "Um projeto complexo com Kanban e configurações.",
+            content: "Projeto removido e enviado para a lixeira.",
             createdAt: new Date(p.created_at).getTime(),
-            deletedAt: new Date(p.updated_at).getTime(),
+            deletedAt: Date.now(), // Fallback
             favorite: false,
           }))
         );
@@ -191,7 +192,7 @@ export function HistoricoX({
           {[
             { k: "Itens", v: `${os.history.length}${auth.user ? "" : `/${QUOTA}`}`, a: "text-signal-300" },
             { k: "Salvos na Nuvem", v: String(favCount), a: "text-bone-100" },
-            { k: "Lixeira", v: `${os.trash.length}${auth.user ? "" : `/${TRASH_QUOTA}`}`, a: os.trash.length ? "text-oxide-400" : "text-mint-300" },
+            { k: "Lixeira", v: `${os.trash.length + trashedProjects.length}${auth.user ? "" : `/${TRASH_QUOTA}`}`, a: (os.trash.length + trashedProjects.length) ? "text-oxide-400" : "text-mint-300" },
             { k: "Expira em", v: retention === 1 ? "1d" : `${retention}d`, a: "text-sky-400" },
           ].map((m) => (
             <div key={m.k} className="bg-ink-900 px-4 py-3">
@@ -227,7 +228,7 @@ export function HistoricoX({
                   tab === id ? "bg-ink-950/20" : "bg-ink-800 text-ink-400"
                 )}
               >
-                {id === "historico" ? os.history.length : os.trash.length}
+                {id === "historico" ? os.history.length : (os.trash.length + trashedProjects.length)}
               </span>
             </button>
           ))}
@@ -521,7 +522,7 @@ export function HistoricoX({
             <Card title="Ocupação" accent="signal">
               <div className="space-y-3">
                 <Meter value={os.history.length} max={QUOTA} accent="signal" label="Histórico" />
-                <Meter value={os.trash.length} max={TRASH_QUOTA} accent="oxide" label="Lixeira" />
+                <Meter value={os.trash.length + trashedProjects.length} max={TRASH_QUOTA} accent="oxide" label="Lixeira" />
               </div>
             </Card>
           )}
