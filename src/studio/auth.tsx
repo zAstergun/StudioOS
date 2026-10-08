@@ -347,12 +347,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Atualiza primeiro no DB para checar restrição de unicidade do @
     const { error: dbError } = await supabase
       .from("profiles")
-<<<<<<< HEAD
-      .update({ full_name: name, channel: channel || null })
-      .eq("id", user.id);
-=======
       .upsert({ id: user.id, full_name: name, channel: channel || null });
->>>>>>> bffb926082274d4ce2784cb70e3c1a620befc391
 
     if (dbError) {
       // 23505 é o código do Postgres para violação de UNIQUE constraint

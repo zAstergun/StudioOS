@@ -234,20 +234,6 @@ export function useStudioOS() {
       if (trsh) cloudTrash = trsh.map(mapFromSupabase) as TrashEntry[];
     }
     
-<<<<<<< HEAD
-    const histMap = new Map<string, HistoryEntry>();
-    const trashMap = new Map<string, TrashEntry>();
-
-    if (user && supabase) {
-      cloudHist.forEach(h => histMap.set(h.id, h));
-      cloudTrash.forEach(h => trashMap.set(h.id, h));
-    } else {
-      const localHist = read<HistoryEntry[]>(HIST_KEY, []);
-      const localTrash = read<TrashEntry[]>(TRASH_KEY, []);
-      localHist.forEach(h => histMap.set(h.id, h));
-      localTrash.forEach(h => trashMap.set(h.id, h));
-    }
-=======
     const localHist = read<HistoryEntry[]>(HIST_KEY, []);
     const localTrash = read<TrashEntry[]>(TRASH_KEY, []);
 
@@ -258,7 +244,6 @@ export function useStudioOS() {
     const trashMap = new Map<string, TrashEntry>();
     localTrash.forEach(h => trashMap.set(h.id, h));
     cloudTrash.forEach(h => trashMap.set(h.id, h));
->>>>>>> bffb926082274d4ce2784cb70e3c1a620befc391
 
     setHistory(Array.from(histMap.values()).sort((a, b) => b.createdAt - a.createdAt));
     setTrash(Array.from(trashMap.values()).sort((a, b) => b.deletedAt - a.deletedAt));
