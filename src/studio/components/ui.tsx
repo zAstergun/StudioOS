@@ -139,16 +139,19 @@ export function Panel({
   tone = "dark",
   hover = false,
   id,
+  onClick,
 }: {
   children: ReactNode;
   className?: string;
   tone?: "dark" | "raised" | "paper";
   hover?: boolean;
   id?: string;
+  onClick?: () => void;
 }) {
   return (
     <div
       id={id}
+      onClick={onClick}
       className={cn(
         "relative rounded-lg border",
         tone === "dark" && "border-ink-700/80 bg-ink-900/70",
