@@ -22,7 +22,7 @@ import { useStudioOS } from "./history";
 import { useAuth } from "./auth";
 import { AuthScreen } from "./views/AuthScreen";
 import PerfilScreen from "./views/PerfilScreen";
-
+import { ProjetosScreen } from "./views/ProjetosScreen";
 const LS_CALIB = "studioos.calib.v1";
 
 const exampleCalib: Calib = {
@@ -269,6 +269,7 @@ export default function App() {
       historico: "Histórico & Lixeira — StudioOS",
       lixeira: "Lixeira — StudioOS",
       perfil: "Meu Perfil — StudioOS",
+      projetos: "Meus Projetos — StudioOS",
     };
     document.title = titles[view] ?? `${tool?.name ?? "StudioOS"} — StudioOS`;
   }, [view, tool]);
@@ -373,6 +374,7 @@ export default function App() {
                 {view === "mentor" && <Mentor onBack={back} onGo={go} niche={calib.niche} />}
                 {view === "membros" && <Membros onBack={back} onGo={go} />}
                 {view === "perfil" && <PerfilScreen onGo={go} />}
+                {view === "projetos" && <ProjetosScreen onGo={go} />}
             {view === "wiki" && <Wiki onBack={back} onGo={go} />}
             {view === "historico" && <HistoricoX onBack={back} onGo={go} />}
             {view === "lixeira" && <HistoricoX onBack={back} onGo={go} initialTab="lixeira" />}

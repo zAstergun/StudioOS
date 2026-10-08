@@ -85,6 +85,16 @@ export function Sidebar({
             kicker={authenticated ? "Gerenciar conta" : "Acesse dados salvos"}
             accent="signal"
           />
+          {authenticated && (
+            <NavItem
+              active={active === "projetos"}
+              onClick={() => go("projetos")}
+              icon="layers"
+              label="Projetos"
+              kicker="Gerenciar projetos"
+              accent="signal"
+            />
+          )}
           <NavItem
             active={active === "historico"}
             onClick={() => go("historico")}
