@@ -91,14 +91,71 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   const [readWiki, setReadWiki] = useState(false);
   const [hasProject, setHasProject] = useState(false);
   const [hasPrefs, setHasPrefs] = useState(false);
+  const [hideOnboarding, setHideOnboarding] = useState(false);
+
+  const [ongoingProjects, setOngoingProjects] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (user && supabase) {
+      const fetchProjects = async () => {
+        const { data, error } = await supabase!
+          .from("studioos_projects")
+          .select("id, name, status, progress, color, owner_id, studioos_project_members(user_id), studioos_tasks(status)")
+          .in("status", ["active", "planning"])
+          .order("created_at", { ascending: false })
+          .limit(10);
+          
+        if (!error && data) {
+          const statusMap: Record<string, string> = {
+            active: "Em andamento",
+            planning: "Planejamento"
+          };
+          setOngoingProjects(data.map((d: any) => {
+            const tasks = d.studioos_tasks || [];
+            const totalTasks = tasks.length;
+            const doneTasks = tasks.filter((t: any) => t.status === "done").length;
+            const calculatedProgress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : (d.progress || 0);
+            
+            return {
+              id: d.id,
+              name: d.name,
+              status: statusMap[d.status] || d.status,
+              progress: calculatedProgress,
+              color: d.color || "#6E93F5"
+            };
+          }));
+        }
+      };
+      fetchProjects();
+    }
+  }, [user]);
+
+  const [jokerTitle, setJokerTitle] = useState("Meu Foco Atual");
+  const [jokerProject, setJokerProject] = useState("");
+  const [isEditingJoker, setIsEditingJoker] = useState(false);
+  const [isSelectingProject, setIsSelectingProject] = useState(false);
 
   useEffect(() => {
     if (user) {
       setReadWiki(localStorage.getItem(`studioos.onboarding.readWiki.${user.id}`) === "true");
       setHasProject(localStorage.getItem(`studioos.onboarding.hasProject.${user.id}`) === "true");
       setHasPrefs(localStorage.getItem(`studioos.onboarding.hasPrefs.${user.id}`) === "true");
+      setHideOnboarding(localStorage.getItem(`studioos.onboarding.hidden.${user.id}`) === "true");
+
+      const savedTitle = localStorage.getItem(`studioos.jokerTitle.${user.id}`);
+      if (savedTitle) setJokerTitle(savedTitle);
+
+      const savedProject = localStorage.getItem(`studioos.jokerProject.${user.id}`);
+      if (savedProject) setJokerProject(savedProject);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (user && mounted) {
+      localStorage.setItem(`studioos.jokerTitle.${user.id}`, jokerTitle);
+      localStorage.setItem(`studioos.jokerProject.${user.id}`, jokerProject);
+    }
+  }, [jokerTitle, jokerProject, user, mounted]);
 
   const isDemo = user?.email?.includes("teste") || user?.email?.includes("criador@") || false;
 
@@ -282,6 +339,18 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   
   const unlockedCount = achievements.filter(a => a.unlocked).length;
   const [showAchievModal, setShowAchievModal] = useState(false);
+
+  useEffect(() => {
+    if (completedCount === onboardingItems.length && !hideOnboarding) {
+      const t = setTimeout(() => {
+        setHideOnboarding(true);
+        if (user) {
+          localStorage.setItem(`studioos.onboarding.hidden.${user.id}`, "true");
+        }
+      }, 4000);
+      return () => clearTimeout(t);
+    }
+  }, [completedCount, hideOnboarding, user, onboardingItems.length]);
 
   return (
     <div className="mx-auto w-full pt-4">
@@ -635,7 +704,132 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
 
           {/* Coluna Direita: Caderno & Conquistas */}
           <aside className="space-y-6">
+            {/* Projetos em Andamento */}
             <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
+              <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
+                <span className="h-3.5 w-1 rounded-full bg-[#2FD4A0]" />
+                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Projetos em Andamento</h3>
+                <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">{ongoingProjects.length}</span>
+              </div>
+              <div className="p-5 space-y-4">
+                {ongoingProjects.map((proj) => (
+                  <div key={proj.id} className="group">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-[13px] font-medium text-[#d3d3d8]">{proj.name}</span>
+                      <span className="text-[10px] font-mono text-[#8c8c94] uppercase tracking-widest">{proj.status}</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-[#1c1c20] rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: mounted ? `${proj.progress}%` : '0%', backgroundColor: proj.color }} />
+                    </div>
+                  </div>
+                ))}
+                {ongoingProjects.length === 0 && (
+                  <div className="text-[12px] text-[#8c8c94] text-center py-2">Nenhum projeto em andamento.</div>
+                )}
+              </div>
+            </Panel>
+
+            {/* Card Coringa */}
+            <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
+              <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
+                <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
+                {isEditingJoker ? (
+                  <input
+                    type="text"
+                    value={jokerTitle}
+                    onChange={(e) => setJokerTitle(e.target.value)}
+                    className="flex-1 bg-transparent text-[15px] font-display font-bold text-white focus:outline-none"
+                    autoFocus
+                    onBlur={() => setIsEditingJoker(false)}
+                    onKeyDown={(e) => e.key === 'Enter' && setIsEditingJoker(false)}
+                  />
+                ) : (
+                  <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight cursor-pointer hover:text-[#6E93F5] transition-colors" onClick={() => setIsEditingJoker(true)}>
+                    {jokerTitle || "Clique para definir título"}
+                  </h3>
+                )}
+                <button onClick={() => setIsEditingJoker(!isEditingJoker)} className="text-[#8c8c94] hover:text-white transition-colors" title="Editar Título">
+                  <Icon name="type" className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                {!jokerProject || isSelectingProject ? (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-mono text-[#8c8c94] uppercase tracking-widest">
+                        {jokerProject ? "Alterar Projeto" : "Selecione um projeto"}
+                      </span>
+                      {jokerProject && (
+                        <button onClick={() => setIsSelectingProject(false)} className="text-[10px] font-medium text-[#6E93F5] hover:text-white transition-colors">
+                          Cancelar
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {ongoingProjects.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => { setJokerProject(p.id); setIsSelectingProject(false); }}
+                          className={`group flex items-center justify-between rounded-xl border p-3 transition-all text-left ${jokerProject === p.id ? 'border-[#6E93F5]/30 bg-[#6E93F5]/10 shadow-[0_0_15px_rgba(110,147,245,0.1)]' : 'border-[#232327] bg-[#101012] hover:border-[#6E93F5]/40 hover:bg-[#101012]/80'}`}
+                        >
+                           <div className="flex items-center gap-3">
+                             <div className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${jokerProject === p.id ? 'bg-[#6E93F5]/20 text-[#6E93F5]' : 'bg-[#232327]/50 text-[#8c8c94] group-hover:text-[#6E93F5]'}`}>
+                               <Icon name="layers" className="h-4 w-4" />
+                             </div>
+                             <div>
+                               <div className={`text-[13px] font-medium tracking-tight ${jokerProject === p.id ? 'text-[#6E93F5]' : 'text-[#d3d3d8]'}`}>
+                                 {p.name}
+                               </div>
+                               <div className="text-[10px] font-mono text-[#8c8c94] mt-0.5">{p.status}</div>
+                             </div>
+                           </div>
+                           {jokerProject === p.id && (
+                             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#6E93F5]">
+                               <Icon name="check" className="h-3 w-3 text-[#101012]" strokeWidth={4} />
+                             </div>
+                           )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <span className="text-[10px] font-mono text-[#8c8c94] uppercase tracking-widest">Projeto Vinculado</span>
+                    <div className="group rounded-xl border border-[#232327] bg-[#101012] p-4 flex flex-col gap-4 relative overflow-hidden transition-all hover:border-[#6E93F5]/30 hover:shadow-[0_0_15px_rgba(110,147,245,0.05)]">
+                       <div className="flex items-center justify-between">
+                         <div className="flex items-center gap-3">
+                           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#232327]/50 text-[#6E93F5]">
+                             <Icon name="layers" className="h-4.5 w-4.5" />
+                           </div>
+                           <div>
+                             <div className="text-[13.5px] font-medium text-[#d3d3d8] tracking-tight">
+                               {ongoingProjects.find(p => p.id === jokerProject)?.name}
+                             </div>
+                             <div className="text-[10px] font-mono text-[#8c8c94] mt-0.5 uppercase">
+                               {ongoingProjects.find(p => p.id === jokerProject)?.status}
+                             </div>
+                           </div>
+                         </div>
+                         <button onClick={() => setIsSelectingProject(true)} className="flex items-center gap-1.5 rounded-full bg-[#1c1c20] px-3 py-1.5 text-[10.5px] font-medium text-[#8c8c94] transition-colors hover:bg-[#232327] hover:text-white" title="Trocar projeto">
+                           <Icon name="dial" className="h-3 w-3" /> Trocar
+                         </button>
+                       </div>
+                       <div className="flex items-center gap-3">
+                          <div className="h-1.5 flex-1 bg-[#1c1c20] rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${ongoingProjects.find(p => p.id === jokerProject)?.progress}%`, backgroundColor: ongoingProjects.find(p => p.id === jokerProject)?.color || '#6E93F5' }} />
+                          </div>
+                          <span className="text-[10px] font-mono text-[#b6b6be] tabular-nums">
+                            {ongoingProjects.find(p => p.id === jokerProject)?.progress}%
+                          </span>
+                       </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Panel>
+
+            {!hideOnboarding && (
+              <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
               <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                 <span className="h-3.5 w-1 rounded-full bg-[#F2B33D]" />
                 <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Primeiros Passos</h3>
@@ -689,6 +883,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 </div>
               </div>
             </Panel>
+            )}
 
             <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
               <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
