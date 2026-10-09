@@ -74,7 +74,8 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
         setProjects(mapped);
 
         try {
-          const openId = sessionStorage.getItem("studioos_open_project_id");
+          const urlParams = new URLSearchParams(window.location.search);
+          const openId = urlParams.get("project") || sessionStorage.getItem("studioos_open_project_id");
           if (openId) {
             const found = mapped.find(p => String(p.id) === String(openId));
             if (found) {
@@ -140,8 +141,40 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
       : 0,
   }), [projects]);
 
+  const handleSelectProject = (proj: Project | null) => {
+    setSelectedProject(proj);
+    try {
+      const url = new URL(window.location.href);
+      if (proj) {
+        url.searchParams.set("view", "projetos");
+        url.searchParams.set("project", proj.id);
+        window.history.pushState({ view: "projetos", project: proj.id }, "", url.toString());
+      } else {
+        url.searchParams.delete("project");
+        window.history.pushState({ view: "projetos" }, "", url.toString());
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    const handlePop = () => {
+      try {
+        const p = new URLSearchParams(window.location.search);
+        const pid = p.get("project");
+        if (pid) {
+          const found = projects.find(proj => String(proj.id) === String(pid));
+          if (found) setSelectedProject(found);
+        } else {
+          setSelectedProject(null);
+        }
+      } catch {}
+    };
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [projects]);
+
   if (selectedProject) {
-    return <ProjetoDetailScreen project={selectedProject} onBack={() => setSelectedProject(null)} />;
+    return <ProjetoDetailScreen project={selectedProject} onBack={() => handleSelectProject(null)} />;
   }
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -322,7 +355,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
               return (
                 <article 
                   key={proj.id} 
-                  onClick={() => setSelectedProject(proj)}
+                  onClick={() => handleSelectProject(proj)}
                   className="group relative cursor-pointer overflow-hidden rounded-xl border border-ink-800/50 bg-ink-900/30 transition-all duration-400 hover:-translate-y-1 hover:border-ink-700 hover:bg-ink-900/60 hover:shadow-[0_20px_60px_-20px_rgba(0,0,0,0.8)]"
                 >
                   {/* COLOR ACCENT STRIPE */}
