@@ -89,14 +89,24 @@ export function Sidebar({
             accent="signal"
           />
           {authenticated && !!supabase && auth.user?.provider !== "demo" && (
-            <NavItem
-              active={active === "projetos"}
-              onClick={() => go("projetos")}
-              icon="layers"
-              label="Projetos"
-              kicker="Gerenciar projetos"
-              accent="signal"
-            />
+            <>
+              <NavItem
+                active={active === "projetos"}
+                onClick={() => go("projetos")}
+                icon="layers"
+                label="Projetos"
+                kicker="Gerenciar projetos"
+                accent="signal"
+              />
+              <NavItem
+                active={active === "salvos"}
+                onClick={() => go("salvos")}
+                icon="bookmark"
+                label="Salvos"
+                kicker="Meus itens salvos"
+                accent="signal"
+              />
+            </>
           )}
           <NavItem
             active={active === "historico"}

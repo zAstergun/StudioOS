@@ -23,6 +23,7 @@ import { useAuth, supabase } from "./auth";
 import { AuthScreen } from "./views/AuthScreen";
 import PerfilScreen from "./views/PerfilScreen";
 import { ProjetosScreen } from "./views/ProjetosScreen";
+import { SalvosScreen } from "./views/SalvosScreen";
 const LS_CALIB = "studioos.calib.v1";
 
 const exampleCalib: Calib = {
@@ -243,8 +244,8 @@ export default function App() {
 
   useLayoutEffect(() => {
     const isRealUser = auth.user && auth.user.provider !== "demo";
-    if (!auth.user && (view === "historico" || view === "lixeira" || view === "perfil")) setView("home");
-    if (!isRealUser && view === "projetos") setView("home");
+    if (!auth.user && (view === "historico" || view === "lixeira" || view === "perfil" || view === "salvos")) setView("home");
+    if (!isRealUser && (view === "projetos" || view === "salvos")) setView("home");
   }, [auth.user, view]);
 
   useEffect(() => {
@@ -276,13 +277,13 @@ export default function App() {
   const progress = useMemo(() => calibProgress(calib), [calib]);
 
   const go = (id: string) => {
-    if (!auth.user && (id === "historico" || id === "lixeira" || id === "perfil" || id === "projetos")) {
+    if (!auth.user && (id === "historico" || id === "lixeira" || id === "perfil" || id === "projetos" || id === "salvos")) {
       setProtectedViewAfterLogin(id);
       setView("login");
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    if (id !== "login" && id !== "historico" && id !== "lixeira" && id !== "perfil" && id !== "projetos") setProtectedViewAfterLogin(null);
+    if (id !== "login" && id !== "historico" && id !== "lixeira" && id !== "perfil" && id !== "projetos" && id !== "salvos") setProtectedViewAfterLogin(null);
     setView(id);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -298,6 +299,7 @@ export default function App() {
       lixeira: "Lixeira — StudioOS",
       perfil: "Meu Perfil — StudioOS",
       projetos: "Meus Projetos — StudioOS",
+      salvos: "Itens Salvos — StudioOS",
     };
     document.title = titles[view] ?? `${tool?.name ?? "StudioOS"} — StudioOS`;
   }, [view, tool]);
@@ -403,6 +405,7 @@ export default function App() {
                 {view === "membros" && <Membros onBack={back} onGo={go} />}
                 {view === "perfil" && <PerfilScreen onGo={go} />}
                 {view === "projetos" && <ProjetosScreen onGo={go} />}
+                {view === "salvos" && <SalvosScreen />}
             {view === "wiki" && <Wiki onBack={back} onGo={go} />}
             {view === "historico" && <HistoricoX onBack={back} onGo={go} />}
             {view === "lixeira" && <HistoricoX onBack={back} onGo={go} initialTab="lixeira" />}
