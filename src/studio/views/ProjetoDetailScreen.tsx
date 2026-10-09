@@ -732,33 +732,64 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                 <h3 className="mb-2 font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
                   Título
                 </h3>
-                <p className="text-[15px] font-medium leading-snug text-bone-50">
+                <p className="break-words text-[15px] font-medium leading-snug text-bone-50">
                   {viewTaskModal.title}
                 </p>
               </div>
-              <div>
-                <h3 className="mb-2 font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Descrição
-                </h3>
+              <div className="group">
+                <div className="mb-2 flex items-center justify-between min-h-[28px]">
+                  <h3 className="font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
+                    Descrição
+                  </h3>
+                  {!isEditingTaskDesc && (
+                    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (viewTaskModal.description) {
+                            navigator.clipboard.writeText(viewTaskModal.description);
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          }
+                        }}
+                        className="rounded p-1.5 text-ink-400 transition-all hover:bg-ink-800 hover:text-bone-200 active:scale-90"
+                        title="Copiar"
+                      >
+                        <Icon name={copied ? "check" : "copy"} className={copied ? "h-3.5 w-3.5 text-emerald-400" : "h-3.5 w-3.5"} />
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditTaskDescContent(viewTaskModal.description || "");
+                          setIsEditingTaskDesc(true);
+                        }}
+                        className="rounded p-1.5 text-signal-400/70 transition-all hover:bg-signal-400/10 hover:text-signal-400 active:scale-90" 
+                        title="Editar"
+                      >
+                        <Icon name="edit" className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
                 {isEditingTaskDesc ? (
-                  <div className="animate-in fade-in zoom-in-95 duration-200">
+                  <div className="flex flex-col outline-none border-none ring-0">
                     <textarea
                       value={editTaskDescContent}
                       onChange={(e) => setEditTaskDescContent(e.target.value)}
-                      className="w-full min-h-[100px] resize-none rounded-lg border border-signal-400/50 bg-ink-950/50 p-4 text-[13px] leading-relaxed text-bone-100 placeholder:text-ink-500 focus:outline-none"
+                      className="w-full min-h-[120px] resize-none rounded-xl border border-signal-400 bg-ink-950 p-4 text-[13px] leading-relaxed text-bone-100 placeholder:text-ink-500 outline-none ring-4 ring-signal-400/15 shadow-[0_0_30px_-5px_rgba(242,179,61,0.2)] transition-all duration-300 selection:bg-signal-400/20"
                       placeholder="Adicione uma descrição para a tarefa..."
                       autoFocus
                     />
-                    <div className="mt-2 flex items-center justify-end gap-2">
+                    <div className="mt-3 flex items-center justify-end gap-2">
                       <button
                         onClick={() => setIsEditingTaskDesc(false)}
-                        className="rounded px-3 py-1.5 font-mono text-[9px] font-bold uppercase text-ink-400 transition-colors hover:text-bone-200"
+                        className="rounded-lg px-4 py-2 font-mono text-[9px] font-bold uppercase text-ink-400 transition-colors hover:bg-ink-800/50 hover:text-bone-200"
                       >
                         Cancelar
                       </button>
                       <button
                         onClick={() => handleUpdateTaskDesc(viewTaskModal.id)}
-                        className="rounded bg-signal-400/10 px-3 py-1.5 font-mono text-[9px] font-bold uppercase text-signal-400 transition-colors hover:bg-signal-400/20"
+                        className="rounded-lg bg-signal-400 px-4 py-2 font-mono text-[9px] font-bold uppercase text-ink-950 shadow-[0_4px_14px_-6px_rgba(242,179,61,0.5)] transition-all hover:bg-signal-300 hover:shadow-[0_6px_20px_-6px_rgba(242,179,61,0.6)]"
                       >
                         Salvar
                       </button>
@@ -770,14 +801,11 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                       setEditTaskDescContent(viewTaskModal.description || "");
                       setIsEditingTaskDesc(true);
                     }}
-                    className="group relative cursor-pointer rounded-lg border border-ink-800/60 bg-ink-950/50 p-4 min-h-[80px] transition-colors hover:border-signal-400/30 hover:bg-signal-400/[0.02]"
+                    className="cursor-pointer rounded-xl border border-ink-800/60 bg-ink-950/50 p-4 min-h-[120px] transition-colors hover:border-signal-400/30 hover:bg-signal-400/[0.02]"
                   >
-                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-bone-200">
+                    <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-bone-200">
                       {viewTaskModal.description || <span className="italic text-ink-500">Adicionar descrição...</span>}
                     </p>
-                    <div className="absolute right-3 top-3 opacity-0 transition-opacity group-hover:opacity-100">
-                      <Icon name="pencil" className="h-3.5 w-3.5 text-signal-400/70" />
-                    </div>
                   </div>
                 )}
               </div>
