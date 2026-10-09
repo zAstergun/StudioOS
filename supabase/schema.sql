@@ -6,6 +6,10 @@ create table if not exists public.profiles (
   full_name text,
   channel text,
   avatar_url text,
+  bio text,
+  links jsonb default '{}'::jsonb,
+  card_visibility jsonb default '{"stats": true, "projects": true, "video": true, "achievements": true}'::jsonb,
+  featured_video jsonb default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -411,7 +415,7 @@ begin
   return query
   select 
     pa.id, pa.user_id, pa.role, pa.status, pa.created_at,
-    p.channel, p.name, p.avatar_url
+    p.channel, p.full_name as name, p.avatar_url
   from public.studioos_project_applications pa
   join public.profiles p on p.id = pa.user_id
   where pa.project_id = p_project_id and pa.status = 'pending'

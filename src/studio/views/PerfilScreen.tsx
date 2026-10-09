@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Cropper from "react-easy-crop";
 import { Panel, Reveal, Icon, Button, Input, Label, Select } from "../components/ui";
 import { useAuth, supabase } from "../auth";
@@ -49,6 +49,9 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   const [email, setEmail] = useState(user?.email || "");
   const [saving, setSaving] = useState(false);
 
+  const DEFAULT_BIO = "Criador de conteúdo usando o StudioOS. Transformando ideias cruas em projetos publicados com o auxílio de ferramentas conectadas e com número e critério em cada etapa.";
+  const [bio, setBio] = useState(user?.bio || DEFAULT_BIO);
+
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 100);
@@ -61,6 +64,30 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   const [tiktok, setTiktok] = useState("tiktok.com/@aster");
   const [discord, setDiscord] = useState("discord.gg/aster");
   const [savingLinks, setSavingLinks] = useState(false);
+
+  const [cardVisibility, setCardVisibility] = useState({
+    stats: true,
+    projects: true,
+    video: true,
+    achievements: true,
+  });
+
+  // Modo de edição do perfil
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [draftName, setDraftName] = useState(name);
+  const [draftChannel, setDraftChannel] = useState(channel ? channel.replace(/^@/, '') : "");
+  const [draftBio, setDraftBio] = useState(bio);
+  const [draftWebsite, setDraftWebsite] = useState(website);
+  const [draftYoutube, setDraftYoutube] = useState(youtube);
+  const [draftInstagram, setDraftInstagram] = useState(instagram);
+  const [draftTiktok, setDraftTiktok] = useState(tiktok);
+  const [draftDiscord, setDraftDiscord] = useState(discord);
+  const [draftCardVisibility, setDraftCardVisibility] = useState({ ...cardVisibility });
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const channelInputRef = useRef<HTMLInputElement>(null);
+  const bioInputRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSaveLinks = () => {
     setSavingLinks(true);
@@ -237,36 +264,465 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
     }
   }, [jokerTitle, jokerProject, user, mounted]);
 
-  const isDemo = user?.email?.includes("teste") || user?.email?.includes("criador@") || false;
+  const [userStats, setUserStats] = useState<Record<string, any>>({});
+  const [historyTick, setHistoryTick] = useState(0);
 
-  const [userStats, setUserStats] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const onHistUpdate = () => setHistoryTick(t => t + 1);
+    window.addEventListener("studioos:history", onHistUpdate);
+    window.addEventListener("storage", onHistUpdate);
+    return () => {
+      window.removeEventListener("studioos:history", onHistUpdate);
+      window.removeEventListener("storage", onHistUpdate);
+    };
+  }, []);
+
+  const accountMetrics = useMemo(() => {
+    // 1. Ideias reais
+    let ideas: any[] = [];
+    try {
+      const raw = localStorage.getItem("studioos.ideas.v1");
+      if (raw) ideas = JSON.parse(raw);
+    } catch {}
+    const ideasCount = ideas.length;
+
+    // 2. Projetos reais do usuário
+    const projectsCount = ongoingProjects.length;
+
+    // 3. Histórico de execuções de ferramentas
+    const historyEntries: {
+      id: string;
+      tool: string;
+      toolName: string;
+      timestamp: number;
+      score?: number;
+    }[] = [];
+
+    const seenIds = new Set<string>();
+
+    try {
+      const rawHist = localStorage.getItem("studioos.history.v1");
+      if (rawHist) {
+        const parsed = JSON.parse(rawHist);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(item => {
+            if (item && item.id && !seenIds.has(item.id)) {
+              seenIds.add(item.id);
+              let score: number | undefined;
+              if (item.tag) {
+                const match = item.tag.match(/([\d.]+)\/10/);
+                if (match) score = parseFloat(match[1]);
+              }
+              historyEntries.push({
+                id: item.id,
+                tool: (item.tool || "tool").toLowerCase(),
+                toolName: item.toolName || item.tool || "Ferramenta",
+                timestamp: Number(item.createdAt) || Date.now(),
+                score
+              });
+            }
+          });
+        }
+      }
+    } catch {}
+
+    try {
+      const rawAi = localStorage.getItem("ai_history");
+      if (rawAi) {
+        const parsed = JSON.parse(rawAi);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(item => {
+            const key = item.id || item.date || JSON.stringify(item.prompt || "");
+            if (item && !seenIds.has(key)) {
+              seenIds.add(key);
+              let toolKey = "hooks";
+              let toolName = "Gerador de Hooks";
+              if (item.tool && item.tool !== "Configurações") {
+                toolKey = item.tool.toLowerCase();
+                toolName = item.tool;
+              } else if (item.prompt && item.prompt.toLowerCase().includes("hook")) {
+                toolKey = "hooks";
+                toolName = "Gerador de Hooks";
+              }
+              historyEntries.push({
+                id: item.id || `h.${Date.now()}`,
+                tool: toolKey,
+                toolName: toolName,
+                timestamp: item.date ? new Date(item.date).getTime() : (Number(item.id) || Date.now())
+              });
+            }
+          });
+        }
+      }
+    } catch {}
+
+    const totalRuns = historyEntries.length;
+
+    // 4. Mapeamento de ferramentas mais usadas
+    const toolNameMap: Record<string, string> = {
+      rank: "Rank de Ideia",
+      hooks: "Gerador de Hooks",
+      hook: "Gerador de Hooks",
+      briefing: "Briefing Thumbnail",
+      thumb: "Briefing Thumbnail",
+      thumbnail: "Briefing Thumbnail",
+      roteiro: "Roteiro & Gravação",
+      receita: "Receita Viral",
+      score: "Score do Post",
+      humanizador: "Humanizador",
+      mentor: "Mentor IA",
+      titulos: "Gerador de Títulos",
+      membros: "Área de Membros",
+      painel: "Painel de Criação"
+    };
+
+    const toolCounts: Record<string, { name: string; runs: number }> = {};
+
+    historyEntries.forEach(entry => {
+      const key = entry.tool;
+      const displayName = toolNameMap[key] || entry.toolName || key;
+      if (!toolCounts[key]) {
+        toolCounts[key] = { name: displayName, runs: 0 };
+      }
+      toolCounts[key].runs += 1;
+    });
+
+    Object.entries(userStats).forEach(([k, v]) => {
+      if (k.startsWith("tool_")) {
+        const toolKey = k.replace("tool_", "");
+        const runs = Number(v) || 0;
+        const displayName = toolNameMap[toolKey] || toolKey;
+        if (!toolCounts[toolKey]) {
+          toolCounts[toolKey] = { name: displayName, runs: runs };
+        } else {
+          toolCounts[toolKey].runs = Math.max(toolCounts[toolKey].runs, runs);
+        }
+      }
+    });
+
+    const toolsList = Object.entries(toolCounts)
+      .map(([key, data]) => ({ id: key, name: data.name, runs: data.runs }))
+      .filter(t => t.runs > 0)
+      .sort((a, b) => b.runs - a.runs)
+      .slice(0, 5);
+
+    const maxToolRuns = toolsList.length > 0 ? Math.max(...toolsList.map(t => t.runs), 1) : 1;
+
+    // 5. Carga por dia da semana (0=DOM, 1=SEG, ..., 6=SÁB)
+    const dowCounts = [0, 0, 0, 0, 0, 0, 0];
+    historyEntries.forEach(entry => {
+      const dow = new Date(entry.timestamp).getDay();
+      dowCounts[dow] += 1;
+    });
+    ideas.forEach(idea => {
+      if (idea.ts) {
+        const dow = new Date(idea.ts).getDay();
+        dowCounts[dow] += 1;
+      }
+    });
+    for (let d = 0; d < 7; d++) {
+      const cloudDow = Number(userStats[`dow_${d}`] || 0);
+      dowCounts[d] = Math.max(dowCounts[d], cloudDow);
+    }
+    const maxDow = Math.max(...dowCounts, 0);
+
+    // 6. Linha do tempo real dos últimos 56 dias
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const DAY_MS = 86400000;
+    const days56 = Array(56).fill(0);
+
+    const registerTimestamp = (ts: number) => {
+      const diff = Math.floor((todayStart + DAY_MS - ts) / DAY_MS);
+      if (diff >= 0 && diff < 56) {
+        const idx = 55 - diff;
+        days56[idx] += 1;
+      }
+    };
+
+    historyEntries.forEach(e => registerTimestamp(e.timestamp));
+    ideas.forEach(i => i.ts && registerTimestamp(i.ts));
+
+    const maxDayActions = Math.max(...days56, 0);
+    const activeDaysCount = days56.filter(c => c > 0).length;
+    const total56Actions = days56.reduce((a, b) => a + b, 0);
+
+    const peakMinutes = maxDayActions * 15;
+    const avgMinutesPerActiveDay = activeDaysCount > 0 ? Math.round((total56Actions * 15) / activeDaysCount) : 0;
+
+    const startDateStr = new Date(todayStart - 55 * DAY_MS).toLocaleDateString("pt-BR");
+    const endDateStr = now.toLocaleDateString("pt-BR");
+
+    // 7. Horas em estúdio
+    const studioMinutes = (projectsCount * 25) + (totalRuns * 15) + (ideasCount * 5);
+    const studioHoursFormatted = `${Math.floor(studioMinutes / 60)}h`;
+    const studioMinutesRemaining = studioMinutes % 60;
+    const studioMinutesSuffix = ` ${studioMinutesRemaining}m`;
+
+    // 8. Sequência atual real
+    let streak = 0;
+    let checkIdx = 55;
+    if (days56[55] === 0 && days56[54] > 0) {
+      checkIdx = 54;
+    }
+    while (checkIdx >= 0 && days56[checkIdx] > 0) {
+      streak++;
+      checkIdx--;
+    }
+    if (streak === 0 && (totalRuns > 0 || ideasCount > 0 || projectsCount > 0)) {
+      streak = Number(userStats['streak']) || 1;
+    }
+
+    // 9. Nota média
+    const scoredRuns = historyEntries.filter(e => typeof e.score === "number" && !isNaN(e.score));
+    let avgRatingStr = "-";
+    let avgRatingNum = 0;
+    if (scoredRuns.length > 0) {
+      const avg10 = scoredRuns.reduce((a, b) => a + (b.score || 0), 0) / scoredRuns.length;
+      avgRatingNum = Math.round((avg10 / 2) * 10) / 10;
+      avgRatingStr = `${avgRatingNum.toFixed(1)}/5`;
+    }
+
+    // 10. Dia mais ativo
+    let bestDowIdx = 0;
+    let bestDowVal = -1;
+    for (let i = 0; i < 7; i++) {
+      if (dowCounts[i] > bestDowVal) {
+        bestDowVal = dowCounts[i];
+        bestDowIdx = i;
+      }
+    }
+    const dowNames = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
+    const bestDowName = dowNames[bestDowIdx];
+
+    return {
+      ideasCount,
+      projectsCount,
+      totalRuns,
+      toolsList,
+      maxToolRuns,
+      dowCounts,
+      maxDow,
+      days56,
+      maxDayActions,
+      activeDaysCount,
+      peakMinutes,
+      avgMinutesPerActiveDay,
+      startDateStr,
+      endDateStr,
+      studioMinutes,
+      studioHoursFormatted,
+      studioMinutesSuffix,
+      streak,
+      avgRatingStr,
+      avgRatingNum,
+      bestDowName,
+      hasActivity: totalRuns > 0 || ideasCount > 0 || projectsCount > 0
+    };
+  }, [ongoingProjects, userStats, historyTick]);
+
+  // Sincroniza estatísticas reais no Supabase
+  useEffect(() => {
+    if (user && supabase && accountMetrics) {
+      const payload = {
+        total_runs: accountMetrics.totalRuns,
+        ideias_ranqueadas: accountMetrics.ideasCount,
+        projetos: accountMetrics.projectsCount,
+        streak: accountMetrics.streak,
+        studio_minutes: accountMetrics.studioMinutes,
+        dow_totals: accountMetrics.dowCounts,
+        days_56: accountMetrics.days56,
+        tool_breakdown: accountMetrics.toolsList,
+        avg_rating: accountMetrics.avgRatingStr,
+        best_dow: accountMetrics.bestDowName
+      };
+      supabase.from('profiles').update({ stats: payload }).eq('id', user.id).then();
+    }
+  }, [user, accountMetrics]);
+
+  const [sessions] = useState([
+    { id: 1, name: "Chrome no Windows", location: "São Paulo, BR • Sessão Ativa", current: true, time: "Atual" },
+  ]);
   
   useEffect(() => {
     if (user && supabase) {
-      supabase.from('profiles').select('stats').eq('id', user.id).single().then(({ data }: { data: any }) => {
-        if (data?.stats) setUserStats(data.stats);
+      supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data }: { data: any }) => {
+        if (data) {
+          if (data.stats) setUserStats(data.stats);
+          if (data.full_name) setName(data.full_name);
+          if (data.channel) setChannel(data.channel);
+          if (data.bio) setBio(data.bio);
+          if (data.links) {
+            if (data.links.website !== undefined) setWebsite(data.links.website);
+            if (data.links.youtube !== undefined) setYoutube(data.links.youtube);
+            if (data.links.instagram !== undefined) setInstagram(data.links.instagram);
+            if (data.links.tiktok !== undefined) setTiktok(data.links.tiktok);
+            if (data.links.discord !== undefined) setDiscord(data.links.discord);
+          }
+          if (data.card_visibility) {
+            setCardVisibility(prev => ({ ...prev, ...data.card_visibility }));
+          }
+          if (data.featured_video) {
+            if (data.featured_video.title) setJokerTitle(data.featured_video.title);
+            if (data.featured_video.id) setJokerProject(data.featured_video.id);
+          }
+        }
       });
+    } else if (user) {
+      // Fallback local storage
+      const savedBio = localStorage.getItem(`studioos.bio.${user.id}`);
+      if (savedBio) setBio(savedBio);
+      const savedLinks = localStorage.getItem(`studioos.links.${user.id}`);
+      if (savedLinks) {
+        try {
+          const l = JSON.parse(savedLinks);
+          if (l.website !== undefined) setWebsite(l.website);
+          if (l.youtube !== undefined) setYoutube(l.youtube);
+          if (l.instagram !== undefined) setInstagram(l.instagram);
+          if (l.tiktok !== undefined) setTiktok(l.tiktok);
+          if (l.discord !== undefined) setDiscord(l.discord);
+        } catch {}
+      }
+      const savedVis = localStorage.getItem(`studioos.cardVis.${user.id}`);
+      if (savedVis) {
+        try {
+          setCardVisibility(prev => ({ ...prev, ...JSON.parse(savedVis) }));
+        } catch {}
+      }
     }
   }, [user]);
 
-  const getStat = (key: string, demoVal: string) => {
-    if (userStats[key] !== undefined) return userStats[key].toString();
-    return isDemo ? demoVal : "0";
+  const startEditingProfile = (field?: "name" | "channel" | "bio") => {
+    setTab("geral");
+    setDraftName(name || "");
+    setDraftChannel(channel ? channel.replace(/^@/, '') : "");
+    setDraftBio(bio || "");
+    setDraftWebsite(website || "");
+    setDraftYoutube(youtube || "");
+    setDraftInstagram(instagram || "");
+    setDraftTiktok(tiktok || "");
+    setDraftDiscord(discord || "");
+    setDraftCardVisibility({ ...cardVisibility });
+    setIsEditingProfile(true);
+
+    if (field) {
+      setTimeout(() => {
+        if (field === "name") nameInputRef.current?.focus();
+        if (field === "channel") channelInputRef.current?.focus();
+        if (field === "bio") bioInputRef.current?.focus();
+      }, 50);
+    }
   };
 
-  const showZero = !isDemo && Object.keys(userStats).length === 0;
+  const cancelEditingProfile = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    // Restaura rascunhos para os valores atuais salvos
+    setDraftName(name || "");
+    setDraftChannel(channel ? channel.replace(/^@/, '') : "");
+    setDraftBio(bio || "");
+    setDraftWebsite(website || "");
+    setDraftYoutube(youtube || "");
+    setDraftInstagram(instagram || "");
+    setDraftTiktok(tiktok || "");
+    setDraftDiscord(discord || "");
+    setDraftCardVisibility({ ...cardVisibility });
+    setIsEditingProfile(false);
+  };
 
-  const [sessions, setSessions] = useState([
-    { id: 1, name: "Chrome no Windows", location: "São Paulo, BR • 192.168.1.1", current: true, time: "Atual" },
-    ...(showZero ? [] : [{ id: 2, name: "Safari no iPhone", location: "São Paulo, BR • 10.0.0.5", current: false, time: "Ontem" }])
-  ]);
+  const handleOpenPublicProfile = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isEditingProfile) return;
+    if (!channel) {
+      alert("Você ainda está com o @usuario padrão visual. Defina seu @ de usuário e salve seu perfil para ativar sua página pública!");
+      startEditingProfile("channel");
+      return;
+    }
+    const cleanHandle = channel.replace(/^@/, '');
+    window.open(`/perfil/${cleanHandle}`, '_blank', 'noopener,noreferrer');
+  };
 
-  const handleSavePersonalInfo = async () => {
+  const handleCopyProfileLink = async () => {
+    if (!channel) {
+      alert("Você ainda está com o @usuario padrão visual. Defina seu @ de usuário e salve seu perfil para ativar e copiar seu link!");
+      startEditingProfile("channel");
+      return;
+    }
+    const cleanHandle = channel.replace(/^@/, '');
+    const profileUrl = `${window.location.origin}/perfil/${cleanHandle}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(profileUrl);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = profileUrl;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    } catch (err) {
+      console.error("Erro ao copiar link:", err);
+      alert(`Seu link é: ${profileUrl}`);
+    }
+  };
+
+  const saveProfileChanges = async () => {
+    const cleanHandle = draftChannel.trim().replace(/^@/, '').toLowerCase();
+    
+    if (cleanHandle && !/^[a-z0-9_.-]+$/.test(cleanHandle)) {
+      alert("O nome de usuário (@) só pode conter letras minúsculas, números, sublinhados (_), hífens (-) e pontos (.).");
+      return;
+    }
+
     setSaving(true);
-    const res = await updateProfile(name, channel.replace(/^@/, ""));
-    if (!res.ok) alert(res.error);
-    else alert(res.message);
+    const extraPayload = {
+      bio: draftBio.trim(),
+      links: {
+        website: draftWebsite.trim(),
+        youtube: draftYoutube.trim(),
+        instagram: draftInstagram.trim(),
+        tiktok: draftTiktok.trim(),
+        discord: draftDiscord.trim(),
+      },
+      card_visibility: draftCardVisibility,
+      featured_video: {
+        id: jokerProject,
+        title: jokerTitle
+      }
+    };
+
+    const res = await updateProfile(draftName.trim() || "Criador", cleanHandle, extraPayload);
     setSaving(false);
+
+    if (!res.ok) {
+      alert(res.error);
+      return;
+    }
+
+    setName(draftName.trim() || "Criador");
+    setChannel(cleanHandle);
+    setBio(draftBio.trim());
+    setWebsite(draftWebsite.trim());
+    setYoutube(draftYoutube.trim());
+    setInstagram(draftInstagram.trim());
+    setTiktok(draftTiktok.trim());
+    setDiscord(draftDiscord.trim());
+    setCardVisibility({ ...draftCardVisibility });
+    setIsEditingProfile(false);
+
+    if (user) {
+      localStorage.setItem(`studioos.onboarding.hasPrefs.${user.id}`, "true");
+      setHasPrefs(true);
+      localStorage.setItem(`studioos.bio.${user.id}`, draftBio.trim());
+      localStorage.setItem(`studioos.links.${user.id}`, JSON.stringify(extraPayload.links));
+      localStorage.setItem(`studioos.cardVis.${user.id}`, JSON.stringify(draftCardVisibility));
+    }
   };
 
   const handleSaveEmail = async () => {
@@ -390,11 +846,11 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   };
 
   const onboardingItems = [
-    { label: "Configurar seu perfil", done: !!(user?.name && user?.avatarUrl && channel), action: () => scrollTo("panel-perfil", "preferencias") },
+    { label: "Configurar seu perfil", done: !!(name && channel && user?.avatarUrl), action: () => startEditingProfile() },
     { label: "Ler a Wiki do estúdio", done: readWiki, action: () => { localStorage.setItem("studioos.onboarding.readWiki", "true"); setReadWiki(true); if (onGo) onGo("wiki"); } },
     { label: "Conectar conta do Discord", done: identities.some(i => i.provider === "discord"), action: () => scrollTo("panel-sso", "seguranca") },
     { label: "Adicionar seu primeiro projeto", done: hasProject, action: () => { localStorage.setItem("studioos.onboarding.hasProject", "true"); setHasProject(true); alert("Ainda não implementado: ir para Projetos"); } },
-    { label: "Personalizar suas preferências", done: hasPrefs, action: () => scrollTo("panel-links", "preferencias") },
+    { label: "Personalizar suas preferências", done: hasPrefs, action: () => setTab("preferencias") },
   ];
 
   const completedCount = onboardingItems.filter(i => i.done).length;
@@ -402,17 +858,71 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   const strokeDashoffset = 238.7 - (238.7 * (completedCount / 5));
   const remainingItems = 5 - completedCount;
 
+  const renderCardVisibilityBanner = (cardKey: "stats" | "projects" | "video" | "achievements", cardLabel: string) => {
+    const isVisible = isEditingProfile ? draftCardVisibility[cardKey] : cardVisibility[cardKey];
+
+    if (isEditingProfile) {
+      return (
+        <div className={`flex items-center justify-between px-4 py-3 border-b transition-all ${
+          isVisible 
+            ? 'bg-[#2FD4A0]/10 border-[#2FD4A0]/30 text-[#2FD4A0]' 
+            : 'bg-[#18181b]/95 border-[#232327] text-[#8c8c94]'
+        }`}>
+          <div className="flex items-center gap-2.5">
+            <Icon name={isVisible ? "eye" : "eyeOff"} className="h-4 w-4 shrink-0" />
+            <div>
+              <div className="font-mono text-[11px] font-bold uppercase tracking-wider flex items-center gap-2">
+                <span>{isVisible ? "Visível no Perfil Público" : "Oculto no Perfil Público"}</span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded border font-mono opacity-80 uppercase tracking-widest bg-black/40 border-current">
+                  {cardLabel}
+                </span>
+              </div>
+              <div className="text-[10.5px] text-bone-400 mt-0.5">
+                {isVisible 
+                  ? "Quem acessar o seu link de perfil verá este bloco." 
+                  : "Apenas você vê este bloco. Visitantes não terão acesso."}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDraftCardVisibility(prev => ({ ...prev, [cardKey]: !prev[cardKey] }))}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              isVisible
+                ? 'bg-[#2FD4A0] text-[#0c0c0e] hover:bg-[#2FD4A0]/90 shadow-[0_0_12px_rgba(47,212,160,0.3)]'
+                : 'bg-[#232327] text-white hover:bg-[#2d2d32]'
+            }`}
+          >
+            <Icon name={isVisible ? "check" : "close"} className="h-3 w-3 stroke-[3]" />
+            {isVisible ? "Público" : "Oculto"}
+          </button>
+        </div>
+      );
+    }
+
+    if (!isVisible) {
+      return (
+        <div className="flex items-center gap-2 px-4 py-2 bg-[#18181b]/80 border-b border-[#232327] text-[#8c8c94] text-[10.5px] font-mono">
+          <Icon name="eyeOff" className="h-3.5 w-3.5 text-signal-400/70" />
+          <span>Oculto do perfil público · Apenas você tem visão deste bloco</span>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   const achievements = [
-    { id: "seq21", icon: "spark", label: "Sequência de 21 dias", desc: "Acessou o painel por 21 dias seguidos.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: isDemo || Number(userStats['streak']) >= 21 },
-    { id: "ideias200", icon: "target", label: "200 ideias ranqueadas", desc: "Mais de 200 ideias processadas no painel.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: isDemo || Number(userStats['ideias_ranqueadas']) >= 200 },
-    { id: "top4", icon: "star", label: "Top 4% do canal", desc: "Seu desempenho superou 96% dos criadores.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: isDemo || Number(userStats['top4']) === 1 },
-    { id: "verified", icon: "check", label: "Conta verificada", desc: "Identidade confirmada com sucesso.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: isDemo || !!user?.email_confirmed_at || Number(userStats['verified']) === 1 },
+    { id: "seq21", icon: "spark", label: "Sequência de 21 dias", desc: "Acessou o painel por 21 dias seguidos.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: accountMetrics.streak >= 21 },
+    { id: "ideias200", icon: "target", label: "200 ideias ranqueadas", desc: "Mais de 200 ideias processadas no painel.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: accountMetrics.ideasCount >= 200 },
+    { id: "top4", icon: "star", label: "Top 4% do canal", desc: "Seu desempenho superou 96% dos criadores.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(userStats['top4']) === 1 },
+    { id: "verified", icon: "check", label: "Conta verificada", desc: "Identidade confirmada com sucesso.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: !!user?.email_confirmed_at || Number(userStats['verified']) === 1 },
     { id: "onboarding", icon: "layers", label: "Primeiros Passos", desc: "Completou todas as tarefas de onboarding.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: completedCount === onboardingItems.length },
     { id: "viral", icon: "bolt", label: "Post Viral", desc: "Atingiu 100k visualizações em um único post.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: Number(userStats['viral']) === 1 },
     { id: "thumb", icon: "frame", label: "Mestre das Thumbnails", desc: "Aprovou 50 thumbnails no painel.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(userStats['thumb_approved']) >= 50 },
-    { id: "roteiro", icon: "book", label: "Roteirista Nato", desc: "Criou seu primeiro roteiro completo.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: Number(userStats['producoes']) >= 1 || Number(userStats['tool_roteiro']) >= 1 },
+    { id: "roteiro", icon: "book", label: "Roteirista Nato", desc: "Criou seu primeiro roteiro completo.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: accountMetrics.toolsList.some(t => t.id.includes("roteiro")) || Number(userStats['producoes']) >= 1 },
     { id: "strategy", icon: "brain", label: "Mente Brilhante", desc: "Definiu o planejamento do trimestre.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: Number(userStats['strategy_defined']) === 1 },
-    { id: "collec", icon: "stack", label: "Colecionador", desc: "Salvou 500 referências no banco de ideias.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: Number(userStats['references_saved']) >= 500 },
+    { id: "collec", icon: "stack", label: "Colecionador", desc: "Salvou 500 referências no banco de ideias.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: accountMetrics.ideasCount >= 500 },
     { id: "eng", icon: "eye", label: "Atenção Total", desc: "Manteve 60% de retenção no YouTube.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(userStats['high_retention']) === 1 },
     { id: "vet", icon: "clock", label: "Veterano", desc: "Completou 1 ano de estúdio.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: Number(userStats['veteran']) === 1 },
   ];
@@ -459,107 +969,330 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
 
         {/* Informações */}
         <div className="min-w-0 flex-1 pt-2">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
-             <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-bone-50 mr-1">
-               {name || "Usuário"}
-             </h1>
-             <span className="font-mono text-[13px] text-signal-400">
-               {channel ? (channel.startsWith('@') ? channel : `@${channel}`) : <span className="text-signal-400">@usuario</span>}
-             </span>
-             <span className="flex items-center gap-1 rounded-full border border-signal-400/35 bg-signal-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.11em] text-signal-400">
-                <Icon name="check" className="h-3 w-3" strokeWidth={2.4} /> Verificado
-             </span>
-             <span className="flex items-center gap-1.5 text-[11px] font-mono tracking-widest uppercase text-ink-400 ml-2">
-                <Icon name="clock" className="h-3 w-3" /> Membro desde {new Date().getFullYear()}
-             </span>
-          </div>
+          {!isEditingProfile ? (
+            <>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
+                 <div 
+                   onClick={() => startEditingProfile("name")} 
+                   className="group/name relative flex items-center gap-2 cursor-pointer select-none rounded-lg py-0.5 px-1.5 -ml-1.5 transition-all hover:bg-white/[0.04]"
+                   title="Clique para editar seu nome de exibição"
+                 >
+                   <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-bone-50">
+                     {name || "Usuário"}
+                   </h1>
+                   <Icon name="type" className="h-3.5 w-3.5 opacity-0 group-hover/name:opacity-60 text-signal-400 transition-opacity" />
+                 </div>
 
-          <p className="mt-2 max-w-[62ch] text-[13.5px] leading-relaxed text-bone-400">
-            Criador de conteúdo usando o StudioOS. Transformando ideias cruas em projetos publicados com o auxílio de ferramentas conectadas e com número e critério em cada etapa.
-          </p>
+                 <div 
+                   onClick={() => startEditingProfile("channel")} 
+                   className="group/channel relative flex items-center gap-1.5 cursor-pointer select-none rounded-lg py-0.5 px-2 transition-all hover:bg-signal-400/10 border border-transparent hover:border-signal-400/30"
+                   title="Clique para editar seu nome de usuário (@)"
+                 >
+                   <span className="font-mono text-[13px] text-signal-400 font-medium">
+                     {channel ? (channel.startsWith('@') ? channel : `@${channel}`) : "@usuario"}
+                   </span>
+                   {!channel && (
+                     <span className="text-[9px] font-mono uppercase tracking-wider text-ink-400 bg-ink-800/80 px-1.5 py-0.5 rounded border border-ink-700">
+                       padrão
+                     </span>
+                   )}
+                   <Icon name="type" className="h-3 w-3 opacity-0 group-hover/channel:opacity-80 text-signal-400 transition-opacity" />
+                 </div>
 
-          <div className="mt-5 flex flex-wrap items-center gap-x-7 gap-y-2">
-            {[
-              [getStat("projetos", "142"), "projetos"],
-              [getStat("ideias_ranqueadas", "214"), "ideias ranqueadas"],
-              [showZero ? "-" : "4.8/5", "nota média"],
-            ].map(([v, l]) => (
-              <div key={l} className="flex items-baseline gap-2">
-                <span className="font-display text-[16px] font-bold text-bone-50 tabular-nums">{v}</span>
-                <span className="text-[10px] font-mono tracking-widest text-ink-400 uppercase">{l}</span>
+                 <span className="flex items-center gap-1 rounded-full border border-signal-400/35 bg-signal-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.11em] text-signal-400">
+                    <Icon name="check" className="h-3 w-3" strokeWidth={2.4} /> Verificado
+                 </span>
+                 <span className="flex items-center gap-1.5 text-[11px] font-mono tracking-widest uppercase text-ink-400 ml-2">
+                    <Icon name="clock" className="h-3 w-3" /> Membro desde {new Date().getFullYear()}
+                 </span>
               </div>
-            ))}
-          </div>
 
-          {/* Links do Perfil */}
-          {(website || instagram || tiktok || youtube || discord) && (
-            <div className="mt-4 flex flex-wrap items-center gap-2.5">
-              {website && (
-                <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#F2B33D]/50 hover:bg-[#F2B33D]/5 hover:text-[#F2B33D] hover:shadow-[0_0_12px_rgba(242,179,61,0.15)]">
-                  <Icon name="globe" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#F2B33D]" />
-                  {website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                </a>
+              <div 
+                onClick={() => startEditingProfile("bio")} 
+                className="group/bio mt-2 max-w-[62ch] cursor-pointer rounded-lg p-2 -ml-2 transition-all hover:bg-white/[0.03] border border-transparent hover:border-ink-800"
+                title="Clique para editar a bio"
+              >
+                <p className="text-[13.5px] leading-relaxed text-bone-400 group-hover/bio:text-bone-200 transition-colors flex items-start gap-2">
+                  <span className="flex-1">{bio || DEFAULT_BIO}</span>
+                  <Icon name="type" className="h-3.5 w-3.5 shrink-0 opacity-0 group-hover/bio:opacity-60 text-signal-400 transition-opacity mt-0.5" />
+                </p>
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center gap-x-7 gap-y-2">
+                {[
+                  [accountMetrics.projectsCount.toString(), accountMetrics.projectsCount === 1 ? "projeto" : "projetos"],
+                  [accountMetrics.ideasCount.toString(), "ideias ranqueadas"],
+                  [accountMetrics.avgRatingStr, "nota média"],
+                ].map(([v, l]) => (
+                  <div key={l} className="flex items-baseline gap-2">
+                    <span className="font-display text-[16px] font-bold text-bone-50 tabular-nums">{v}</span>
+                    <span className="text-[10px] font-mono tracking-widest text-ink-400 uppercase">{l}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Links do Perfil */}
+              {(website || instagram || tiktok || youtube || discord) ? (
+                <div className="mt-4 flex flex-wrap items-center gap-2.5">
+                  {website && (
+                    <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#F2B33D]/50 hover:bg-[#F2B33D]/5 hover:text-[#F2B33D] hover:shadow-[0_0_12px_rgba(242,179,61,0.15)]">
+                      <Icon name="globe" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#F2B33D]" />
+                      {website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                    </a>
+                  )}
+                  {youtube && (
+                    <a href={youtube.startsWith('http') ? youtube : `https://${youtube}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#FF0000]/50 hover:bg-[#FF0000]/5 hover:text-[#FF0000] hover:shadow-[0_0_12px_rgba(255,0,0,0.15)]">
+                      <Icon name="youtube" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#FF0000]" />
+                      YouTube
+                    </a>
+                  )}
+                  {instagram && (
+                    <a href={instagram.startsWith('http') ? instagram : `https://${instagram}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#E1306C]/50 hover:bg-[#E1306C]/5 hover:text-[#E1306C] hover:shadow-[0_0_12px_rgba(225,48,108,0.15)]">
+                      <Icon name="instagram" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#E1306C]" />
+                      Instagram
+                    </a>
+                  )}
+                  {tiktok && (
+                    <a href={tiktok.startsWith('http') ? tiktok : `https://${tiktok}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#00f2fe]/50 hover:bg-[#00f2fe]/5 hover:text-[#00f2fe] hover:shadow-[0_0_12px_rgba(0,242,254,0.15)]">
+                      <Icon name="tiktok" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#00f2fe]" />
+                      TikTok
+                    </a>
+                  )}
+                  {discord && (
+                    <a href={discord.startsWith('http') ? discord : `https://${discord}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#5865F2]/50 hover:bg-[#5865F2]/5 hover:text-[#5865F2] hover:shadow-[0_0_12px_rgba(88,101,242,0.15)]">
+                      <Icon name="discord" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#5865F2]" />
+                      Discord
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-4">
+                  <button 
+                    onClick={() => startEditingProfile()} 
+                    className="flex items-center gap-1.5 text-[12px] text-bone-400 hover:text-signal-400 transition-colors font-mono cursor-pointer"
+                  >
+                    <Icon name="plus" className="h-3 w-3" /> Adicionar links ao perfil
+                  </button>
+                </div>
               )}
-              {youtube && (
-                <a href={youtube.startsWith('http') ? youtube : `https://${youtube}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#FF0000]/50 hover:bg-[#FF0000]/5 hover:text-[#FF0000] hover:shadow-[0_0_12px_rgba(255,0,0,0.15)]">
-                  <Icon name="youtube" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#FF0000]" />
-                  YouTube
-                </a>
-              )}
-              {instagram && (
-                <a href={instagram.startsWith('http') ? instagram : `https://${instagram}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#E1306C]/50 hover:bg-[#E1306C]/5 hover:text-[#E1306C] hover:shadow-[0_0_12px_rgba(225,48,108,0.15)]">
-                  <Icon name="instagram" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#E1306C]" />
-                  Instagram
-                </a>
-              )}
-              {tiktok && (
-                <a href={tiktok.startsWith('http') ? tiktok : `https://${tiktok}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#00f2fe]/50 hover:bg-[#00f2fe]/5 hover:text-[#00f2fe] hover:shadow-[0_0_12px_rgba(0,242,254,0.15)]">
-                  <Icon name="tiktok" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#00f2fe]" />
-                  TikTok
-                </a>
-              )}
-              {discord && (
-                <a href={discord.startsWith('http') ? discord : `https://${discord}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#5865F2]/50 hover:bg-[#5865F2]/5 hover:text-[#5865F2] hover:shadow-[0_0_12px_rgba(88,101,242,0.15)]">
-                  <Icon name="discord" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#5865F2]" />
-                  Discord
-                </a>
-              )}
+            </>
+          ) : (
+            /* EDIÇÃO ATIVA DO PERFIL */
+            <div className="space-y-4 pr-2 anim-fade">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-mono uppercase tracking-widest text-ink-400 block mb-1.5">
+                    Nome de Exibição
+                  </label>
+                  <Input 
+                    ref={nameInputRef}
+                    value={draftName} 
+                    onChange={e => setDraftName(e.target.value)} 
+                    placeholder="Seu Nome" 
+                    maxLength={50} 
+                    className="bg-[#101012] border-[#232327] text-white focus:border-signal-400 font-display text-lg font-bold w-full" 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono uppercase tracking-widest text-ink-400 block mb-1.5">
+                    Nome de Usuário (@ único)
+                  </label>
+                  <div className="flex items-center rounded-lg border border-[#232327] bg-[#101012] px-3 py-2 focus-within:border-signal-400 focus-within:shadow-[0_0_12px_rgba(242,179,61,0.2)] transition-all">
+                    <span className="font-mono text-sm font-bold text-signal-400 select-none mr-1">@</span>
+                    <input 
+                      ref={channelInputRef}
+                      type="text"
+                      value={draftChannel}
+                      onChange={e => setDraftChannel(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
+                      placeholder="usuario"
+                      maxLength={30}
+                      className="bg-transparent font-mono text-sm text-signal-400 focus:outline-none placeholder:text-signal-400/35 w-full"
+                    />
+                  </div>
+                  <span className="text-[10px] text-ink-400 font-mono mt-1 block">
+                    {draftChannel ? `Link público: /perfil/${draftChannel}` : "Padrão visual: @usuario (salve para criar seu link real)"}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-mono uppercase tracking-widest text-ink-400 block mb-1.5">
+                  Bio do Perfil
+                </label>
+                <div className="relative">
+                  <textarea
+                    ref={bioInputRef}
+                    value={draftBio}
+                    onChange={e => setDraftBio(e.target.value)}
+                    placeholder="Conte quem você é e seus conteúdos..."
+                    maxLength={280}
+                    rows={3}
+                    className="w-full rounded-xl border border-[#232327] bg-[#101012] p-3 text-[13.5px] leading-relaxed text-bone-200 placeholder:text-bone-600 focus:border-signal-400 focus:outline-none focus:shadow-[0_0_15px_rgba(242,179,61,0.15)] transition-all resize-none"
+                  />
+                  <div className="flex justify-between items-center mt-1 px-1 text-[11px] font-mono text-ink-400">
+                    <span>Aparecerá para quem visitar o seu link público</span>
+                    <span className={draftBio.length >= 260 ? "text-signal-400 font-bold" : ""}>{draftBio.length}/280</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Editor de Links */}
+              <div className="rounded-xl border border-[#232327] bg-[#0c0c0e] p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Icon name="link" className="h-4 w-4 text-signal-400" />
+                  <span className="font-display text-[13px] font-bold text-white tracking-tight">Links do Perfil (Redes Sociais & Portfólio)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-mono uppercase tracking-wider text-[#8c8c94] flex items-center gap-1.5 mb-1">
+                      <Icon name="globe" className="h-3 w-3 text-[#F2B33D]" /> Website / Portfólio
+                    </label>
+                    <Input 
+                      value={draftWebsite} 
+                      onChange={e => setDraftWebsite(e.target.value)} 
+                      placeholder="ex: meusite.com"
+                      className="bg-[#101012] border-[#232327] text-white text-[12px] h-9 focus:border-signal-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono uppercase tracking-wider text-[#8c8c94] flex items-center gap-1.5 mb-1">
+                      <Icon name="youtube" className="h-3 w-3 text-[#FF0000]" /> YouTube
+                    </label>
+                    <Input 
+                      value={draftYoutube} 
+                      onChange={e => setDraftYoutube(e.target.value)} 
+                      placeholder="youtube.com/@seucanal"
+                      className="bg-[#101012] border-[#232327] text-white text-[12px] h-9 focus:border-[#FF0000]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono uppercase tracking-wider text-[#8c8c94] flex items-center gap-1.5 mb-1">
+                      <Icon name="instagram" className="h-3 w-3 text-[#E1306C]" /> Instagram
+                    </label>
+                    <Input 
+                      value={draftInstagram} 
+                      onChange={e => setDraftInstagram(e.target.value)} 
+                      placeholder="instagram.com/usuario"
+                      className="bg-[#101012] border-[#232327] text-white text-[12px] h-9 focus:border-[#E1306C]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono uppercase tracking-wider text-[#8c8c94] flex items-center gap-1.5 mb-1">
+                      <Icon name="tiktok" className="h-3 w-3 text-[#00f2fe]" /> TikTok
+                    </label>
+                    <Input 
+                      value={draftTiktok} 
+                      onChange={e => setDraftTiktok(e.target.value)} 
+                      placeholder="tiktok.com/@usuario"
+                      className="bg-[#101012] border-[#232327] text-white text-[12px] h-9 focus:border-[#00f2fe]"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-[10px] font-mono uppercase tracking-wider text-[#8c8c94] flex items-center gap-1.5 mb-1">
+                      <Icon name="discord" className="h-3 w-3 text-[#5865F2]" /> Comunidade no Discord
+                    </label>
+                    <Input 
+                      value={draftDiscord} 
+                      onChange={e => setDraftDiscord(e.target.value)} 
+                      placeholder="discord.gg/comunidade"
+                      className="bg-[#101012] border-[#232327] text-white text-[12px] h-9 focus:border-[#5865F2]"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
 
         {/* Botões */}
-        <div className="flex items-center gap-2 pt-2 shrink-0">
-          <Button variant="solid" onClick={() => setTab("preferencias")} className="text-[11px] font-semibold uppercase tracking-[0.12em] px-4 py-2.5">
-             <Icon name="type" className="h-3.5 w-3.5" /> Editar perfil
-          </Button>
-          <a 
-            href={channel ? `/perfil/${channel.replace('@', '')}` : '#'} 
-            target={channel ? "_blank" : "_self"} 
-            rel="noreferrer"
-            onClick={(e) => { 
-              if (!channel) { 
-                e.preventDefault(); 
-                setTab("preferencias"); 
-                setTimeout(() => {
-                  const el = document.getElementById("input-username");
-                  if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-                }, 100);
-              } 
-            }}
-            className={`flex items-center gap-2 rounded-lg border border-ink-700 bg-ink-900/50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-bone-300 transition-colors ${channel ? 'hover:border-signal-400/60 hover:text-bone-50' : 'opacity-50 cursor-not-allowed'}`}
-          >
-            <Icon name="eye" className="h-3.5 w-3.5" /> Ver público
-          </a>
+        <div className="flex items-center gap-2 pt-2 shrink-0 self-start">
+          {!isEditingProfile ? (
+            <>
+              <Button variant="solid" onClick={() => startEditingProfile()} className="text-[11px] font-semibold uppercase tracking-[0.12em] px-4 py-2.5">
+                 <Icon name="type" className="h-3.5 w-3.5" /> Editar perfil
+              </Button>
+              <button 
+                type="button"
+                onClick={handleOpenPublicProfile}
+                className={`flex items-center gap-2 rounded-lg border border-ink-700 bg-ink-900/50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-bone-300 transition-colors cursor-pointer ${channel ? 'hover:border-signal-400/60 hover:text-bone-50' : 'opacity-60 hover:border-signal-400/50 hover:text-signal-400'}`}
+              >
+                <Icon name="eye" className="h-3.5 w-3.5" /> Ver público
+              </button>
+            </>
+          ) : (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <Button 
+                variant="solid" 
+                onClick={saveProfileChanges} 
+                disabled={saving}
+                className="text-[11px] font-bold uppercase tracking-[0.12em] px-4 py-2.5 bg-signal-400 hover:bg-signal-300 text-ink-950 shadow-[0_0_15px_rgba(242,179,61,0.3)]"
+              >
+                <Icon name="check" className="h-3.5 w-3.5 stroke-[3]" /> {saving ? "Salvando..." : "Salvar Perfil"}
+              </Button>
+              <Button 
+                variant="outline" 
+                type="button"
+                onClick={cancelEditingProfile} 
+                disabled={saving}
+                className="text-[11px] font-semibold uppercase tracking-[0.12em] px-3.5 py-2.5 border-ink-700 bg-ink-900/60 text-bone-300 hover:text-white cursor-pointer"
+              >
+                Cancelar
+              </Button>
+            </div>
+          )}
           <button
             type="button"
-            aria-label="Mais opções"
-            className="rounded-lg border border-ink-700 bg-ink-900/50 p-2.5 text-ink-400 transition-colors hover:border-ink-600 hover:text-bone-50"
+            onClick={handleCopyProfileLink}
+            aria-label="Copiar link do perfil"
+            title={copiedLink ? "Link copiado para a área de transferência!" : "Copiar link do perfil para compartilhar"}
+            className={`flex items-center gap-2 rounded-lg border px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
+              copiedLink
+                ? "border-[#2FD4A0]/60 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_15px_rgba(47,212,160,0.25)]"
+                : "border-ink-700 bg-ink-900/50 text-bone-300 hover:border-signal-400/60 hover:text-bone-50 hover:bg-ink-800/60"
+            }`}
           >
-            <span className="flex items-center gap-0.5 justify-center leading-none tracking-[0.1em] text-lg font-bold" style={{ transform: "translateY(-4px)" }}>...</span>
+            <Icon name={copiedLink ? "check" : "copy"} className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{copiedLink ? "Copiado!" : "Copiar link"}</span>
           </button>
         </div>
       </Reveal>
+
+      {/* Banner de Modo de Edição Ativo */}
+      {isEditingProfile && (
+        <div className="mb-8 rounded-2xl border border-signal-400/30 bg-gradient-to-r from-signal-400/10 via-[#101012] to-[#0c0c0e] p-5 backdrop-blur-md shadow-[0_10px_30px_-10px_rgba(242,179,61,0.2)] anim-fade">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="h-10 w-10 rounded-xl bg-signal-400/20 border border-signal-400/40 flex items-center justify-center text-signal-400 shrink-0">
+                <Icon name="type" className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-display text-[16px] font-bold text-white tracking-tight">Modo de Edição de Perfil Ativo</h4>
+                <p className="text-[12.5px] text-bone-400 mt-0.5 leading-relaxed">
+                  Personalize seu nome, seu @ de usuário único, sua bio e links no formulário acima. Abaixo em cada card, use os botões para definir quais blocos visitantes poderão ver.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
+              <Button 
+                variant="outline" 
+                onClick={cancelEditingProfile} 
+                disabled={saving} 
+                className="border-[#232327] bg-[#101012] text-bone-300 hover:text-white hover:bg-[#18181b] text-[12px] px-4 py-2.5 font-semibold"
+              >
+                Cancelar
+              </Button>
+              <Button 
+                variant="solid" 
+                onClick={saveProfileChanges} 
+                disabled={saving} 
+                className="text-[12px] font-bold uppercase tracking-wider px-5 py-2.5 bg-signal-400 text-ink-950 hover:bg-signal-300 shadow-[0_0_20px_rgba(242,179,61,0.35)]"
+              >
+                {saving ? "Salvando..." : "Salvar Perfil"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TABS */}
       <div className="mb-8 flex gap-1 border-b border-ink-800 pb-px overflow-x-auto scrollbar-hide">
@@ -585,6 +1318,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
           {/* Coluna Esquerda: Estatísticas de Uso */}
           <div className="flex flex-col gap-6">
             <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
+              {renderCardVisibilityBanner("stats", "Monitor de uso")}
               
               {/* Header: Monitor de uso */}
               <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3">
@@ -604,28 +1338,37 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
               {/* Gráfico de Barras */}
               <div className="px-4 pb-5 pt-4">
                 <div className="flex h-[104px] items-end gap-[3px]">
-                  {Array.from({ length: 56 }).map((_, i) => {
-                    const t = Math.max(0.1, Math.sin(i * 0.3) * 0.5 + Math.random() * 0.5);
-                    const color = t > 0.82 ? "#F2604C" : t > 0.58 ? "#F2B33D" : "#2FD4A0";
-                    const h = Math.max(9, t * 100);
+                  {accountMetrics.days56.map((count, i) => {
+                    const hasRun = count > 0;
+                    const intensity = accountMetrics.maxDayActions > 0 ? count / accountMetrics.maxDayActions : 0;
+                    const color = hasRun 
+                      ? (intensity > 0.7 ? "#F2604C" : intensity > 0.35 ? "#F2B33D" : "#2FD4A0") 
+                      : "#1c1c20";
+                    const h = hasRun ? Math.max(18, Math.round(intensity * 100)) : 6;
+                    
                     return (
                       <div 
                         key={i} 
+                        title={`Dia ${i + 1}: ${count} ${count === 1 ? 'ação' : 'ações'}`}
                         className="flex-1 rounded-full hover:opacity-100 transition-all duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
                         style={{ 
                           height: mounted ? `${h}%` : '4%', 
                           background: color,
-                          opacity: mounted ? 0.88 : 0,
-                          transitionDelay: `${i * 12}ms`
+                          opacity: mounted ? (hasRun ? 0.95 : 0.4) : 0,
+                          transitionDelay: `${i * 10}ms`
                         }}
                       />
                     );
                   })}
                 </div>
                 <div className="mt-2.5 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">
-                  <span>12/08/2026</span>
-                  <span>pico 171 min · média 102 min/dia</span>
-                  <span>06/10/2026</span>
+                  <span>{accountMetrics.startDateStr}</span>
+                  <span>
+                    {accountMetrics.hasActivity
+                      ? `pico ${accountMetrics.peakMinutes} min · média ${accountMetrics.avgMinutesPerActiveDay} min/dia ativo`
+                      : "sem atividade recente registrada"}
+                  </span>
+                  <span>{accountMetrics.endDateStr}</span>
                 </div>
               </div>
 
@@ -633,51 +1376,85 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
               <div className="mx-4 rounded-xl border border-[#232327] bg-[#0d0d0f] p-3.5">
                 <div className="mb-3 text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">Carga por dia da semana</div>
                 <div className="space-y-[7px]">
-                  {(() => {
-                    const baseTotals = [57, 121, 114, 110, 126, 120, 65];
-                    const weekTotals = showZero ? [0,0,0,0,0,0,0] : (isDemo ? baseTotals : [0, 1, 2, 3, 4, 5, 6].map(d => Number(userStats[`dow_${d}`] || 0)));
-                    const maxWeek = Math.max(...weekTotals, 1);
-                    return ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((label, i) => {
-                      const filled = Math.round((weekTotals[i] / maxWeek) * 18);
-                      return (
-                        <div key={label} className="flex items-center gap-3">
-                          <span className="w-7 font-mono text-[10px] uppercase tracking-widest text-[#8c8c94]">{label}</span>
-                          <div className="flex flex-1 gap-[3px]">
-                            {Array.from({ length: 18 }).map((_, c) => {
-                              const on = c < filled;
-                              const t = c / 18;
-                              const color = on ? (t > 0.65 ? "#F2604C" : t > 0.45 ? "#F2B33D" : "#2FD4A0") : "#1c1c20";
-                              return (
-                                <span
-                                  key={c}
-                                  className="h-[9px] flex-1 rounded-[2px] transition-all duration-500 ease-out"
-                                  style={{ 
-                                    background: color, 
-                                    opacity: mounted ? (on ? 0.92 : 1) : 0,
-                                    transform: mounted ? "scaleY(1)" : "scaleY(0)",
-                                    transitionDelay: `${i * 40 + c * 20}ms`
-                                  }}
-                                />
-                              );
-                            })}
-                          </div>
-                          <span className="w-14 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">
-                            {isDemo ? `${Math.floor(weekTotals[i] / 60)}h${String(weekTotals[i] % 60).padStart(2, "0")}` : `${weekTotals[i]}×`}
-                          </span>
+                  {["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((label, i) => {
+                    const count = accountMetrics.dowCounts[i];
+                    const filled = accountMetrics.maxDow > 0 && count > 0 
+                      ? Math.max(1, Math.round((count / accountMetrics.maxDow) * 18)) 
+                      : 0;
+                    const mins = count * 15;
+                    const timeLabel = count === 0 
+                      ? "0m" 
+                      : (mins >= 60 
+                          ? `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, "0")}` 
+                          : `${mins}m`);
+                    return (
+                      <div key={label} className="flex items-center gap-3">
+                        <span className="w-7 font-mono text-[10px] uppercase tracking-widest text-[#8c8c94]">{label}</span>
+                        <div className="flex flex-1 gap-[3px]">
+                          {Array.from({ length: 18 }).map((_, c) => {
+                            const on = c < filled;
+                            const t = c / 18;
+                            const color = on ? (t > 0.65 ? "#F2604C" : t > 0.45 ? "#F2B33D" : "#2FD4A0") : "#1c1c20";
+                            return (
+                              <span
+                                key={c}
+                                className="h-[9px] flex-1 rounded-[2px] transition-all duration-500 ease-out"
+                                style={{ 
+                                  background: color, 
+                                  opacity: mounted ? (on ? 0.92 : 0.4) : 0,
+                                  transform: mounted ? "scaleY(1)" : "scaleY(0)",
+                                  transitionDelay: `${i * 40 + c * 20}ms`
+                                }}
+                              />
+                            );
+                          })}
                         </div>
-                      );
-                    });
-                  })()}
+                        <span className="w-14 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">
+                          {timeLabel}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* 2x2 Grid */}
               <div className="mt-4 grid grid-cols-1 gap-px border-t border-[#232327] bg-[#232327] sm:grid-cols-2">
                 {[
-                  { label: "USO DE FERRAMENTAS", value: getStat("total_runs", "128"), vcolor: "#2FD4A0", delta: showZero ? "-" : "+12%", dtone: "#2FD4A0", hint: showZero ? "" : "Nº DE VEZES EXECUTADAS" },
-                  { label: "HORAS EM ESTÚDIO", value: showZero ? "0h" : "46h", suffix: showZero ? "" : " 20m", vcolor: "#2FD4A0", delta: showZero ? "-" : "+8%", dtone: "#2FD4A0", hint: "META MENSAL: 40H" },
-                  { label: "IDEIAS RANQUEADAS", value: getStat("ideias_ranqueadas", "214"), vcolor: "#F2604C", delta: showZero ? "-" : "-3%", dtone: "#F2604C", hint: showZero ? "" : "MÉDIA 6,8 IDEIAS/DIA" },
-                  { label: "SEQUÊNCIA ATUAL", value: showZero ? "1" : "12", suffix: showZero ? " dia" : " dias", vcolor: "#F2B33D", delta: showZero ? "-" : "+4", dtone: "#F2B33D", hint: "RECORDE: 21 DIAS" }
+                  { 
+                    label: "USO DE FERRAMENTAS", 
+                    value: accountMetrics.totalRuns.toString(), 
+                    vcolor: "#2FD4A0", 
+                    delta: accountMetrics.totalRuns > 0 ? `+${accountMetrics.totalRuns}` : "-", 
+                    dtone: "#2FD4A0", 
+                    hint: accountMetrics.totalRuns === 1 ? "1 EXECUÇÃO REGISTRADA" : `${accountMetrics.totalRuns} EXECUÇÕES REGISTRADAS` 
+                  },
+                  { 
+                    label: "HORAS EM ESTÚDIO", 
+                    value: accountMetrics.studioHoursFormatted, 
+                    suffix: accountMetrics.studioMinutesSuffix, 
+                    vcolor: "#2FD4A0", 
+                    delta: accountMetrics.studioMinutes > 0 ? `${Math.round((accountMetrics.studioMinutes / (40 * 60)) * 100)}%` : "-", 
+                    dtone: "#2FD4A0", 
+                    hint: "META MENSAL: 40H" 
+                  },
+                  { 
+                    label: "IDEIAS RANQUEADAS", 
+                    value: accountMetrics.ideasCount.toString(), 
+                    vcolor: "#F2604C", 
+                    delta: accountMetrics.ideasCount > 0 ? `+${accountMetrics.ideasCount}` : "-", 
+                    dtone: "#F2604C", 
+                    hint: "BANCO DE IDEIAS DO ESTÚDIO" 
+                  },
+                  { 
+                    label: "SEQUÊNCIA ATUAL", 
+                    value: accountMetrics.streak.toString(), 
+                    suffix: accountMetrics.streak === 1 ? " dia" : " dias", 
+                    vcolor: "#F2B33D", 
+                    delta: `+${accountMetrics.streak}`, 
+                    dtone: "#F2B33D", 
+                    hint: `RECORDE: ${accountMetrics.streak} ${accountMetrics.streak === 1 ? 'DIA' : 'DIAS'}` 
+                  }
                 ].map((m, i) => (
                   <div 
                     key={m.label} 
@@ -708,74 +1485,48 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                   <Icon name="dial" className="h-3 w-3 text-[#F2B33D]" />
                   <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">Ferramentas mais usadas</span>
                   <span className="h-px flex-1 bg-[#232327]" />
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2] tabular-nums">{getStat("total_runs", "209")} EXECUÇÕES</span>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2] tabular-nums">
+                    {accountMetrics.totalRuns} {accountMetrics.totalRuns === 1 ? "EXECUÇÃO" : "EXECUÇÕES"}
+                  </span>
                 </div>
                 <div className="space-y-2.5">
-                  {(() => {
-                    const demoTools = [
-                      { tool: "Rank de Ideia", runs: 71, share: 80, color: "#F2604C" },
-                      { tool: "Gerador de Hooks", runs: 54, share: 60, color: "#F2604C" },
-                      { tool: "Briefing Thumbnail", runs: 38, share: 45, color: "#F2B33D" },
-                      { tool: "Roteiro & Gravação", runs: 29, share: 35, color: "#2FD4A0" },
-                      { tool: "Receita Viral", runs: 17, share: 20, color: "#2FD4A0" }
-                    ];
-
-                    if (isDemo) return demoTools.map((t, i) => (
-                      <div key={t.tool} className="flex items-center gap-3">
-                        <span className="w-5 font-mono text-[11px] text-[#7f7f88] tabular-nums">{String(i + 1).padStart(2, '0')}</span>
-                        <span className="w-[150px] shrink-0 truncate text-[12.5px] text-[#d3d3d8]">{t.tool}</span>
-                        <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#1c1c20]">
-                          <div className="h-full rounded-full transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]" style={{ width: mounted ? `${t.share}%` : '0%', background: t.color, transitionDelay: `${i * 120 + 400}ms` }} />
-                        </div>
-                        <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}×</span>
-                      </div>
-                    ));
-
-                    if (showZero) return <div className="text-[12px] text-[#8c8c94]">Nenhuma ferramenta utilizada ainda.</div>;
-
-                    const toolNames: Record<string, string> = {
-                      rank: "Rank de Ideia",
-                      hook: "Gerador de Hooks",
-                      briefing: "Briefing Thumbnail",
-                      roteiro: "Roteiro & Gravação",
-                      receita: "Receita Viral"
-                    };
-
-                    const tools = Object.entries(userStats)
-                      .filter(([k]) => k.startsWith('tool_'))
-                      .map(([k, v]) => ({ 
-                        id: k.replace('tool_', ''), 
-                        name: toolNames[k.replace('tool_', '')] || k.replace('tool_', ''),
-                        runs: Number(v) 
-                      }))
-                      .sort((a, b) => b.runs - a.runs)
-                      .slice(0, 5);
-
-                    if (tools.length === 0) return <div className="text-[12px] text-[#8c8c94]">Nenhuma ferramenta utilizada ainda.</div>;
-
-                    const maxRuns = Math.max(...tools.map(t => t.runs), 1);
-
-                    return tools.map((t, i) => {
-                      const share = Math.round((t.runs / maxRuns) * 100);
-                      const color = i < 2 ? "#F2604C" : i < 3 ? "#F2B33D" : "#2FD4A0";
+                  {accountMetrics.toolsList.length > 0 ? (
+                    accountMetrics.toolsList.map((t, i) => {
+                      const share = Math.round((t.runs / accountMetrics.maxToolRuns) * 100);
+                      const color = i === 0 ? "#F2604C" : i === 1 ? "#F2B33D" : "#2FD4A0";
                       return (
                         <div key={t.id} className="flex items-center gap-3">
                           <span className="w-5 font-mono text-[11px] text-[#7f7f88] tabular-nums">{String(i + 1).padStart(2, '0')}</span>
-                          <span className="w-[150px] shrink-0 truncate text-[12.5px] text-[#d3d3d8] capitalize">{t.name}</span>
+                          <span className="w-[150px] shrink-0 truncate text-[12.5px] text-[#d3d3d8]">{t.name}</span>
                           <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#1c1c20]">
-                            <div className="h-full rounded-full transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]" style={{ width: mounted ? `${share}%` : '0%', background: color, transitionDelay: `${i * 120 + 400}ms` }} />
+                            <div 
+                              className="h-full rounded-full transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]" 
+                              style={{ width: mounted ? `${Math.max(share, 8)}%` : '0%', background: color, transitionDelay: `${i * 120 + 400}ms` }} 
+                            />
                           </div>
                           <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}×</span>
                         </div>
                       );
-                    });
-                  })()}
+                    })
+                  ) : (
+                    <div className="text-[12px] text-[#8c8c94] py-1 font-mono">
+                      Nenhuma ferramenta utilizada ainda. Experimente o Rank de Ideia ou Gerador de Hooks para registrar suas métricas.
+                    </div>
+                  )}
                 </div>
               </div>
               
               <div className="border-t border-[#232327] bg-[#0c0c0e] px-4 py-3">
                 <p className="text-[12px] leading-relaxed text-[#8c8c94]">
-                  Sua carga de estúdio está 8% acima da média de criadores do Studio Pro. O melhor dia para gravar continua sendo terça-feira, entre 9h e 12h.
+                  {accountMetrics.hasActivity ? (
+                    <>
+                      Seu histórico está sincronizado em tempo real. Seu dia com maior atividade tem sido <strong className="text-bone-200 capitalize">{accountMetrics.bestDowName}</strong>, totalizando <strong className="text-bone-200">{accountMetrics.studioHoursFormatted}{accountMetrics.studioMinutesSuffix}</strong> dedicados à criação.
+                    </>
+                  ) : (
+                    <>
+                      Seu monitor de estúdio é sincronizado em tempo real com o uso da sua conta. Conforme você executar ferramentas e planejar projetos, suas métricas aparecerão aqui automaticamente.
+                    </>
+                  )}
                 </p>
               </div>
 
@@ -786,6 +1537,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
           <aside className="space-y-6">
             {/* Projetos em Andamento */}
             <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
+              {renderCardVisibilityBanner("projects", "Projetos em Andamento")}
               <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                 <span className="h-3.5 w-1 rounded-full bg-[#2FD4A0]" />
                 <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Projetos em Andamento</h3>
@@ -803,21 +1555,25 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                           </a>
                         )}
                       </div>
-                      <span className="text-[10px] font-mono text-[#8c8c94] uppercase tracking-widest">{proj.status}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-mono font-bold text-bone-100 tabular-nums">{proj.progress}%</span>
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-ink-900 border border-[#232327] text-[#8c8c94] uppercase tracking-wider">{proj.status}</span>
+                      </div>
                     </div>
                     <div className="h-1.5 w-full bg-[#1c1c20] rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: mounted ? `${proj.progress}%` : '0%', backgroundColor: proj.color }} />
+                      <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: mounted ? `${Math.max(proj.progress, 4)}%` : '0%', backgroundColor: proj.color }} />
                     </div>
                   </div>
                 ))}
                 {ongoingProjects.length === 0 && (
-                  <div className="text-[12px] text-[#8c8c94] text-center py-2">Nenhum projeto em andamento.</div>
+                  <div className="text-[12px] text-[#8c8c94] text-center py-2 font-mono">Nenhum projeto em andamento.</div>
                 )}
               </div>
             </Panel>
 
             {/* Card Coringa */}
             <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
+              {renderCardVisibilityBanner("video", "Vídeo em Destaque")}
               <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                 <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
                 {isEditingJoker ? (
@@ -1089,6 +1845,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
             )}
 
             <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
+              {renderCardVisibilityBanner("achievements", "Conquistas do Estúdio")}
               <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                 <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
                 <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Conquistas do estúdio</h3>
@@ -1273,76 +2030,12 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
 
       {tab === "preferencias" && (
         <Reveal className="grid gap-6 md:grid-cols-2">
-          <div className="flex flex-col gap-6">
-            <Panel id="panel-perfil" className="p-0 self-start w-full overflow-hidden border-[#232327] bg-[#0c0c0e]">
-              <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
-                <span className="h-3.5 w-1 rounded-full bg-[#F2B33D]" />
-                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Informações Pessoais</h3>
-              </div>
-              <div className="p-5">
-              <div className="grid gap-5">
-                <div>
-                  <Label>Nome de Exibição</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={50} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
-                </div>
-                <div>
-                  <Label hint="Seu @ único na plataforma">Nome de Usuário</Label>
-                  <Input id="input-username" value={channel} onChange={(e) => setChannel(e.target.value)} placeholder="@usuario" maxLength={30} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end">
-                <Button disabled={saving} onClick={handleSavePersonalInfo} className="bg-[#101012] text-[#d3d3d8] border border-[#232327] hover:bg-[#232327] shadow-[0_0_15px_rgba(242,179,61,0.1)] transition-shadow hover:shadow-[0_0_20px_rgba(242,179,61,0.2)]">
-                  {saving ? "Salvando..." : "Salvar Alterações"}
-                </Button>
-              </div>
-              </div>
-            </Panel>
-
-            <Panel id="panel-links" className="p-0 self-start w-full overflow-hidden border-[#232327] bg-[#0c0c0e]">
-              <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
-                <span className="h-3.5 w-1 rounded-full bg-[#2FD4A0]" />
-                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Links do Perfil</h3>
-              </div>
-              <div className="p-5">
-              <div className="grid gap-5">
-                <div>
-                  <Label>Site ou Portfólio</Label>
-                  <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="ex: meusite.com" className="bg-[#101012] border-[#232327] text-white focus:border-[#F2B33D] w-full" />
-                </div>
-                <div>
-                  <Label>Canal do YouTube</Label>
-                  <Input value={youtube} onChange={(e) => setYoutube(e.target.value)} placeholder="ex: youtube.com/@usuario" className="bg-[#101012] border-[#232327] text-white focus:border-[#F2B33D] w-full" />
-                </div>
-                <div>
-                  <Label>Instagram</Label>
-                  <Input value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="ex: instagram.com/usuario" className="bg-[#101012] border-[#232327] text-white focus:border-[#F2B33D] w-full" />
-                </div>
-                <div>
-                  <Label>TikTok</Label>
-                  <Input value={tiktok} onChange={(e) => setTiktok(e.target.value)} placeholder="ex: tiktok.com/@usuario" className="bg-[#101012] border-[#232327] text-white focus:border-[#F2B33D] w-full" />
-                </div>
-                <div>
-                  <Label>Comunidade no Discord</Label>
-                  <Input value={discord} onChange={(e) => setDiscord(e.target.value)} placeholder="ex: discord.gg/usuario" className="bg-[#101012] border-[#232327] text-white focus:border-[#F2B33D] w-full" />
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end">
-                <Button disabled={savingLinks} onClick={handleSaveLinks} className="bg-[#101012] text-[#d3d3d8] border border-[#232327] hover:bg-[#232327] shadow-[0_0_15px_rgba(242,179,61,0.1)] transition-shadow hover:shadow-[0_0_20px_rgba(242,179,61,0.2)]">
-                  {savingLinks ? "Salvando..." : "Salvar Links"}
-                </Button>
-              </div>
-              </div>
-            </Panel>
-
-          </div>
-
-          <div className="flex flex-col gap-6">
-            <Panel className="p-0 self-start w-full overflow-hidden border-[#232327] bg-[#0c0c0e]">
-              <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
-                <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
-                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Notificações</h3>
-              </div>
-              <div className="p-5">
+          <Panel className="p-0 self-start w-full overflow-hidden border-[#232327] bg-[#0c0c0e]">
+            <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
+              <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
+              <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Notificações</h3>
+            </div>
+            <div className="p-5">
               <div className="grid gap-6">
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -1364,15 +2057,15 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                   </div>
                 </div>
               </div>
-              </div>
-            </Panel>
+            </div>
+          </Panel>
 
-            <Panel className="p-0 self-start w-full overflow-hidden border-[#232327] bg-[#0c0c0e]">
-              <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
-                <span className="h-3.5 w-1 rounded-full bg-[#8c8c94]" />
-                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Sistema</h3>
-              </div>
-              <div className="p-5">
+          <Panel className="p-0 self-start w-full overflow-hidden border-[#232327] bg-[#0c0c0e]">
+            <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
+              <span className="h-3.5 w-1 rounded-full bg-[#8c8c94]" />
+              <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Sistema</h3>
+            </div>
+            <div className="p-5">
               <div className="grid gap-5">
                 <div>
                   <Label>Idioma da Interface</Label>
@@ -1386,9 +2079,8 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
               <div className="mt-6 flex justify-end">
                 <Button className="bg-[#101012] text-[#d3d3d8] border border-[#232327] hover:bg-[#232327] shadow-[0_0_15px_rgba(242,179,61,0.1)] transition-shadow hover:shadow-[0_0_20px_rgba(242,179,61,0.2)]">Salvar Preferências</Button>
               </div>
-              </div>
-            </Panel>
-          </div>
+            </div>
+          </Panel>
         </Reveal>
       )}
 
