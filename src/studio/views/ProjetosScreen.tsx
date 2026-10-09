@@ -4,6 +4,7 @@ import { cn } from "../utils/cn";
 
 import { ProjetoDetailScreen } from "./ProjetoDetailScreen";
 import { useAuth, supabase } from "../auth";
+import { SaveToSalvosModal } from "../components/SaveToSalvosModal";
 
 export interface Project {
   id: string;
@@ -40,6 +41,9 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectColor, setNewProjectColor] = useState("#F2604C");
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [savingProject, setSavingProject] = useState<Project | null>(null);
+  const [projectToRemoveFromSalvos, setProjectToRemoveFromSalvos] = useState<Project | null>(null);
+  const [savedProjectIds, setSavedProjectIds] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setMounted(true);
@@ -53,7 +57,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
         .order("created_at", { ascending: false });
         
       if (!error && data) {
-        setProjects(data.map(d => ({
+        const mapped = data.map(d => ({
           id: d.id,
           name: d.name,
           status: d.status as any,
@@ -66,16 +70,53 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
           isShared: d.owner_id !== user.id || (d.studioos_project_members && d.studioos_project_members.length > 0),
           saved_links: d.saved_links || [],
           external_link: d.external_link || ""
-        })));
+        }));
+        setProjects(mapped);
+
+        try {
+          const openId = sessionStorage.getItem("studioos_open_project_id");
+          if (openId) {
+            const found = mapped.find(p => String(p.id) === String(openId));
+            if (found) {
+              setSelectedProject(found);
+              sessionStorage.removeItem("studioos_open_project_id");
+            }
+          }
+        } catch {}
       }
     };
 
     fetchProjects();
 
+    const fetchSavedItems = async () => {
+      if (!supabase || !user) return;
+      const { data, error } = await supabase
+        .from("studioos_saved_items")
+        .select("id, metadata")
+        .eq("user_id", user.id)
+        .eq("type", "projeto");
+      if (!error && data) {
+        const mapping: Record<string, string> = {};
+        data.forEach(item => {
+          let meta = item.metadata;
+          if (typeof meta === "string") {
+            try { meta = JSON.parse(meta); } catch {}
+          }
+          if (meta?.id) {
+            mapping[String(meta.id)] = item.id;
+            mapping[meta.id] = item.id;
+          }
+        });
+        setSavedProjectIds(mapping);
+      }
+    };
+    fetchSavedItems();
+
     if (!supabase) return;
 
     const channel = supabase.channel('projects_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_projects' }, fetchProjects)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_saved_items', filter: `user_id=eq.${user.id}` }, fetchSavedItems)
       .subscribe();
 
     return () => {
@@ -300,7 +341,39 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                         </span>
                       </div>
 
-                      {/* TRASH BUTTON */}
+                      <div className="flex gap-1">
+                        {/* SAVE BUTTON */}
+                        {(() => {
+                          const isSaved = Boolean(savedProjectIds[proj.id] || savedProjectIds[String(proj.id)]);
+                          return (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isSaved) {
+                                  setProjectToRemoveFromSalvos(proj);
+                                } else {
+                                  setSavingProject(proj);
+                                }
+                              }}
+                              className={cn(
+                                "flex h-7 w-7 items-center justify-center rounded-md transition-all duration-200",
+                                isSaved
+                                  ? "text-signal-400 opacity-100 hover:bg-signal-400/10"
+                                  : "text-ink-400 opacity-0 hover:bg-signal-400/10 hover:text-signal-400 group-hover:opacity-100"
+                              )}
+                              title={isSaved ? "Remover dos Salvos" : "Salvar em Salvos"}
+                            >
+                              <Icon 
+                                name="bookmark" 
+                                fill={isSaved ? "currentColor" : "none"}
+                                className={cn("h-3 w-3", isSaved && "text-signal-400 fill-signal-400")} 
+                                strokeWidth={1.8} 
+                              />
+                            </button>
+                          );
+                        })()}
+                        
+                        {/* TRASH BUTTON */}
                       {user?.id === proj.owner_id && (
                         <button
                           onClick={(e) => {
@@ -313,6 +386,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                           <Icon name="trash" className="h-3 w-3" strokeWidth={1.8} />
                         </button>
                       )}
+                      </div>
                     </div>
 
                     {/* PROJECT ICON + NAME */}
@@ -512,7 +586,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
               <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Excluir Projeto</h2>
               <p className="text-[13px] leading-relaxed text-bone-300">
                 Tem certeza que deseja excluir <strong className="text-bone-100">{projectToDelete.name}</strong>? 
-                Ele será movido para a <strong className="text-red-400">Lixeira (no menu Sistema)</strong> e você poderá restaurá-lo depois se quiser.
+                Ele será movido para a <strong className="text-red-400">Lixeira (em Histórico & Lixeira)</strong> e você poderá restaurá-lo depois se quiser.
               </p>
             </div>
             
@@ -538,6 +612,112 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
           </div>
         </div>
       )}
+
+      {/* MODAL REMOVER PROJETO DOS SALVOS */}
+      {projectToRemoveFromSalvos && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/85 p-4 backdrop-blur-md"
+          onClick={(e) => { if (e.target === e.currentTarget) setProjectToRemoveFromSalvos(null); }}
+        >
+          <div 
+            className="relative w-full max-w-[420px] overflow-hidden rounded-2xl border border-ink-700/50 bg-ink-900 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)] animate-in fade-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-7 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-signal-400/10 text-signal-400 border border-signal-400/20">
+                <Icon name="bookmark" className="h-6 w-6" fill="currentColor" strokeWidth={1.8} />
+              </div>
+              
+              <h3 className="mb-2 font-display text-xl font-bold text-bone-100">
+                Remover dos Salvos?
+              </h3>
+              
+              <p className="mb-7 text-[13px] leading-relaxed text-bone-300">
+                Tem certeza que deseja remover o projeto <strong className="text-bone-100">{projectToRemoveFromSalvos.name}</strong> da sua lista de salvos? 
+                O projeto continuará existindo normalmente, apenas o atalho salvo será retirado.
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setProjectToRemoveFromSalvos(null)}
+                  className="flex-1 rounded-lg border border-ink-800/60 bg-ink-950/60 px-4 py-3.5 font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const proj = projectToRemoveFromSalvos;
+                    const projIdStr = String(proj.id);
+                    const idToDelete = savedProjectIds[projIdStr] || savedProjectIds[proj.id];
+                    
+                    // Optimistic update
+                    setSavedProjectIds(prev => {
+                      const next = { ...prev };
+                      delete next[projIdStr];
+                      delete next[proj.id];
+                      return next;
+                    });
+                    setProjectToRemoveFromSalvos(null);
+
+                    if (supabase && user) {
+                      if (idToDelete) {
+                        await supabase.from("studioos_saved_items").delete().eq("id", idToDelete);
+                      } else {
+                        // Fallback search by project ID in metadata
+                        const { data } = await supabase
+                          .from("studioos_saved_items")
+                          .select("id, metadata")
+                          .eq("user_id", user.id)
+                          .eq("type", "projeto");
+                        const found = data?.find(i => {
+                          let m = i.metadata;
+                          if (typeof m === "string") {
+                            try { m = JSON.parse(m); } catch {}
+                          }
+                          return String(m?.id) === projIdStr;
+                        });
+                        if (found) {
+                          await supabase.from("studioos_saved_items").delete().eq("id", found.id);
+                        }
+                      }
+                    }
+                  }}
+                  className="flex-1 rounded-lg bg-red-500/20 border border-red-500/40 px-4 py-3.5 font-mono text-[10px] font-bold tracking-[0.14em] text-red-400 uppercase transition-all duration-200 hover:bg-red-500 hover:text-white hover:border-red-500"
+                >
+                  Sim, Remover
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SAVE TO SALVOS MODAL */}
+      <SaveToSalvosModal
+        isOpen={!!savingProject}
+        onClose={() => setSavingProject(null)}
+        item={savingProject ? {
+          title: savingProject.name,
+          type: "projeto",
+          url: savingProject.external_link,
+          metadata: {
+            id: String(savingProject.id),
+            status: savingProject.status,
+            color: savingProject.color
+          }
+        } : null}
+        onSaveSuccess={(savedItem) => {
+          if (savingProject) {
+            setSavedProjectIds(prev => ({
+              ...prev,
+              [String(savingProject.id)]: savedItem.id,
+              [savingProject.id]: savedItem.id
+            }));
+          }
+        }}
+      />
     </div>
   );
 }

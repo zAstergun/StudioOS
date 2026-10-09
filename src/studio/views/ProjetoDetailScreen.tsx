@@ -1166,7 +1166,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
               <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Excluir Projeto</h2>
               <p className="text-[13px] leading-relaxed text-bone-300">
                 Tem certeza que deseja excluir <strong className="text-bone-100">{project.name}</strong>? 
-                Ele será movido para a <strong className="text-red-400">Lixeira (no menu Histórico)</strong> e você poderá restaurá-lo depois se quiser.
+                Ele será movido para a <strong className="text-red-400">Lixeira (em Histórico & Lixeira)</strong> e você poderá restaurá-lo depois se quiser.
               </p>
             </div>
             
