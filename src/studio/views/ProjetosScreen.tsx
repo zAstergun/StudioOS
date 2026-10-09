@@ -16,6 +16,7 @@ export interface Project {
   color: string;
   owner_id?: string;
   isShared?: boolean;
+  saved_links?: Array<{ title: string, url: string }>;
 }
 
 const STATUS_MAP: Record<string, { label: string; dot: string }> = {
@@ -47,7 +48,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
       if (!supabase) return;
       const { data, error } = await supabase
         .from("studioos_projects")
-        .select("*, studioos_project_members(user_id)")
+        .select("*, studioos_project_members(user_id), saved_links")
         .order("created_at", { ascending: false });
         
       if (!error && data) {
@@ -61,7 +62,8 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
           completedTasks: 0,
           color: d.color,
           owner_id: d.owner_id,
-          isShared: d.owner_id !== user.id || (d.studioos_project_members && d.studioos_project_members.length > 0)
+          isShared: d.owner_id !== user.id || (d.studioos_project_members && d.studioos_project_members.length > 0),
+          saved_links: d.saved_links || []
         })));
       }
     };

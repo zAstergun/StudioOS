@@ -47,6 +47,16 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [editNoteContent, setEditNoteContent] = useState("");
 
+  const [savedLinks, setSavedLinks] = useState<Array<{ title: string, url: string }>>(project.saved_links || []);
+  const [showAddLink, setShowAddLink] = useState(false);
+  const [newLinkTitle, setNewLinkTitle] = useState("");
+  const [newLinkUrl, setNewLinkUrl] = useState("");
+  const [copiedLinkIndex, setCopiedLinkIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    setSavedLinks(project.saved_links || []);
+  }, [project.saved_links]);
+
   useEffect(() => {
     setMounted(true);
     if (!user || !project.id) return;
@@ -239,6 +249,32 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
       setShowShareModal(false);
       setShareChannel("");
       setShareRole("editor");
+    }
+  };
+
+  const handleSaveLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLinkTitle.trim() || !newLinkUrl.trim()) return;
+    
+    let url = newLinkUrl.trim();
+    if (!url.startsWith('http')) url = `https://${url}`;
+
+    const newLinks = [...savedLinks, { title: newLinkTitle.trim(), url }];
+    setSavedLinks(newLinks);
+    setShowAddLink(false);
+    setNewLinkTitle("");
+    setNewLinkUrl("");
+
+    if (supabase) {
+      await supabase.from("studioos_projects").update({ saved_links: newLinks }).eq("id", project.id);
+    }
+  };
+
+  const handleDeleteLink = async (index: number) => {
+    const newLinks = savedLinks.filter((_, i) => i !== index);
+    setSavedLinks(newLinks);
+    if (supabase) {
+      await supabase.from("studioos_projects").update({ saved_links: newLinks }).eq("id", project.id);
     }
   };
 
@@ -499,11 +535,71 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                   Itens Salvos
                 </h3>
               </div>
-              <span className="rounded bg-signal-400/10 px-2 py-0.5 font-mono text-[8px] font-bold tracking-[0.1em] text-signal-400 uppercase">Em breve</span>
+              <button onClick={() => setShowAddLink(true)} className="rounded bg-signal-400/10 px-2 py-0.5 font-mono text-[8px] font-bold tracking-[0.1em] text-signal-400 uppercase hover:bg-signal-400/20 transition-colors">+ Adicionar Link</button>
             </div>
-            <div className="flex min-h-[140px] flex-col items-center justify-center gap-2 px-6 py-10">
-              <Icon name="bookmark" className="h-5 w-5 text-ink-700" strokeWidth={1.2} />
-              <p className="font-mono text-[9px] tracking-[0.1em] text-ink-400 uppercase">Nenhum item salvo</p>
+            <div className="flex min-h-[140px] flex-col gap-3 p-4">
+              {showAddLink && (
+                <form onSubmit={handleSaveLink} className="flex flex-col gap-2 rounded-lg bg-ink-900/50 p-3 border border-ink-800">
+                  <input 
+                    type="text" 
+                    placeholder="Título do link (ex: Roteiro, Figma)" 
+                    value={newLinkTitle}
+                    onChange={(e) => setNewLinkTitle(e.target.value)}
+                    className="w-full rounded bg-ink-950 px-2 py-1.5 text-[11px] text-bone-300 border border-ink-800 focus:outline-none focus:border-signal-400/50"
+                    autoFocus
+                  />
+                  <input 
+                    type="url" 
+                    placeholder="https://..." 
+                    value={newLinkUrl}
+                    onChange={(e) => setNewLinkUrl(e.target.value)}
+                    className="w-full rounded bg-ink-950 px-2 py-1.5 text-[11px] text-bone-300 border border-ink-800 focus:outline-none focus:border-signal-400/50"
+                  />
+                  <div className="flex justify-end gap-2 mt-1">
+                    <button type="button" onClick={() => setShowAddLink(false)} className="text-[10px] text-ink-400 hover:text-bone-300 transition-colors">Cancelar</button>
+                    <button type="submit" className="text-[10px] text-signal-400 hover:text-signal-300 transition-colors">Salvar</button>
+                  </div>
+                </form>
+              )}
+              {savedLinks.length === 0 && !showAddLink ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-6">
+                  <Icon name="bookmark" className="h-5 w-5 text-ink-700" strokeWidth={1.2} />
+                  <p className="font-mono text-[9px] tracking-[0.1em] text-ink-400 uppercase">Nenhum item salvo</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {savedLinks.map((link, i) => (
+                    <a href={link.url} target="_blank" rel="noopener noreferrer" key={i} className="group flex items-center justify-between rounded-lg border border-ink-800/50 bg-ink-900/30 p-2.5 transition-colors hover:border-signal-400/30 hover:bg-ink-900/50 cursor-pointer">
+                      <div className="flex flex-col gap-0.5 overflow-hidden flex-1 mr-2">
+                        <span className="text-[11.5px] font-medium text-bone-300 truncate group-hover:text-signal-400 transition-colors">{link.title}</span>
+                        <span className="text-[9px] font-mono text-ink-500 truncate">{link.url}</span>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0">
+                        <button 
+                          onClick={(e) => { 
+                            e.preventDefault(); 
+                            e.stopPropagation(); 
+                            navigator.clipboard.writeText(link.url); 
+                            setCopiedLinkIndex(i);
+                            setTimeout(() => setCopiedLinkIndex(null), 2000);
+                          }}
+                          className={cn("transition-colors p-1", copiedLinkIndex === i ? "text-emerald-400" : "text-ink-600 hover:text-signal-400")}
+                          title="Copiar link"
+                        >
+                          <Icon name={copiedLinkIndex === i ? "check" : "copy"} className="h-3.5 w-3.5" />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteLink(i); }}
+                          className="text-ink-600 hover:text-red-400 transition-colors p-1" 
+                          title="Remover link"
+                        >
+                          <Icon name="trash" className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </Reveal>
