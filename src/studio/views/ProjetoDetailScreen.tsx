@@ -52,6 +52,14 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
   const [newLinkTitle, setNewLinkTitle] = useState("");
   const [newLinkUrl, setNewLinkUrl] = useState("");
   const [copiedLinkIndex, setCopiedLinkIndex] = useState<number | null>(null);
+  const [isEditingExternalLink, setIsEditingExternalLink] = useState(false);
+  const [tempExternalLink, setTempExternalLink] = useState("");
+  const [localExternalLink, setLocalExternalLink] = useState(project.external_link || "");
+
+  useEffect(() => {
+    setLocalExternalLink(project.external_link || "");
+    setTempExternalLink(project.external_link || "");
+  }, [project.external_link]);
 
   useEffect(() => {
     setSavedLinks(project.saved_links || []);
@@ -252,6 +260,16 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
     }
   };
 
+  const handleSaveExternalLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supabase) return;
+    let url = tempExternalLink.trim();
+    if (url && !url.startsWith('http')) url = `https://${url}`;
+    setLocalExternalLink(url);
+    await supabase.from("studioos_projects").update({ external_link: url || null }).eq("id", project.id);
+    setIsEditingExternalLink(false);
+  };
+
   const handleSaveLink = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLinkTitle.trim() || !newLinkUrl.trim()) return;
@@ -383,13 +401,61 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
               </>
             )}
             {project.status !== "trashed" && (
-              <button 
-                onClick={() => setShowTaskModal("todo")}
-                className="group flex h-9 items-center gap-2 rounded-lg bg-signal-400 px-5 font-mono text-[10px] font-bold tracking-[0.1em] text-ink-950 uppercase shadow-[0_6px_20px_-8px_rgba(242,179,61,0.5)] transition-all hover:-translate-y-0.5 hover:shadow-[0_10px_30px_-8px_rgba(242,179,61,0.6)]"
-              >
-                <Icon name="plus" className="h-3 w-3 transition-transform group-hover:rotate-90" strokeWidth={2.5} />
-                Nova Tarefa
-              </button>
+              <>
+                {isEditingExternalLink ? (
+                  <form onSubmit={handleSaveExternalLink} className="flex h-9 items-center gap-1 rounded-lg border border-signal-400/50 bg-ink-900/30 px-2 overflow-hidden w-[200px]">
+                    <input 
+                      type="url" 
+                      value={tempExternalLink}
+                      onChange={(e) => setTempExternalLink(e.target.value)}
+                      onBlur={async (e) => {
+                        if (e.relatedTarget && (e.relatedTarget as HTMLButtonElement).type === 'submit') {
+                          return;
+                        }
+                        if (supabase) {
+                          let url = tempExternalLink.trim();
+                          if (url && !url.startsWith('http')) url = `https://${url}`;
+                          setLocalExternalLink(url);
+                          await supabase.from("studioos_projects").update({ external_link: url || null }).eq("id", project.id);
+                        }
+                        setIsEditingExternalLink(false);
+                      }}
+                      placeholder="Link do vídeo"
+                      className="h-full w-full bg-transparent text-[10px] font-mono text-white focus:outline-none"
+                      autoFocus
+                    />
+                    <button type="submit" onMouseDown={(e) => e.preventDefault()} className="text-signal-400 hover:text-signal-300 px-1">
+                      <Icon name="check" className="h-3.5 w-3.5" />
+                    </button>
+                  </form>
+                ) : localExternalLink ? (
+                  <div className="flex items-center group relative">
+                    <div className="absolute inset-0 -z-10 rounded-lg bg-signal-400/20 blur-md opacity-0 transition-opacity duration-500 group-hover:opacity-100"></div>
+                    <a href={localExternalLink} target="_blank" rel="noopener noreferrer" className="flex h-9 items-center gap-2 rounded-l-lg border border-r-0 border-signal-400/40 bg-signal-400/10 px-4 font-mono text-[10px] font-bold tracking-[0.1em] text-signal-400 uppercase transition-all hover:bg-signal-400/20 hover:text-signal-300">
+                      <Icon name="play" className="h-3.5 w-3.5 fill-signal-400/20" />
+                      Assistir Vídeo
+                    </a>
+                    <button onClick={() => { setTempExternalLink(localExternalLink); setIsEditingExternalLink(true); }} className="flex h-9 items-center justify-center rounded-r-lg border border-l-0 border-signal-400/40 bg-signal-400/10 px-2.5 text-signal-400/60 transition-all hover:bg-signal-400/20 hover:text-signal-400" title="Editar Link">
+                      <Icon name="edit" className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => { setTempExternalLink(""); setIsEditingExternalLink(true); }}
+                    className="flex h-9 items-center gap-2 rounded-lg border border-ink-800/50 bg-ink-900/30 px-4 font-mono text-[10px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-all hover:border-ink-600 hover:text-white"
+                  >
+                    <Icon name="link" className="h-3 w-3 text-ink-300" />
+                    Link do Vídeo
+                  </button>
+                )}
+                <button 
+                  onClick={() => setShowTaskModal("todo")}
+                  className="group flex h-9 items-center gap-2 rounded-lg bg-signal-400 px-5 font-mono text-[10px] font-bold tracking-[0.1em] text-ink-950 uppercase shadow-[0_6px_20px_-8px_rgba(242,179,61,0.5)] transition-all hover:-translate-y-0.5 hover:shadow-[0_10px_30px_-8px_rgba(242,179,61,0.6)]"
+                >
+                  <Icon name="plus" className="h-3 w-3 transition-transform group-hover:rotate-90" strokeWidth={2.5} />
+                  Nova Tarefa
+                </button>
+              </>
             )}
           </div>
         </div>
