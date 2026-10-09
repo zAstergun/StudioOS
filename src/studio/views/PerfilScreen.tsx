@@ -100,7 +100,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
       const fetchProjects = async () => {
         const { data, error } = await supabase!
           .from("studioos_projects")
-          .select("id, name, status, progress, color, owner_id, studioos_project_members(user_id), studioos_tasks(status)")
+          .select("id, name, status, progress, color, owner_id, external_link, studioos_project_members(user_id), studioos_tasks(status)")
           .in("status", ["active", "planning"])
           .order("created_at", { ascending: false })
           .limit(10);
@@ -121,7 +121,8 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
               name: d.name,
               status: statusMap[d.status] || d.status,
               progress: calculatedProgress,
-              color: d.color || "#6E93F5"
+              color: d.color || "#6E93F5",
+              external_link: d.external_link
             };
           }));
         }
@@ -134,6 +135,17 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   const [jokerProject, setJokerProject] = useState("");
   const [isEditingJoker, setIsEditingJoker] = useState(false);
   const [isSelectingProject, setIsSelectingProject] = useState(false);
+  const [editingLink, setEditingLink] = useState(false);
+  const [tempLink, setTempLink] = useState("");
+
+  const handleSaveLink = async (projectId: string) => {
+    if (!supabase) return;
+    const { error } = await supabase.from('studioos_projects').update({ external_link: tempLink }).eq('id', projectId);
+    if (!error) {
+      setOngoingProjects(prev => prev.map(p => p.id === projectId ? { ...p, external_link: tempLink } : p));
+    }
+    setEditingLink(false);
+  };
 
   useEffect(() => {
     if (user) {
@@ -715,7 +727,14 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 {ongoingProjects.map((proj) => (
                   <div key={proj.id} className="group">
                     <div className="flex justify-between items-center mb-1.5">
-                      <span className="text-[13px] font-medium text-[#d3d3d8]">{proj.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[13px] font-medium text-[#d3d3d8]">{proj.name}</span>
+                        {proj.external_link && (
+                          <a href={proj.external_link} target="_blank" rel="noopener noreferrer" className="text-[#8c8c94] hover:text-[#6E93F5] transition-colors" title="Acessar link">
+                            <Icon name="link" className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
                       <span className="text-[10px] font-mono text-[#8c8c94] uppercase tracking-widest">{proj.status}</span>
                     </div>
                     <div className="h-1.5 w-full bg-[#1c1c20] rounded-full overflow-hidden">
@@ -810,9 +829,40 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                              </div>
                            </div>
                          </div>
-                         <button onClick={() => setIsSelectingProject(true)} className="flex items-center gap-1.5 rounded-full bg-[#1c1c20] px-3 py-1.5 text-[10.5px] font-medium text-[#8c8c94] transition-colors hover:bg-[#232327] hover:text-white" title="Trocar projeto">
-                           <Icon name="dial" className="h-3 w-3" /> Trocar
-                         </button>
+                         <div className="flex items-center gap-3">
+                           {editingLink ? (
+                             <div className="flex items-center gap-2">
+                               <input 
+                                 type="url" 
+                                 value={tempLink}
+                                 onChange={(e) => setTempLink(e.target.value)}
+                                 placeholder="Link do vídeo finalizado"
+                                 className="w-32 rounded bg-[#1c1c20] px-2 py-1 text-[10px] text-white border border-[#232327] focus:outline-none focus:border-[#6E93F5]/50"
+                                 autoFocus
+                                 onKeyDown={(e) => e.key === 'Enter' && handleSaveLink(jokerProject)}
+                               />
+                               <button onClick={() => handleSaveLink(jokerProject)} className="text-[10px] text-[#2FD4A0] hover:text-[#2FD4A0]/80 transition-colors">Salvar</button>
+                               <button onClick={() => setEditingLink(false)} className="text-[10px] text-[#8c8c94] hover:text-white transition-colors">Cancelar</button>
+                             </div>
+                           ) : ongoingProjects.find(p => p.id === jokerProject)?.external_link ? (
+                             <div className="flex items-center gap-2">
+                               <a href={ongoingProjects.find(p => p.id === jokerProject)?.external_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10.5px] font-medium text-[#6E93F5] hover:underline">
+                                 <Icon name="link" className="h-3 w-3" /> Acessar Link
+                               </a>
+                               <button onClick={() => { setTempLink(ongoingProjects.find(p => p.id === jokerProject)?.external_link || ""); setEditingLink(true); }} className="text-[#8c8c94] hover:text-white transition-colors" title="Editar link">
+                                 <Icon name="type" className="h-3 w-3" />
+                               </button>
+                             </div>
+                           ) : (
+                             <button onClick={() => { setTempLink(""); setEditingLink(true); }} className="flex items-center gap-1 text-[10.5px] font-medium text-[#8c8c94] hover:text-[#d3d3d8] transition-colors">
+                               <Icon name="link" className="h-3 w-3" /> Adicionar Link
+                             </button>
+                           )}
+
+                           <button onClick={() => setIsSelectingProject(true)} className="flex items-center gap-1.5 rounded-full bg-[#1c1c20] px-3 py-1.5 text-[10.5px] font-medium text-[#8c8c94] transition-colors hover:bg-[#232327] hover:text-white" title="Trocar projeto">
+                             <Icon name="dial" className="h-3 w-3" /> Trocar
+                           </button>
+                         </div>
                        </div>
                        <div className="flex items-center gap-3">
                           <div className="h-1.5 flex-1 bg-[#1c1c20] rounded-full overflow-hidden">
