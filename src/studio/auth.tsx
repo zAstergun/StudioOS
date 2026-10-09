@@ -30,6 +30,14 @@ export type StudioUser = {
   name: string;
   channel?: string;
   avatarUrl?: string;
+  bio?: string;
+  links?: Record<string, string>;
+  card_visibility?: {
+    stats?: boolean;
+    projects?: boolean;
+    video?: boolean;
+    achievements?: boolean;
+  };
   provider: "email" | "google" | "discord" | "demo";
   createdAt: string;
   email_confirmed_at?: string;
@@ -55,7 +63,21 @@ type AuthCtx = {
   sendMagicLink: (email: string) => Promise<Result>;
   resetPassword: (email: string) => Promise<Result>;
   updatePassword: (password: string) => Promise<Result>;
-  updateProfile: (name: string, channel: string) => Promise<Result>;
+  updateProfile: (
+    name: string,
+    channel: string,
+    extra?: {
+      bio?: string;
+      links?: Record<string, string>;
+      card_visibility?: {
+        stats?: boolean;
+        projects?: boolean;
+        video?: boolean;
+        achievements?: boolean;
+      };
+      featured_video?: any;
+    }
+  ) => Promise<Result>;
   updateEmail: (email: string) => Promise<Result>;
   updateAvatar: (file: File) => Promise<Result>;
   signOut: () => Promise<void>;
@@ -121,6 +143,9 @@ function mapUser(u: SbUser): StudioUser {
       (meta.channel as string) ||
       (provider === "discord" ? ((meta.user_name as string) ? `@${meta.user_name as string}` : undefined) : undefined),
     avatarUrl: (meta.avatar_url as string) || (meta.picture as string) || undefined,
+    bio: (meta.bio as string) || undefined,
+    links: (meta.links as Record<string, string>) || undefined,
+    card_visibility: (meta.card_visibility as any) || undefined,
     provider,
     createdAt: u.created_at,
     email_confirmed_at: u.email_confirmed_at,
@@ -331,44 +356,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: true, message: "Senha atualizada." };
   }, []);
 
-  const updateProfile = useCallback<AuthCtx["updateProfile"]>(async (name, channel) => {
+  const updateProfile = useCallback<AuthCtx["updateProfile"]>(async (name, channel, extra) => {
+    const cleanChannel = channel ? channel.replace(/^@/, "").trim() : "";
     if (!supabase) {
       await wait(600);
       const raw = localStorage.getItem(DEMO_KEY);
       if (raw) {
         const u = JSON.parse(raw) as StudioUser;
         u.name = name;
-        u.channel = channel;
+        u.channel = cleanChannel || undefined;
+        if (extra?.bio !== undefined) u.bio = extra.bio;
+        if (extra?.links !== undefined) u.links = extra.links;
+        if (extra?.card_visibility !== undefined) u.card_visibility = extra.card_visibility;
         localStorage.setItem(DEMO_KEY, JSON.stringify(u));
         setUser(u);
       }
-      return { ok: true, message: "Perfil atualizado." };
+      return { ok: true, message: "Perfil atualizado com sucesso." };
     }
 
     if (!user) return { ok: false, error: "Não autenticado." };
 
+    const upsertData: Record<string, any> = {
+      id: user.id,
+      full_name: name,
+      channel: cleanChannel || null,
+      avatar_url: user.avatarUrl || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (extra?.bio !== undefined) upsertData.bio = extra.bio;
+    if (extra?.links !== undefined) upsertData.links = extra.links;
+    if (extra?.card_visibility !== undefined) upsertData.card_visibility = extra.card_visibility;
+    if (extra?.featured_video !== undefined) upsertData.featured_video = extra.featured_video;
+
     // Atualiza primeiro no DB para checar restrição de unicidade do @
     const { error: dbError } = await supabase
       .from("profiles")
-      .upsert({ id: user.id, full_name: name, channel: channel || null });
+      .upsert(upsertData);
 
     if (dbError) {
       // 23505 é o código do Postgres para violação de UNIQUE constraint
       if (dbError.code === "23505" || dbError.message.includes("unique")) {
-        return { ok: false, error: "Este @ já está em uso por outra pessoa. Escolha outro." };
+        return { ok: false, error: "Este @ de usuário já está em uso por outro criador. Escolha outro." };
       }
       return { ok: false, error: translate(dbError.message) };
     }
 
+    const authMeta: Record<string, any> = {
+      full_name: name,
+      channel: cleanChannel || null,
+    };
+    if (extra?.bio !== undefined) authMeta.bio = extra.bio;
+    if (extra?.links !== undefined) authMeta.links = extra.links;
+    if (extra?.card_visibility !== undefined) authMeta.card_visibility = extra.card_visibility;
+
     const { data, error } = await supabase.auth.updateUser({
-      data: { full_name: name, channel: channel || null },
+      data: authMeta,
     });
     
     if (error) return { ok: false, error: translate(error.message) };
     if (data.user) {
       setUser(mapUser(data.user as SbUser));
     }
-    return { ok: true, message: "Perfil atualizado." };
+    return { ok: true, message: "Perfil atualizado com sucesso." };
   }, [user]);
 
   const updateEmail = useCallback<AuthCtx["updateEmail"]>(async (newEmail) => {
