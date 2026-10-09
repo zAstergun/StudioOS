@@ -208,9 +208,48 @@ function ScrollProgress() {
 
 /* ---------------------------------------------------------------- app */
 
+const VALID_VIEWS = new Set([
+  "home",
+  "login",
+  "perfil",
+  "projetos",
+  "salvos",
+  "wiki",
+  "historico",
+  "lixeira",
+  "calibracao",
+  "config",
+  "rank",
+  "titulos",
+  "hooks",
+  "roteiro",
+  "thumbnail",
+  "receita",
+  "humanizador",
+  "score",
+  "mentor",
+  "membros",
+]);
+
+function getInitialView(): string {
+  if (typeof window === "undefined") return "home";
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get("view");
+    if (v && VALID_VIEWS.has(v)) {
+      return v;
+    }
+    const stored = localStorage.getItem("studioos_last_view");
+    if (stored && VALID_VIEWS.has(stored)) {
+      return stored;
+    }
+  } catch {}
+  return "home";
+}
+
 export default function App() {
   const auth = useAuth();
-  const [view, setView] = useState("home");
+  const [view, setView] = useState<string>(getInitialView);
   const [protectedViewAfterLogin, setProtectedViewAfterLogin] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
   const [calib, setCalib] = useState<Calib>(() => loadCalib(!auth.user));
@@ -242,10 +281,15 @@ export default function App() {
   }, [auth.recovering, auth.user, protectedViewAfterLogin, view]);
 
   useLayoutEffect(() => {
+    if (auth.loading) return;
     const isRealUser = auth.user && auth.user.provider !== "demo";
-    if (!auth.user && (view === "historico" || view === "lixeira" || view === "perfil" || view === "salvos")) setView("home");
-    if (!isRealUser && (view === "projetos" || view === "salvos")) setView("home");
-  }, [auth.user, view]);
+    if (!auth.user && (view === "historico" || view === "lixeira" || view === "perfil" || view === "salvos" || view === "projetos")) {
+      setProtectedViewAfterLogin(view);
+      setView("login");
+    } else if (!isRealUser && (view === "projetos" || view === "salvos")) {
+      setView("home");
+    }
+  }, [auth.loading, auth.user, view]);
 
   useEffect(() => {
     if (auth.loading || !supabase) return;
@@ -282,10 +326,68 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    if (id !== "login" && id !== "historico" && id !== "lixeira" && id !== "perfil" && id !== "projetos" && id !== "salvos") setProtectedViewAfterLogin(null);
+    if (id !== "login" && id !== "historico" && id !== "lixeira" && id !== "perfil" && id !== "projetos" && id !== "salvos") {
+      setProtectedViewAfterLogin(null);
+    }
     setView(id);
     window.scrollTo({ top: 0, behavior: "smooth" });
+
+    try {
+      localStorage.setItem("studioos_last_view", id);
+      const url = new URL(window.location.href);
+      if (id === "home") {
+        url.searchParams.delete("view");
+        url.searchParams.delete("project");
+      } else {
+        url.searchParams.set("view", id);
+        if (id !== "projetos") {
+          url.searchParams.delete("project");
+        }
+      }
+      const newUrl = url.pathname + (url.search ? url.search : "") + url.hash;
+      window.history.pushState({ view: id }, "", newUrl);
+    } catch {}
   };
+
+  // Synchronize URL and storage if view changes outside `go` (e.g. login redirect or initial mount)
+  useEffect(() => {
+    try {
+      localStorage.setItem("studioos_last_view", view);
+      const url = new URL(window.location.href);
+      const currentParam = url.searchParams.get("view");
+      const expectedParam = view === "home" ? null : view;
+
+      if (currentParam !== expectedParam) {
+        if (expectedParam) {
+          url.searchParams.set("view", expectedParam);
+        } else {
+          url.searchParams.delete("view");
+        }
+        if (view !== "projetos") {
+          url.searchParams.delete("project");
+        }
+        const newUrl = url.pathname + (url.search ? url.search : "") + url.hash;
+        window.history.replaceState({ view }, "", newUrl);
+      }
+    } catch {}
+  }, [view]);
+
+  // Handle browser back and forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const v = params.get("view") || "home";
+        if (VALID_VIEWS.has(v)) {
+          setView(v);
+        } else {
+          setView("home");
+        }
+      } catch {}
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const back = () => go("home");
   const tool = TOOL_BY_ID[view];

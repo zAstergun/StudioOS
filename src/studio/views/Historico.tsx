@@ -87,6 +87,12 @@ export function HistoricoX({
   const os = useStudioOS();
   const auth = useAuth();
   const [tab, setTab] = useState<"historico" | "lixeira">(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setTab(initialTab);
+    }
+  }, [initialTab]);
   const [fmt, setFmt] = useState<string>("todos");
   const [pill, setPill] = useState<(typeof FILTERS)[number]>("recentes");
   const [showFav, setShowFav] = useState(false);
@@ -270,7 +276,10 @@ export function HistoricoX({
           ).map(([id, label, ic]) => (
             <button
               key={id}
-              onClick={() => setTab(id)}
+              onClick={() => {
+                setTab(id);
+                onGo(id);
+              }}
               className={cn(
                 "inline-flex items-center gap-2 rounded px-3.5 py-2 font-mono text-[11px] tracking-[0.1em] uppercase transition-all duration-200",
                 tab === id ? "bg-signal-400 text-ink-950" : "text-bone-400 hover:bg-ink-800 hover:text-bone-100"

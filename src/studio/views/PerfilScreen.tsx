@@ -257,8 +257,8 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   const showZero = !isDemo && Object.keys(userStats).length === 0;
 
   const [sessions, setSessions] = useState([
-    { id: 1, name: "Chrome no Windows", location: "São Paulo, BR â€¢ 192.168.1.1", current: true, time: "Atual" },
-    ...(showZero ? [] : [{ id: 2, name: "Safari no iPhone", location: "São Paulo, BR â€¢ 10.0.0.5", current: false, time: "Ontem" }])
+    { id: 1, name: "Chrome no Windows", location: "São Paulo, BR • 192.168.1.1", current: true, time: "Atual" },
+    ...(showZero ? [] : [{ id: 2, name: "Safari no iPhone", location: "São Paulo, BR • 10.0.0.5", current: false, time: "Ontem" }])
   ]);
 
   const handleSavePersonalInfo = async () => {
@@ -594,7 +594,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                   <span className="h-2 w-2 rounded-full bg-[#2FD4A0]" />
                 </span>
                 <span className="flex-1 text-center font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">
-                  Monitor de uso Â· 12 semanas
+                  Monitor de uso · 12 semanas
                 </span>
                 <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-[#2FD4A0]">
                   <Icon name="wave" className="h-3 w-3" strokeWidth={2.4} /> Ao vivo
@@ -624,7 +624,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 </div>
                 <div className="mt-2.5 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">
                   <span>12/08/2026</span>
-                  <span>pico 171 min Â· média 102 min/dia</span>
+                  <span>pico 171 min · média 102 min/dia</span>
                   <span>06/10/2026</span>
                 </div>
               </div>
@@ -637,7 +637,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                     const baseTotals = [57, 121, 114, 110, 126, 120, 65];
                     const weekTotals = showZero ? [0,0,0,0,0,0,0] : (isDemo ? baseTotals : [0, 1, 2, 3, 4, 5, 6].map(d => Number(userStats[`dow_${d}`] || 0)));
                     const maxWeek = Math.max(...weekTotals, 1);
-                    return ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÃB"].map((label, i) => {
+                    return ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((label, i) => {
                       const filled = Math.round((weekTotals[i] / maxWeek) * 18);
                       return (
                         <div key={label} className="flex items-center gap-3">
@@ -662,7 +662,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                             })}
                           </div>
                           <span className="w-14 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">
-                            {isDemo ? `${Math.floor(weekTotals[i] / 60)}h${String(weekTotals[i] % 60).padStart(2, "0")}` : `${weekTotals[i]}Ã—`}
+                            {isDemo ? `${Math.floor(weekTotals[i] / 60)}h${String(weekTotals[i] % 60).padStart(2, "0")}` : `${weekTotals[i]}×`}
                           </span>
                         </div>
                       );
@@ -674,10 +674,10 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
               {/* 2x2 Grid */}
               <div className="mt-4 grid grid-cols-1 gap-px border-t border-[#232327] bg-[#232327] sm:grid-cols-2">
                 {[
-                  { label: "USO DE FERRAMENTAS", value: getStat("total_runs", "128"), vcolor: "#2FD4A0", delta: showZero ? "-" : "+12%", dtone: "#2FD4A0", hint: showZero ? "" : "NÂº DE VEZES EXECUTADAS" },
-                  { label: "HORAS EM ESTÃšDIO", value: showZero ? "0h" : "46h", suffix: showZero ? "" : " 20m", vcolor: "#2FD4A0", delta: showZero ? "-" : "+8%", dtone: "#2FD4A0", hint: "META MENSAL: 40H" },
-                  { label: "IDEIAS RANQUEADAS", value: getStat("ideias_ranqueadas", "214"), vcolor: "#F2604C", delta: showZero ? "-" : "-3%", dtone: "#F2604C", hint: showZero ? "" : "MÃ‰DIA 6,8 IDEIAS/DIA" },
-                  { label: "SEQUÃŠNCIA ATUAL", value: showZero ? "1" : "12", suffix: showZero ? " dia" : " dias", vcolor: "#F2B33D", delta: showZero ? "-" : "+4", dtone: "#F2B33D", hint: "RECORDE: 21 DIAS" }
+                  { label: "USO DE FERRAMENTAS", value: getStat("total_runs", "128"), vcolor: "#2FD4A0", delta: showZero ? "-" : "+12%", dtone: "#2FD4A0", hint: showZero ? "" : "Nº DE VEZES EXECUTADAS" },
+                  { label: "HORAS EM ESTÚDIO", value: showZero ? "0h" : "46h", suffix: showZero ? "" : " 20m", vcolor: "#2FD4A0", delta: showZero ? "-" : "+8%", dtone: "#2FD4A0", hint: "META MENSAL: 40H" },
+                  { label: "IDEIAS RANQUEADAS", value: getStat("ideias_ranqueadas", "214"), vcolor: "#F2604C", delta: showZero ? "-" : "-3%", dtone: "#F2604C", hint: showZero ? "" : "MÉDIA 6,8 IDEIAS/DIA" },
+                  { label: "SEQUÊNCIA ATUAL", value: showZero ? "1" : "12", suffix: showZero ? " dia" : " dias", vcolor: "#F2B33D", delta: showZero ? "-" : "+4", dtone: "#F2B33D", hint: "RECORDE: 21 DIAS" }
                 ].map((m, i) => (
                   <div 
                     key={m.label} 
@@ -708,7 +708,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                   <Icon name="dial" className="h-3 w-3 text-[#F2B33D]" />
                   <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">Ferramentas mais usadas</span>
                   <span className="h-px flex-1 bg-[#232327]" />
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2] tabular-nums">{getStat("total_runs", "209")} EXECUÃ‡Ã•ES</span>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2] tabular-nums">{getStat("total_runs", "209")} EXECUÇÕES</span>
                 </div>
                 <div className="space-y-2.5">
                   {(() => {
@@ -727,7 +727,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                         <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#1c1c20]">
                           <div className="h-full rounded-full transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]" style={{ width: mounted ? `${t.share}%` : '0%', background: t.color, transitionDelay: `${i * 120 + 400}ms` }} />
                         </div>
-                        <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}Ã—</span>
+                        <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}×</span>
                       </div>
                     ));
 
@@ -765,7 +765,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                           <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#1c1c20]">
                             <div className="h-full rounded-full transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]" style={{ width: mounted ? `${share}%` : '0%', background: color, transitionDelay: `${i * 120 + 400}ms` }} />
                           </div>
-                          <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}Ã—</span>
+                          <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}×</span>
                         </div>
                       );
                     });
@@ -1152,15 +1152,15 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 <div className="grid gap-5">
                   <div>
                     <Label>Senha Atual</Label>
-                    <Input type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" value={pass} onChange={e => setPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
+                    <Input type="password" placeholder="••••••••" value={pass} onChange={e => setPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                   <div>
                     <Label hint="Mín. 8 caracteres, com letras e números">Nova Senha</Label>
-                    <Input type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" value={newPass} onChange={e => setNewPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
+                    <Input type="password" placeholder="••••••••" value={newPass} onChange={e => setNewPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                   <div>
                     <Label>Confirmar Nova Senha</Label>
-                    <Input type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" value={newPassConf} onChange={e => setNewPassConf(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
+                    <Input type="password" placeholder="••••••••" value={newPassConf} onChange={e => setNewPassConf(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                 </div>
                 <div className="mt-6 flex justify-end">
@@ -1379,7 +1379,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                   <Select defaultValue="pt" className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full">
                     <option value="pt">Português (BR)</option>
                     <option value="en" disabled>English (US) - Em breve</option>
-                    <option value="es" disabled>EspaÃ±ol - Em breve</option>
+                    <option value="es" disabled>Español - Em breve</option>
                   </Select>
                 </div>
               </div>
@@ -1448,7 +1448,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
         </div>
       )}
 
-      {/* MODAL DE EXCLUSÃƒO DE CONTA */}
+      {/* MODAL DE EXCLUSÃO DE CONTA */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <Reveal className="w-full max-w-md">

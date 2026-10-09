@@ -8,7 +8,39 @@ const PALETTE = ["#F2604C", "#F2B33D", "#2FD4A0", "#6E93F5", "#D946EF", "#A855F7
 export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
   const { user } = useAuth();
   const [categories, setCategories] = useState<{id: string, name: string, color: string}[]>([]);
-  const [activeTab, setActiveTab] = useState<string>("todos");
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const p = new URLSearchParams(window.location.search);
+        return p.get("categoria") || "todos";
+      } catch {}
+    }
+    return "todos";
+  });
+
+  const handleSelectTab = (tabId: string) => {
+    setActiveTab(tabId);
+    try {
+      const url = new URL(window.location.href);
+      if (tabId === "todos") {
+        url.searchParams.delete("categoria");
+      } else {
+        url.searchParams.set("categoria", tabId);
+      }
+      window.history.replaceState({ ...window.history.state, categoria: tabId }, "", url.toString());
+    } catch {}
+  };
+
+  useEffect(() => {
+    const onPop = () => {
+      try {
+        const p = new URLSearchParams(window.location.search);
+        setActiveTab(p.get("categoria") || "todos");
+      } catch {}
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const [showModal, setShowModal] = useState(false);
   const [newTabName, setNewTabName] = useState("");
   const [newTabColor, setNewTabColor] = useState(PALETTE[3]); // Default blue
@@ -221,7 +253,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-1 rounded-lg border border-ink-800/50 bg-ink-900/20 p-1">
             <button
-              onClick={() => setActiveTab("todos")}
+              onClick={() => handleSelectTab("todos")}
               className={cn(
                 "flex items-center gap-2 rounded-md px-4 py-2 font-mono text-[10px] tracking-[0.12em] uppercase transition-all duration-200",
                 activeTab === "todos" 
@@ -235,7 +267,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
             {categories.map(cat => (
               <button
                 key={cat.id}
-                onClick={() => setActiveTab(cat.id)}
+                onClick={() => handleSelectTab(cat.id)}
                 className={cn(
                   "group relative flex items-center gap-2 rounded-md py-2 pl-4 pr-7 font-mono text-[10px] tracking-[0.12em] uppercase transition-all duration-200",
                   activeTab === cat.id 
