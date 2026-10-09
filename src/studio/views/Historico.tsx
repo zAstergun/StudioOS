@@ -89,7 +89,7 @@ export function HistoricoX({
 
   useEffect(() => {
     async function fetchTrashedProjects() {
-      if (!auth.user) return;
+      if (!auth.user || !supabase) return;
       const { data, error } = await supabase
         .from("studioos_projects")
         .select("*")
@@ -413,9 +413,11 @@ export function HistoricoX({
                       onToggle={() => setExpanded(expanded === t.id ? null : t.id)}
                       onRestore={() => {
                         if (t.tool === 'projetos') {
-                          supabase.from('studioos_projects').update({ status: 'planning' }).eq('id', t.id).then(() => {
-                            setTrashedProjects(prev => prev.filter(p => p.id !== t.id));
-                          });
+                          if (supabase) {
+                            supabase.from('studioos_projects').update({ status: 'planning' }).eq('id', t.id).then(() => {
+                              setTrashedProjects(prev => prev.filter(p => p.id !== t.id));
+                            });
+                          }
                         } else {
                           os.restore(t.id);
                         }
@@ -423,9 +425,11 @@ export function HistoricoX({
                       onDestroy={() => {
                         if (window.confirm("Excluir permanentemente? Não dá para desfazer.")) {
                           if (t.tool === 'projetos') {
-                            supabase.from('studioos_projects').delete().eq('id', t.id).then(() => {
-                              setTrashedProjects(prev => prev.filter(p => p.id !== t.id));
-                            });
+                            if (supabase) {
+                              supabase.from('studioos_projects').delete().eq('id', t.id).then(() => {
+                                setTrashedProjects(prev => prev.filter(p => p.id !== t.id));
+                              });
+                            }
                           } else {
                             os.deleteForever(t.id);
                           }

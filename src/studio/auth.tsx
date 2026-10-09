@@ -32,6 +32,7 @@ export type StudioUser = {
   avatarUrl?: string;
   provider: "email" | "google" | "discord" | "demo";
   createdAt: string;
+  email_confirmed_at?: string;
 };
 
 export type OAuthProvider = "google" | "discord";
@@ -93,6 +94,7 @@ type SbUser = {
   id: string;
   email?: string;
   created_at: string;
+  email_confirmed_at?: string;
   app_metadata?: { provider?: string };
   user_metadata?: Record<string, unknown>;
 };
@@ -121,6 +123,7 @@ function mapUser(u: SbUser): StudioUser {
     avatarUrl: (meta.avatar_url as string) || (meta.picture as string) || undefined,
     provider,
     createdAt: u.created_at,
+    email_confirmed_at: u.email_confirmed_at,
   };
 }
 
