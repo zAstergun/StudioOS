@@ -128,15 +128,83 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
         }
       };
       fetchProjects();
+
+      const fetchVideoProjects = async () => {
+        const { data, error } = await supabase!
+          .from("studioos_projects")
+          .select("id, name, status, progress, color, external_link")
+          .not("external_link", "is", null)
+          .order("created_at", { ascending: false });
+          
+        if (!error && data) {
+          const statusMap: Record<string, string> = {
+            active: "Em andamento",
+            planning: "Planejamento",
+            completed: "Concluído",
+            archived: "Arquivado",
+            trashed: "Lixeira"
+          };
+          setVideoProjects(data.filter(d => d.external_link && d.external_link.trim() !== "").map(d => ({
+            ...d,
+            status: statusMap[d.status] || d.status
+          })));
+        }
+      };
+      fetchVideoProjects();
     }
   }, [user]);
 
-  const [jokerTitle, setJokerTitle] = useState("Meu Foco Atual");
+  const [jokerTitle, setJokerTitle] = useState("Vídeo em Destaque");
   const [jokerProject, setJokerProject] = useState("");
   const [isEditingJoker, setIsEditingJoker] = useState(false);
   const [isSelectingProject, setIsSelectingProject] = useState(false);
   const [editingLink, setEditingLink] = useState(false);
   const [tempLink, setTempLink] = useState("");
+  const [videoProjects, setVideoProjects] = useState<any[]>([]);
+  const [isPlayingJokerVideo, setIsPlayingJokerVideo] = useState(false);
+  const jokerVideoRef = useRef<HTMLDivElement>(null);
+
+  const getEmbedUrl = (url?: string) => {
+    if (!url) return null;
+    try {
+      const trimmed = url.trim();
+      
+      // Youtube
+      const ytMatch = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/);
+      if (ytMatch && ytMatch[1]) {
+        return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=0&rel=0`;
+      }
+
+      // Vimeo
+      const vimeoMatch = trimmed.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+      if (vimeoMatch && vimeoMatch[1]) {
+        return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+      }
+
+      // TikTok
+      const tiktokMatch = trimmed.match(/tiktok\.com\/.*video\/(\d+)/);
+      if (tiktokMatch && tiktokMatch[1]) {
+        return `https://www.tiktok.com/embed/v2/${tiktokMatch[1]}`;
+      }
+
+      // Instagram
+      if (trimmed.includes("instagram.com/")) {
+        const path = trimmed.split("instagram.com/")[1].split("?")[0].replace(/\/$/, "");
+        if (path.startsWith("p/") || path.startsWith("reel/")) {
+          return `https://www.instagram.com/${path}/embed`;
+        }
+      }
+
+      // MP4 Direct
+      if (trimmed.endsWith(".mp4") || trimmed.endsWith(".webm")) {
+        return trimmed;
+      }
+
+    } catch (e) {
+      return null;
+    }
+    return null;
+  };
 
   const handleSaveLink = async (projectId: string) => {
     if (!supabase) return;
@@ -154,7 +222,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
       setHasPrefs(localStorage.getItem(`studioos.onboarding.hasPrefs.${user.id}`) === "true");
       setHideOnboarding(localStorage.getItem(`studioos.onboarding.hidden.${user.id}`) === "true");
 
-      const savedTitle = localStorage.getItem(`studioos.jokerTitle.${user.id}`);
+      const savedTitle = localStorage.getItem(`studioos.showcaseTitle.${user.id}`);
       if (savedTitle) setJokerTitle(savedTitle);
 
       const savedProject = localStorage.getItem(`studioos.jokerProject.${user.id}`);
@@ -164,7 +232,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
 
   useEffect(() => {
     if (user && mounted) {
-      localStorage.setItem(`studioos.jokerTitle.${user.id}`, jokerTitle);
+      localStorage.setItem(`studioos.showcaseTitle.${user.id}`, jokerTitle);
       localStorage.setItem(`studioos.jokerProject.${user.id}`, jokerProject);
     }
   }, [jokerTitle, jokerProject, user, mounted]);
@@ -189,8 +257,8 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   const showZero = !isDemo && Object.keys(userStats).length === 0;
 
   const [sessions, setSessions] = useState([
-    { id: 1, name: "Chrome no Windows", location: "São Paulo, BR • 192.168.1.1", current: true, time: "Atual" },
-    ...(showZero ? [] : [{ id: 2, name: "Safari no iPhone", location: "São Paulo, BR • 10.0.0.5", current: false, time: "Ontem" }])
+    { id: 1, name: "Chrome no Windows", location: "São Paulo, BR â€¢ 192.168.1.1", current: true, time: "Atual" },
+    ...(showZero ? [] : [{ id: 2, name: "Safari no iPhone", location: "São Paulo, BR â€¢ 10.0.0.5", current: false, time: "Ontem" }])
   ]);
 
   const handleSavePersonalInfo = async () => {
@@ -526,7 +594,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                   <span className="h-2 w-2 rounded-full bg-[#2FD4A0]" />
                 </span>
                 <span className="flex-1 text-center font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">
-                  Monitor de uso · 12 semanas
+                  Monitor de uso Â· 12 semanas
                 </span>
                 <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-[#2FD4A0]">
                   <Icon name="wave" className="h-3 w-3" strokeWidth={2.4} /> Ao vivo
@@ -556,7 +624,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 </div>
                 <div className="mt-2.5 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">
                   <span>12/08/2026</span>
-                  <span>pico 171 min · média 102 min/dia</span>
+                  <span>pico 171 min Â· média 102 min/dia</span>
                   <span>06/10/2026</span>
                 </div>
               </div>
@@ -569,7 +637,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                     const baseTotals = [57, 121, 114, 110, 126, 120, 65];
                     const weekTotals = showZero ? [0,0,0,0,0,0,0] : (isDemo ? baseTotals : [0, 1, 2, 3, 4, 5, 6].map(d => Number(userStats[`dow_${d}`] || 0)));
                     const maxWeek = Math.max(...weekTotals, 1);
-                    return ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((label, i) => {
+                    return ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÃB"].map((label, i) => {
                       const filled = Math.round((weekTotals[i] / maxWeek) * 18);
                       return (
                         <div key={label} className="flex items-center gap-3">
@@ -594,7 +662,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                             })}
                           </div>
                           <span className="w-14 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">
-                            {isDemo ? `${Math.floor(weekTotals[i] / 60)}h${String(weekTotals[i] % 60).padStart(2, "0")}` : `${weekTotals[i]}×`}
+                            {isDemo ? `${Math.floor(weekTotals[i] / 60)}h${String(weekTotals[i] % 60).padStart(2, "0")}` : `${weekTotals[i]}Ã—`}
                           </span>
                         </div>
                       );
@@ -606,10 +674,10 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
               {/* 2x2 Grid */}
               <div className="mt-4 grid grid-cols-1 gap-px border-t border-[#232327] bg-[#232327] sm:grid-cols-2">
                 {[
-                  { label: "USO DE FERRAMENTAS", value: getStat("total_runs", "128"), vcolor: "#2FD4A0", delta: showZero ? "-" : "+12%", dtone: "#2FD4A0", hint: showZero ? "" : "Nº DE VEZES EXECUTADAS" },
-                  { label: "HORAS EM ESTÚDIO", value: showZero ? "0h" : "46h", suffix: showZero ? "" : " 20m", vcolor: "#2FD4A0", delta: showZero ? "-" : "+8%", dtone: "#2FD4A0", hint: "META MENSAL: 40H" },
-                  { label: "IDEIAS RANQUEADAS", value: getStat("ideias_ranqueadas", "214"), vcolor: "#F2604C", delta: showZero ? "-" : "-3%", dtone: "#F2604C", hint: showZero ? "" : "MÉDIA 6,8 IDEIAS/DIA" },
-                  { label: "SEQUÊNCIA ATUAL", value: showZero ? "1" : "12", suffix: showZero ? " dia" : " dias", vcolor: "#F2B33D", delta: showZero ? "-" : "+4", dtone: "#F2B33D", hint: "RECORDE: 21 DIAS" }
+                  { label: "USO DE FERRAMENTAS", value: getStat("total_runs", "128"), vcolor: "#2FD4A0", delta: showZero ? "-" : "+12%", dtone: "#2FD4A0", hint: showZero ? "" : "NÂº DE VEZES EXECUTADAS" },
+                  { label: "HORAS EM ESTÃšDIO", value: showZero ? "0h" : "46h", suffix: showZero ? "" : " 20m", vcolor: "#2FD4A0", delta: showZero ? "-" : "+8%", dtone: "#2FD4A0", hint: "META MENSAL: 40H" },
+                  { label: "IDEIAS RANQUEADAS", value: getStat("ideias_ranqueadas", "214"), vcolor: "#F2604C", delta: showZero ? "-" : "-3%", dtone: "#F2604C", hint: showZero ? "" : "MÃ‰DIA 6,8 IDEIAS/DIA" },
+                  { label: "SEQUÃŠNCIA ATUAL", value: showZero ? "1" : "12", suffix: showZero ? " dia" : " dias", vcolor: "#F2B33D", delta: showZero ? "-" : "+4", dtone: "#F2B33D", hint: "RECORDE: 21 DIAS" }
                 ].map((m, i) => (
                   <div 
                     key={m.label} 
@@ -640,7 +708,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                   <Icon name="dial" className="h-3 w-3 text-[#F2B33D]" />
                   <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">Ferramentas mais usadas</span>
                   <span className="h-px flex-1 bg-[#232327]" />
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2] tabular-nums">{getStat("total_runs", "209")} EXECUÇÕES</span>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2] tabular-nums">{getStat("total_runs", "209")} EXECUÃ‡Ã•ES</span>
                 </div>
                 <div className="space-y-2.5">
                   {(() => {
@@ -659,7 +727,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                         <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#1c1c20]">
                           <div className="h-full rounded-full transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]" style={{ width: mounted ? `${t.share}%` : '0%', background: t.color, transitionDelay: `${i * 120 + 400}ms` }} />
                         </div>
-                        <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}×</span>
+                        <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}Ã—</span>
                       </div>
                     ));
 
@@ -697,7 +765,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                           <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#1c1c20]">
                             <div className="h-full rounded-full transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]" style={{ width: mounted ? `${share}%` : '0%', background: color, transitionDelay: `${i * 120 + 400}ms` }} />
                           </div>
-                          <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}×</span>
+                          <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}Ã—</span>
                         </div>
                       );
                     });
@@ -772,20 +840,30 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 </button>
               </div>
               <div className="p-5 space-y-4">
-                {!jokerProject || isSelectingProject ? (
+                {videoProjects.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 px-4 text-center rounded-2xl border border-dashed border-[#232327] bg-[#0c0c0e]">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/5 mb-3 border border-white/5">
+                      <Icon name="youtube" className="h-5 w-5 text-[#8c8c94]" />
+                    </div>
+                    <h4 className="text-[13px] font-medium text-white mb-1.5">Nenhum vídeo disponível</h4>
+                    <p className="text-[11px] text-[#8c8c94] max-w-[260px] leading-relaxed">
+                      Para exibir um vídeo aqui, adicione um link (YouTube, Vimeo, TikTok, ou MP4) nas configurações de algum dos seus projetos.
+                    </p>
+                  </div>
+                ) : !videoProjects.find(p => p.id === jokerProject) || isSelectingProject ? (
                   <div className="flex flex-col gap-3">
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-mono text-[#8c8c94] uppercase tracking-widest">
-                        {jokerProject ? "Alterar Projeto" : "Selecione um projeto"}
+                        {videoProjects.find(p => p.id === jokerProject) ? "Alterar Projeto" : "Selecione um projeto"}
                       </span>
-                      {jokerProject && (
+                      {videoProjects.find(p => p.id === jokerProject) && (
                         <button onClick={() => setIsSelectingProject(false)} className="text-[10px] font-medium text-[#6E93F5] hover:text-white transition-colors">
                           Cancelar
                         </button>
                       )}
                     </div>
                     <div className="flex flex-col gap-2">
-                      {ongoingProjects.map(p => (
+                      {videoProjects.map(p => (
                         <button
                           key={p.id}
                           onClick={() => { setJokerProject(p.id); setIsSelectingProject(false); }}
@@ -812,67 +890,142 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-3">
-                    <span className="text-[10px] font-mono text-[#8c8c94] uppercase tracking-widest">Projeto Vinculado</span>
-                    <div className="group rounded-xl border border-[#232327] bg-[#101012] p-4 flex flex-col gap-4 relative overflow-hidden transition-all hover:border-[#6E93F5]/30 hover:shadow-[0_0_15px_rgba(110,147,245,0.05)]">
-                       <div className="flex items-center justify-between">
-                         <div className="flex items-center gap-3">
-                           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#232327]/50 text-[#6E93F5]">
-                             <Icon name="layers" className="h-4.5 w-4.5" />
-                           </div>
-                           <div>
-                             <div className="text-[13.5px] font-medium text-[#d3d3d8] tracking-tight">
-                               {ongoingProjects.find(p => p.id === jokerProject)?.name}
-                             </div>
-                             <div className="text-[10px] font-mono text-[#8c8c94] mt-0.5 uppercase">
-                               {ongoingProjects.find(p => p.id === jokerProject)?.status}
-                             </div>
-                           </div>
-                         </div>
-                         <div className="flex items-center gap-3">
-                           {editingLink ? (
-                             <div className="flex items-center gap-2">
-                               <input 
-                                 type="url" 
-                                 value={tempLink}
-                                 onChange={(e) => setTempLink(e.target.value)}
-                                 placeholder="Link do vídeo finalizado"
-                                 className="w-32 rounded bg-[#1c1c20] px-2 py-1 text-[10px] text-white border border-[#232327] focus:outline-none focus:border-[#6E93F5]/50"
-                                 autoFocus
-                                 onKeyDown={(e) => e.key === 'Enter' && handleSaveLink(jokerProject)}
-                               />
-                               <button onClick={() => handleSaveLink(jokerProject)} className="text-[10px] text-[#2FD4A0] hover:text-[#2FD4A0]/80 transition-colors">Salvar</button>
-                               <button onClick={() => setEditingLink(false)} className="text-[10px] text-[#8c8c94] hover:text-white transition-colors">Cancelar</button>
-                             </div>
-                           ) : ongoingProjects.find(p => p.id === jokerProject)?.external_link ? (
-                             <div className="flex items-center gap-2">
-                               <a href={ongoingProjects.find(p => p.id === jokerProject)?.external_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10.5px] font-medium text-[#6E93F5] hover:underline">
-                                 <Icon name="link" className="h-3 w-3" /> Acessar Link
-                               </a>
-                               <button onClick={() => { setTempLink(ongoingProjects.find(p => p.id === jokerProject)?.external_link || ""); setEditingLink(true); }} className="text-[#8c8c94] hover:text-white transition-colors" title="Editar link">
-                                 <Icon name="type" className="h-3 w-3" />
-                               </button>
-                             </div>
-                           ) : (
-                             <button onClick={() => { setTempLink(""); setEditingLink(true); }} className="flex items-center gap-1 text-[10.5px] font-medium text-[#8c8c94] hover:text-[#d3d3d8] transition-colors">
-                               <Icon name="link" className="h-3 w-3" /> Adicionar Link
-                             </button>
-                           )}
+                  <div className="flex flex-col gap-0 rounded-2xl overflow-hidden shadow-2xl relative border border-[#232327]">
+                    {(() => {
+                           const embedUrl = getEmbedUrl(videoProjects.find(p => p.id === jokerProject)?.external_link);
+                           if (!embedUrl) return null;
+                           const isNative = embedUrl.endsWith('.mp4') || embedUrl.endsWith('.webm');
+                           const isYouTube = embedUrl.includes('youtube.com/embed/');
+                           let ytId = null;
+                           if (isYouTube) {
+                             ytId = embedUrl.split('embed/')[1].split('?')[0];
+                           }
+                           
+                           const finalEmbedUrl = (!isNative && isPlayingJokerVideo) 
+                             ? (embedUrl.includes('autoplay=0') ? embedUrl.replace('autoplay=0', 'autoplay=1') : `${embedUrl}${embedUrl.includes('?') ? '&' : '?'}autoplay=1`) 
+                             : embedUrl;
+                           
+                           return (
+                             <div 
+                               ref={jokerVideoRef}
+                               className="group relative w-full aspect-video bg-[#0c0c0e]"
+                             >
+                               {isNative ? (
+                                 <video 
+                                   src={finalEmbedUrl} 
+                                   className="w-full h-full object-contain"
+                                   controls={isPlayingJokerVideo}
+                                   autoPlay={isPlayingJokerVideo}
+                                 />
+                               ) : isYouTube && !isPlayingJokerVideo ? (
+                                 <img 
+                                   src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`}
+                                   onError={(e) => { e.currentTarget.src = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`; }}
+                                   alt="Video Thumbnail"
+                                   className="w-full h-full object-cover"
+                                 />
+                               ) : (
+                                 <iframe 
+                                   src={finalEmbedUrl} 
+                                   className={`w-full h-full`}
+                                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                   allowFullScreen 
+                                 />
+                               )}
+                               
+                               {/* Overlay */}
+                               <div className={`absolute inset-0 flex flex-col transition-all duration-300 pointer-events-none ${!isPlayingJokerVideo ? 'bg-black/30' : 'bg-transparent'}`}>
+                                 {/* Expand Button */}
+                                 <div className={`absolute top-3 right-3 flex gap-2 z-20 transition-opacity duration-300 ${!isPlayingJokerVideo ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}>
+                                   <button 
+                                     onClick={() => {
+                                       if (!document.fullscreenElement) {
+                                         jokerVideoRef.current?.requestFullscreen();
+                                       } else {
+                                         document.exitFullscreen();
+                                       }
+                                     }}
+                                     className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition-all hover:bg-black/90 hover:text-[#6E93F5] hover:scale-110`}
+                                     title="Expandir"
+                                   >
+                                     <Icon name="maximize" className="h-3.5 w-3.5" />
+                                   </button>
+                                 </div>
+                                 
+                                 {/* Center Play Button */}
+                                 <div className="flex-1 flex items-center justify-center z-20 pointer-events-none">
+                                   {!isPlayingJokerVideo && (
+                                     <button 
+                                       onClick={() => setIsPlayingJokerVideo(true)} 
+                                       className="pointer-events-auto group/play flex h-14 w-14 items-center justify-center rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white shadow-[0_0_40px_rgba(0,0,0,0.5)] transition-all hover:scale-110 hover:bg-white/20"
+                                     >
+                                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-black transition-transform group-hover/play:scale-105">
+                                         <Icon name="play" className="h-5 w-5 ml-0.5" />
+                                       </div>
+                                     </button>
+                                   )}
+                                 </div>
 
-                           <button onClick={() => setIsSelectingProject(true)} className="flex items-center gap-1.5 rounded-full bg-[#1c1c20] px-3 py-1.5 text-[10.5px] font-medium text-[#8c8c94] transition-colors hover:bg-[#232327] hover:text-white" title="Trocar projeto">
-                             <Icon name="dial" className="h-3 w-3" /> Trocar
-                           </button>
-                         </div>
-                       </div>
-                       <div className="flex items-center gap-3">
-                          <div className="h-1.5 flex-1 bg-[#1c1c20] rounded-full overflow-hidden">
-                            <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: `${ongoingProjects.find(p => p.id === jokerProject)?.progress}%`, backgroundColor: ongoingProjects.find(p => p.id === jokerProject)?.color || '#6E93F5' }} />
-                          </div>
-                          <span className="text-[10px] font-mono text-[#b6b6be] tabular-nums">
-                            {ongoingProjects.find(p => p.id === jokerProject)?.progress}%
-                          </span>
-                       </div>
-                    </div>
+                                 {/* Debug url (temporary) */}
+                                 <div className="absolute top-2 left-2 text-[8px] text-white/30 bg-black/50 px-1 rounded font-mono truncate max-w-[200px] pointer-events-none opacity-0 group-hover:opacity-100 z-30">
+                                   {finalEmbedUrl}
+                                 </div>
+
+                                 {/* Gradient & Info Bar at the Bottom */}
+                                 <div className={`absolute bottom-0 left-0 right-0 p-3 pt-12 bg-gradient-to-t from-black via-black/80 to-transparent transition-opacity duration-300 pointer-events-none ${!isPlayingJokerVideo ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} z-20`}>
+                                    <div className="flex flex-col gap-2 pointer-events-auto">
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-white backdrop-blur-sm border border-white/10 shadow-lg">
+                                          <Icon name="layers" className="h-4 w-4" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="text-[13px] font-bold text-white tracking-tight drop-shadow-md truncate">
+                                            {videoProjects.find(p => p.id === jokerProject)?.name}
+                                          </div>
+                                          <div className="text-[9px] font-mono text-white/70 mt-0.5 uppercase drop-shadow-sm flex items-center gap-1.5">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-[#6E93F5]"></span>
+                                            {videoProjects.find(p => p.id === jokerProject)?.status}
+                                          </div>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                           {editingLink ? (
+                                             <div className="flex items-center gap-1 bg-black/60 p-1 rounded-lg backdrop-blur-md border border-white/10">
+                                               <input 
+                                                 type="url" 
+                                                 value={tempLink}
+                                                 onChange={(e) => setTempLink(e.target.value)}
+                                                 placeholder="Link"
+                                                 className="w-20 rounded-md bg-white/10 px-1.5 py-1 text-[9px] text-white border border-transparent focus:outline-none focus:border-white/30 placeholder:text-white/40"
+                                                 autoFocus
+                                                 onKeyDown={(e) => e.key === 'Enter' && handleSaveLink(jokerProject)}
+                                               />
+                                               <button onClick={() => handleSaveLink(jokerProject)} className="px-1.5 py-1 rounded-md bg-[#2FD4A0] text-black text-[9px] font-bold hover:bg-[#2FD4A0]/90 transition-colors">Salvar</button>
+                                               <button onClick={() => setEditingLink(false)} className="px-1.5 py-1 rounded-md text-white/70 text-[9px] font-medium hover:text-white hover:bg-white/10 transition-colors">X</button>
+                                             </div>
+                                           ) : videoProjects.find(p => p.id === jokerProject)?.external_link ? (
+                                             <button onClick={() => { setTempLink(videoProjects.find(p => p.id === jokerProject)?.external_link || ""); setEditingLink(true); }} className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/10 text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 hover:scale-105 transition-all shadow-lg" title="Editar link">
+                                               <Icon name="type" className="h-3 w-3" />
+                                             </button>
+                                           ) : (
+                                             <button onClick={() => { setTempLink(""); setEditingLink(true); }} className="flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1.5 text-[10px] font-medium text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 hover:scale-105 transition-all shadow-lg">
+                                               <Icon name="link" className="h-3 w-3" /> Link
+                                             </button>
+                                           )}
+                                           
+                                           <div className="h-3 w-px bg-white/20 mx-0.5"></div>
+
+                                           <button onClick={() => setIsSelectingProject(true)} className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/10 text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 hover:scale-105 transition-all shadow-lg" title="Trocar projeto">
+                                             <Icon name="dial" className="h-3 w-3" />
+                                           </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                 </div>
+                               </div>
+                             </div>
+                           );
+                    })()}
                   </div>
                 )}
               </div>
@@ -999,15 +1152,15 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 <div className="grid gap-5">
                   <div>
                     <Label>Senha Atual</Label>
-                    <Input type="password" placeholder="••••••••" value={pass} onChange={e => setPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
+                    <Input type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" value={pass} onChange={e => setPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                   <div>
                     <Label hint="Mín. 8 caracteres, com letras e números">Nova Senha</Label>
-                    <Input type="password" placeholder="••••••••" value={newPass} onChange={e => setNewPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
+                    <Input type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" value={newPass} onChange={e => setNewPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                   <div>
                     <Label>Confirmar Nova Senha</Label>
-                    <Input type="password" placeholder="••••••••" value={newPassConf} onChange={e => setNewPassConf(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
+                    <Input type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" value={newPassConf} onChange={e => setNewPassConf(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                 </div>
                 <div className="mt-6 flex justify-end">
@@ -1226,7 +1379,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                   <Select defaultValue="pt" className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full">
                     <option value="pt">Português (BR)</option>
                     <option value="en" disabled>English (US) - Em breve</option>
-                    <option value="es" disabled>Español - Em breve</option>
+                    <option value="es" disabled>EspaÃ±ol - Em breve</option>
                   </Select>
                 </div>
               </div>
@@ -1295,7 +1448,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
         </div>
       )}
 
-      {/* MODAL DE EXCLUSÃO DE CONTA */}
+      {/* MODAL DE EXCLUSÃƒO DE CONTA */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <Reveal className="w-full max-w-md">
@@ -1394,3 +1547,4 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
     </div>
   );
 }
+
