@@ -15,6 +15,7 @@ import {
 } from "../history";
 import { Button, Icon, Input, Meter } from "../components/ui";
 import { Card, CopyButton } from "../components/ToolShell";
+import { SaveToSalvosModal } from "../components/SaveToSalvosModal";
 
 const TOOL_ACCENTS: Record<string, Accent> = {
   rank: "signal",
@@ -52,11 +53,18 @@ const TITLES_TOOLS = new Set(["titulos", "hooks"]);
 const POSTS_TOOLS = new Set(["humanizador", "score", "receita"]);
 const STRATEGY_TOOLS = new Set(["mentor", "membros"]);
 
-function matchesFilter(e: HistoryEntry, f: (typeof FILTERS)[number], fav: boolean) {
-  // Global filter: if toggle is on, hide non-favorites everywhere
-  if (fav && !e.favorite) return false;
+function matchesFilter(
+  e: HistoryEntry | TrashEntry, 
+  f: (typeof FILTERS)[number], 
+  favOnly: boolean,
+  savedMap: Record<string, string>
+) {
+  const isSaved = Boolean(e.favorite || savedMap[e.id] || savedMap[String(e.id)]);
+
+  // Global toggle: if "filtrar apenas salvos" is on, hide non-saved items
+  if (favOnly && !isSaved) return false;
   
-  if (f === "salvos") return e.favorite;
+  if (f === "salvos") return isSaved;
   if (f === "recentes") return true;
   if (f === "ideias") return e.tool === "rank" || e.tool === "ideia";
   if (f === "títulos") return TITLES_TOOLS.has(e.tool);
@@ -81,11 +89,14 @@ export function HistoricoX({
   const [tab, setTab] = useState<"historico" | "lixeira">(initialTab);
   const [fmt, setFmt] = useState<string>("todos");
   const [pill, setPill] = useState<(typeof FILTERS)[number]>("recentes");
-  const [showFav, setShowFav] = useState(true);
+  const [showFav, setShowFav] = useState(false);
   const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sort, setSort] = useState<"recentes" | "antigos" | "score">("recentes");
   const [trashedProjects, setTrashedProjects] = useState<TrashEntry[]>([]);
+  const [savingItem, setSavingItem] = useState<HistoryEntry | null>(null);
+  const [itemToRemoveFromSalvos, setItemToRemoveFromSalvos] = useState<HistoryEntry | null>(null);
+  const [savedItemIds, setSavedItemIds] = useState<Record<string, string>>({});
 
   useEffect(() => {
     async function fetchTrashedProjects() {
@@ -113,6 +124,39 @@ export function HistoricoX({
       }
     }
     fetchTrashedProjects();
+
+    async function fetchSavedItems() {
+      if (!auth.user || !supabase) return;
+      const { data, error } = await supabase
+        .from("studioos_saved_items")
+        .select("id, metadata")
+        .eq("user_id", auth.user.id);
+      if (!error && data) {
+        const mapping: Record<string, string> = {};
+        data.forEach(item => {
+          let meta = item.metadata;
+          if (typeof meta === "string") {
+            try { meta = JSON.parse(meta); } catch {}
+          }
+          if (meta?.id) {
+            mapping[String(meta.id)] = item.id;
+            mapping[meta.id] = item.id;
+          }
+        });
+        setSavedItemIds(mapping);
+      }
+    }
+    fetchSavedItems();
+
+    if (!supabase) return;
+
+    const channel = supabase.channel('history_saved_items')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_saved_items', filter: `user_id=eq.${auth.user?.id}` }, fetchSavedItems)
+      .subscribe();
+
+    return () => {
+      supabase!.removeChannel(channel);
+    };
   }, [auth.user]);
 
   const toolsInHistory = useMemo(
@@ -120,12 +164,23 @@ export function HistoricoX({
     [os.history]
   );
 
-  const favCount = os.history.filter((h) => h.favorite).length;
+  const cloudCount = useMemo(() => new Set(Object.values(savedItemIds)).size, [savedItemIds]);
+
+  const pillSavedCount = useMemo(() => {
+    if (tab === "lixeira") {
+      return [...os.trash, ...trashedProjects].filter(
+        (t) => Boolean(t.favorite || savedItemIds[t.id] || savedItemIds[String(t.id)])
+      ).length;
+    }
+    return os.history.filter(
+      (h) => Boolean(h.favorite || savedItemIds[h.id] || savedItemIds[String(h.id)])
+    ).length;
+  }, [tab, os.trash, trashedProjects, os.history, savedItemIds]);
 
   const list = useMemo(() => {
     let l = os.history.filter((h) =>
       (fmt === "todos" ? true : h.tool === fmt)
-        && matchesFilter(h, pill, showFav)
+        && matchesFilter(h, pill, showFav, savedItemIds)
         && (!q.trim() || (h.title + h.summary + h.content + h.toolName).toLowerCase().includes(q.toLowerCase()))
     ) as (HistoryEntry & { num?: number })[];
     if (sort === "recentes") l = [...l].sort((a, b) => b.createdAt - a.createdAt);
@@ -138,16 +193,17 @@ export function HistoricoX({
       });
     }
     return l;
-  }, [os.history, fmt, pill, showFav, q, sort]);
+  }, [os.history, fmt, pill, showFav, savedItemIds, q, sort]);
 
   const listTrash = useMemo(() => {
     let l: TrashEntry[] = [...os.trash, ...trashedProjects];
     if (fmt !== "todos") l = l.filter((t) => t.tool === fmt);
-    if (q.trim()) l = l.filter((t) => (t.title + t.summary + t.content).toLowerCase().includes(q.toLowerCase()));
+    l = l.filter((t) => matchesFilter(t, pill, showFav, savedItemIds));
+    if (q.trim()) l = l.filter((t) => (t.title + t.summary + t.content + (t.toolName || "")).toLowerCase().includes(q.toLowerCase()));
     return [...l].sort((a, b) =>
       sort === "antigos" ? a.deletedAt - b.deletedAt : b.deletedAt - a.deletedAt
     );
-  }, [os.trash, trashedProjects, fmt, q, sort]);
+  }, [os.trash, trashedProjects, fmt, pill, showFav, savedItemIds, q, sort]);
 
   const retention = os.config.trashDays;
 
@@ -191,7 +247,7 @@ export function HistoricoX({
         <div className="grid shrink-0 grid-cols-2 gap-px overflow-hidden rounded-lg border border-ink-700/80 bg-ink-700/60">
           {[
             { k: "Itens", v: `${os.history.length}${auth.user ? "" : `/${QUOTA}`}`, a: "text-signal-300" },
-            { k: "Salvos na Nuvem", v: String(favCount), a: "text-bone-100" },
+            { k: "Salvos na Nuvem", v: String(cloudCount), a: "text-bone-100" },
             { k: "Lixeira", v: `${os.trash.length + trashedProjects.length}${auth.user ? "" : `/${TRASH_QUOTA}`}`, a: (os.trash.length + trashedProjects.length) ? "text-oxide-400" : "text-mint-300" },
             { k: "Expira em", v: retention === 1 ? "1d" : `${retention}d`, a: "text-sky-400" },
           ].map((m) => (
@@ -285,13 +341,14 @@ export function HistoricoX({
           >
             <span className="font-mono text-[10px] tracking-[0.1em] uppercase">{f}</span>
             {f === "salvos" && (
-              <span className="ml-1.5 text-[10px] text-ink-500 tabular-nums">{favCount}</span>
+              <span className="ml-1.5 text-[10px] text-ink-500 tabular-nums">{pillSavedCount}</span>
             )}
           </button>
         ))}
         <span className="mx-1 hidden h-4 w-px bg-ink-700 sm:block" />
-        <label className="flex cursor-pointer items-center gap-2 text-[11.5px] font-medium transition-colors">
+        <div className="flex cursor-pointer items-center gap-2 text-[11.5px] font-medium transition-colors">
           <button
+            type="button"
             onClick={() => setShowFav((s) => !s)}
             className={cn(
               "relative h-5 w-9 rounded-full border transition-all duration-300",
@@ -306,10 +363,13 @@ export function HistoricoX({
               )}
             />
           </button>
-          <span className={cn("transition-colors", showFav ? "text-signal-300" : "text-ink-400 hover:text-bone-200")}>
+          <span 
+            onClick={() => setShowFav((s) => !s)}
+            className={cn("transition-colors select-none", showFav ? "text-signal-300" : "text-ink-400 hover:text-bone-200")}
+          >
             filtrar apenas salvos
           </span>
-        </label>
+        </div>
         <div className="ml-auto flex gap-1">
           {(["recentes", "antigos", "score"] as const).map((s) => (
             <button
@@ -365,6 +425,9 @@ export function HistoricoX({
                       expanded={expanded === h.id}
                       onToggle={() => setExpanded(expanded === h.id ? null : h.id)}
                       onGo={onGo}
+                      onSaveItem={setSavingItem}
+                      savedItemIds={savedItemIds}
+                      onRequestRemoveSaved={(entry) => setItemToRemoveFromSalvos(entry)}
                     />
                   ))}
                   <div className="flex flex-wrap items-center gap-3 rounded-lg border border-ink-800 bg-ink-900/40 px-4 py-3">
@@ -436,6 +499,7 @@ export function HistoricoX({
                         }
                       }}
                       onGo={onGo}
+                      savedItemId={savedItemIds[t.id] || savedItemIds[String(t.id)]}
                     />
                   ))}
                   <div className="flex flex-wrap items-center gap-3 rounded-lg border border-oxide-400/30 bg-oxide-400/[0.05] px-4 py-3">
@@ -554,6 +618,110 @@ export function HistoricoX({
           </Button>
         </div>
       </div>
+
+      <SaveToSalvosModal
+        isOpen={!!savingItem}
+        onClose={() => setSavingItem(null)}
+        item={savingItem ? {
+          title: savingItem.title,
+          type: "historico",
+          metadata: {
+            id: String(savingItem.id),
+            content: savingItem.content,
+            summary: savingItem.summary,
+            tool: savingItem.tool,
+            toolName: savingItem.toolName,
+          }
+        } : null}
+        onSaveSuccess={(savedItem) => {
+          if (savingItem) {
+            setSavedItemIds(prev => ({
+              ...prev,
+              [String(savingItem.id)]: savedItem.id,
+              [savingItem.id]: savedItem.id
+            }));
+          }
+        }}
+      />
+
+      {/* MODAL REMOVER HISTÓRICO DOS SALVOS */}
+      {itemToRemoveFromSalvos && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/85 p-4 backdrop-blur-md"
+          onClick={(e) => { if (e.target === e.currentTarget) setItemToRemoveFromSalvos(null); }}
+        >
+          <div 
+            className="relative w-full max-w-[420px] overflow-hidden rounded-2xl border border-ink-700/50 bg-ink-900 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)] animate-in fade-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-7 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-signal-400/10 text-signal-400 border border-signal-400/20">
+                <Icon name="bookmark" className="h-6 w-6" fill="currentColor" strokeWidth={1.8} />
+              </div>
+              
+              <h3 className="mb-2 font-display text-xl font-bold text-bone-100">
+                Remover dos Salvos?
+              </h3>
+              
+              <p className="mb-7 text-[13px] leading-relaxed text-bone-300">
+                Deseja remover <strong className="text-bone-100">{itemToRemoveFromSalvos.title}</strong> dos seus salvos? 
+                O registro permanecerá no seu histórico local normalmente.
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setItemToRemoveFromSalvos(null)}
+                  className="flex-1 rounded-lg border border-ink-800/60 bg-ink-950/60 px-4 py-3.5 font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const entry = itemToRemoveFromSalvos;
+                    const entryIdStr = String(entry.id);
+                    const idToDelete = savedItemIds[entryIdStr] || savedItemIds[entry.id];
+                    
+                    setSavedItemIds(prev => {
+                      const next = { ...prev };
+                      delete next[entryIdStr];
+                      delete next[entry.id];
+                      return next;
+                    });
+                    setItemToRemoveFromSalvos(null);
+
+                    if (supabase && auth.user) {
+                      if (idToDelete) {
+                        await supabase.from("studioos_saved_items").delete().eq("id", idToDelete);
+                      } else {
+                        const { data } = await supabase
+                          .from("studioos_saved_items")
+                          .select("id, metadata")
+                          .eq("user_id", auth.user.id)
+                          .eq("type", "historico");
+                        const found = data?.find(i => {
+                          let m = i.metadata;
+                          if (typeof m === "string") {
+                            try { m = JSON.parse(m); } catch {}
+                          }
+                          return String(m?.id) === entryIdStr;
+                        });
+                        if (found) {
+                          await supabase.from("studioos_saved_items").delete().eq("id", found.id);
+                        }
+                      }
+                    }
+                  }}
+                  className="flex-1 rounded-lg bg-red-500/20 border border-red-500/40 px-4 py-3.5 font-mono text-[10px] font-bold tracking-[0.14em] text-red-400 uppercase transition-all duration-200 hover:bg-red-500 hover:text-white hover:border-red-500"
+                >
+                  Sim, Remover
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -575,12 +743,18 @@ function HistoryRow({
   expanded,
   onToggle,
   onGo,
+  onSaveItem,
+  savedItemIds,
+  onRequestRemoveSaved,
 }: {
   entry: HistoryEntry;
   num: number;
   expanded: boolean;
   onToggle: () => void;
   onGo: (id: string) => void;
+  onSaveItem: (entry: HistoryEntry) => void;
+  savedItemIds: Record<string, string>;
+  onRequestRemoveSaved: (entry: HistoryEntry) => void;
 }) {
   const ac = accentOf(entry);
   const meta = TOOL_BY_ID[entry.tool];
@@ -606,8 +780,8 @@ function HistoryRow({
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13.5px] font-medium text-bone-100">
               {entry.title}
-              {entry.favorite && (
-                <Icon name="bookmark" className="ml-2 inline h-3 w-3 -translate-y-0.5 fill-signal-400 text-signal-400" strokeWidth={1} />
+              {Boolean(entry.favorite || savedItemIds[entry.id] || savedItemIds[String(entry.id)]) && (
+                <Icon name="bookmark" fill="currentColor" className="ml-2 inline h-3 w-3 -translate-y-0.5 fill-signal-400 text-signal-400" strokeWidth={1} />
               )}
             </span>
             <span className="mt-0.5 block truncate text-[11px] text-ink-400">{entry.summary}</span>
@@ -640,7 +814,13 @@ function HistoryRow({
         <span className="mr-2 font-mono text-[9px] tracking-[0.14em] text-ink-500 uppercase">
           {new Date(entry.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
         </span>
-        <Actions entry={entry} onGo={onGo} />
+        <Actions 
+          entry={entry} 
+          onGo={onGo} 
+          onSaveItem={onSaveItem} 
+          savedItemId={savedItemIds[entry.id] || savedItemIds[String(entry.id)]} 
+          onRequestRemoveSaved={() => onRequestRemoveSaved(entry)} 
+        />
       </div>
 
       <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out", expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
@@ -675,7 +855,7 @@ function HistoryRow({
   );
 }
 
-function Actions({ entry, onGo }: { entry: HistoryEntry; onGo: (id: string) => void }) {
+function Actions({ entry, onGo, onSaveItem, savedItemId, onRequestRemoveSaved }: { entry: HistoryEntry; onGo: (id: string) => void; onSaveItem: (entry: HistoryEntry) => void; savedItemId?: string; onRequestRemoveSaved?: () => void }) {
   const [copied, setCopied] = useState(false);
   return (
     <span className="ml-auto flex shrink-0 items-center gap-0" title="Ações">
@@ -687,14 +867,25 @@ function Actions({ entry, onGo }: { entry: HistoryEntry; onGo: (id: string) => v
         reabrir
       </button>
       <button
-        onClick={() => toggleFavorite(entry)}
+        onClick={() => {
+          if (savedItemId) {
+            onRequestRemoveSaved?.();
+          } else {
+            onSaveItem(entry);
+          }
+        }}
         className={cn(
           "rounded px-2 py-1 transition-colors",
-          entry.favorite ? "text-signal-400" : "text-ink-500 hover:bg-ink-800 hover:text-signal-300"
+          savedItemId ? "text-signal-400" : "text-ink-500 hover:bg-ink-800 hover:text-signal-300"
         )}
-        title={entry.favorite ? "Remover dos salvos" : "Salvar na nuvem"}
+        title={savedItemId ? "Remover dos salvos" : "Salvar na nuvem"}
       >
-        <Icon name="bookmark" className={cn("h-3.5 w-3.5", entry.favorite && "fill-signal-400")} strokeWidth={1.8} />
+        <Icon 
+          name="bookmark" 
+          fill={savedItemId ? "currentColor" : "none"} 
+          className={cn("h-3.5 w-3.5", savedItemId && "fill-signal-400 text-signal-400")} 
+          strokeWidth={1.8} 
+        />
       </button>
       <button
         onClick={() => {
@@ -730,6 +921,7 @@ function TrashRow({
   onRestore,
   onDestroy,
   onGo,
+  savedItemId,
 }: {
   entry: TrashEntry;
   num: number;
@@ -739,9 +931,11 @@ function TrashRow({
   onRestore: () => void;
   onDestroy: () => void;
   onGo: (id: string) => void;
+  savedItemId?: string;
 }) {
   const ac = accentOf(entry);
   const left = daysLeft(entry, retention);
+  const isSaved = Boolean(entry.favorite || savedItemId);
   return (
     <article
       className={cn(
@@ -760,6 +954,9 @@ function TrashRow({
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13.5px] font-medium text-bone-300 line-through decoration-ink-600">
               {entry.title}
+              {isSaved && (
+                <Icon name="bookmark" fill="currentColor" className="ml-2 inline h-3 w-3 -translate-y-0.5 fill-signal-400 text-signal-400 no-underline" strokeWidth={1} />
+              )}
             </span>
             <span className="mt-0.5 block truncate text-[11px] text-ink-500">
               {entry.summary}

@@ -66,15 +66,17 @@ export function Icon({
   name,
   className,
   strokeWidth = 1.6,
+  fill,
 }: {
   name: keyof typeof P | string;
   className?: string;
   strokeWidth?: number;
+  fill?: string;
 }) {
   return (
     <svg
       viewBox="0 0 24 24"
-      fill="none"
+      fill={fill ?? "none"}
       stroke="currentColor"
       strokeWidth={strokeWidth}
       strokeLinecap="round"

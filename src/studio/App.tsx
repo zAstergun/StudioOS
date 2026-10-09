@@ -125,8 +125,7 @@ function Footer({ onGo }: { onGo: (id: string) => void }) {
               </div>
               <ul className="space-y-2">
                 {[
-                  ["historico", "Histórico"],
-                  ["lixeira", "Lixeira"],
+                  ["historico", "Histórico & Lixeira"],
                   ["config", "Provedor de IA"],
                   ["calibracao", "Calibração"],
                 ].map(([id, label]) => (
@@ -356,7 +355,7 @@ export default function App() {
                 : view === "login"
                   ? "Login"
                 : tool?.name ??
-                  (view === "historico" ? "Histórico" : view === "lixeira" ? "Lixeira" : "Configuração")}
+                  (view === "historico" || view === "lixeira" ? "Histórico & Lixeira" : "Configuração")}
             </span>
             <button
               onClick={() => go("rank")}
@@ -405,7 +404,7 @@ export default function App() {
                 {view === "membros" && <Membros onBack={back} onGo={go} />}
                 {view === "perfil" && <PerfilScreen onGo={go} />}
                 {view === "projetos" && <ProjetosScreen onGo={go} />}
-                {view === "salvos" && <SalvosScreen />}
+                {view === "salvos" && <SalvosScreen onGo={go} />}
             {view === "wiki" && <Wiki onBack={back} onGo={go} />}
             {view === "historico" && <HistoricoX onBack={back} onGo={go} />}
             {view === "lixeira" && <HistoricoX onBack={back} onGo={go} initialTab="lixeira" />}

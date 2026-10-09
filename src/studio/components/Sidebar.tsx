@@ -109,11 +109,11 @@ export function Sidebar({
             </>
           )}
           <NavItem
-            active={active === "historico"}
+            active={active === "historico" || active === "lixeira"}
             onClick={() => go("historico")}
             icon="historico"
-            label="Histórico"
-            kicker={authenticated ? `${historyCount} registro${historyCount === 1 ? "" : "s"}` : "entre para acessar"}
+            label="Histórico & Lixeira"
+            kicker={authenticated ? `${historyCount} logs · ${trashCount} lixeira` : "entre para acessar"}
             accent="signal"
             badge={authenticated ? historyCount : undefined}
           />
@@ -174,15 +174,6 @@ export function Sidebar({
               label="Wiki do Painel"
               kicker="Ajuda"
               accent="bone"
-            />
-            <NavItem
-              active={active === "lixeira"}
-              onClick={() => go("lixeira")}
-              icon="trash"
-              label="Lixeira"
-              kicker={authenticated ? (trashCount ? `${trashCount} aguardando purge` : "vazia") : "entre para acessar"}
-              accent="oxide"
-              badge={authenticated ? trashCount : undefined}
             />
           </div>
         </div>
