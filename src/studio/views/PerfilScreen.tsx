@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import Cropper from "react-easy-crop";
 import { Panel, Reveal, Icon, Button, Input, Label, Select } from "../components/ui";
 import { useAuth, supabase } from "../auth";
+import { computeProjectStatus } from "./ProjetosScreen";
 
 const getCroppedImg = async (imageSrc: string, pixelCrop: any): Promise<File | null> => {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -135,23 +136,30 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
         if (!error && data) {
           const statusMap: Record<string, string> = {
             active: "Em andamento",
-            planning: "Planejamento"
+            planning: "Planejamento",
+            completed: "Concluído"
           };
-          setOngoingProjects(data.map((d: any) => {
-            const tasks = d.studioos_tasks || [];
-            const totalTasks = tasks.length;
-            const doneTasks = tasks.filter((t: any) => t.status === "done").length;
-            const calculatedProgress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : (d.progress || 0);
-            
-            return {
-              id: d.id,
-              name: d.name,
-              status: statusMap[d.status] || d.status,
-              progress: calculatedProgress,
-              color: d.color || "#6E93F5",
-              external_link: d.external_link
-            };
-          }));
+          const mappedOngoing = data
+            .map((d: any) => {
+              const tasks = d.studioos_tasks || [];
+              const totalTasks = tasks.length;
+              const doneTasks = tasks.filter((t: any) => t.status === "done").length;
+              const calculatedProgress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : (d.progress || 0);
+              const derivedStatus = computeProjectStatus(tasks, d.status);
+              
+              return {
+                id: d.id,
+                name: d.name,
+                status: statusMap[derivedStatus] || derivedStatus,
+                statusCode: derivedStatus,
+                progress: calculatedProgress,
+                color: d.color || "#6E93F5",
+                external_link: d.external_link
+              };
+            })
+            .filter((p: any) => p.statusCode !== "completed");
+
+          setOngoingProjects(mappedOngoing);
         }
       };
       fetchProjects();
@@ -178,6 +186,20 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
         }
       };
       fetchVideoProjects();
+
+      const channel = supabase!.channel('perfil_projects_live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_projects' }, () => {
+          fetchProjects();
+          fetchVideoProjects();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_tasks' }, () => {
+          fetchProjects();
+        })
+        .subscribe();
+
+      return () => {
+        supabase!.removeChannel(channel);
+      };
     }
   }, [user]);
 
@@ -945,10 +967,10 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   return (
     <div className="mx-auto w-full pt-4">
       {/* HEADER */}
-      <Reveal className="mb-10 flex flex-col lg:flex-row lg:items-start gap-8">
+      <Reveal className="mb-10 flex flex-col md:flex-row md:items-start gap-6 sm:gap-8">
         {/* Avatar */}
         <div className="relative group shrink-0 self-start">
-          <div className="relative h-28 w-28 overflow-hidden rounded-full border-2 border-signal-400 bg-ink-900 shadow-[0_12px_30px_rgba(0,0,0,0.5)] sm:h-[120px] sm:w-[120px]">
+          <div className="relative h-24 w-24 overflow-hidden rounded-full border-2 border-signal-400 bg-ink-900 shadow-[0_12px_30px_rgba(0,0,0,0.5)] sm:h-28 sm:w-28 md:h-[120px] md:w-[120px]">
             <Icon name="user" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-10 w-10 text-ink-500" />
             {user?.avatarUrl ? (
               <img src={user.avatarUrl} alt="Avatar" className="absolute inset-0 h-full w-full object-cover" />
@@ -962,54 +984,96 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
             )}
           </div>
           <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
-          <button onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar} className="absolute -bottom-2 -right-2 rounded-full border border-ink-600 bg-ink-800 p-2 text-bone-300 transition-colors hover:bg-signal-400 hover:text-ink-950 disabled:opacity-50" aria-label="Alterar foto">
-            <Icon name="frame" className="h-4 w-4" />
+          <button onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar} className="absolute -bottom-1 -right-1 rounded-full border border-ink-600 bg-ink-800 p-2 text-bone-300 transition-colors hover:bg-signal-400 hover:text-ink-950 disabled:opacity-50 cursor-pointer shadow-lg" aria-label="Alterar foto">
+            <Icon name="frame" className="h-3.5 w-3.5" />
           </button>
         </div>
 
         {/* Informações */}
-        <div className="min-w-0 flex-1 pt-2">
+        <div className="min-w-0 flex-1 w-full pt-1">
           {!isEditingProfile ? (
             <>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3">
-                 <div 
-                   onClick={() => startEditingProfile("name")} 
-                   className="group/name relative flex items-center gap-2 cursor-pointer select-none rounded-lg py-0.5 px-1.5 -ml-1.5 transition-all hover:bg-white/[0.04]"
-                   title="Clique para editar seu nome de exibição"
-                 >
-                   <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-bone-50">
-                     {name || "Usuário"}
-                   </h1>
-                   <Icon name="type" className="h-3.5 w-3.5 opacity-0 group-hover/name:opacity-60 text-signal-400 transition-opacity" />
-                 </div>
+              {/* Header Top Row: Identity on Left, Action Buttons on Right */}
+              <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 mb-3">
+                {/* Identidade */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <div 
+                      onClick={() => startEditingProfile("name")} 
+                      className="group/name relative flex items-center gap-2 cursor-pointer select-none rounded-lg py-0.5 px-1.5 -ml-1.5 transition-all hover:bg-white/[0.04]"
+                      title="Clique para editar seu nome de exibição"
+                    >
+                      <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-bone-50">
+                        {name || "Usuário"}
+                      </h1>
+                      <Icon name="type" className="h-3.5 w-3.5 opacity-0 group-hover/name:opacity-60 text-signal-400 transition-opacity" />
+                    </div>
 
-                 <div 
-                   onClick={() => startEditingProfile("channel")} 
-                   className="group/channel relative flex items-center gap-1.5 cursor-pointer select-none rounded-lg py-0.5 px-2 transition-all hover:bg-signal-400/10 border border-transparent hover:border-signal-400/30"
-                   title="Clique para editar seu nome de usuário (@)"
-                 >
-                   <span className="font-mono text-[13px] text-signal-400 font-medium">
-                     {channel ? (channel.startsWith('@') ? channel : `@${channel}`) : "@usuario"}
-                   </span>
-                   {!channel && (
-                     <span className="text-[9px] font-mono uppercase tracking-wider text-ink-400 bg-ink-800/80 px-1.5 py-0.5 rounded border border-ink-700">
-                       padrão
-                     </span>
-                   )}
-                   <Icon name="type" className="h-3 w-3 opacity-0 group-hover/channel:opacity-80 text-signal-400 transition-opacity" />
-                 </div>
+                    <span className="flex items-center gap-1 rounded-full border border-signal-400/35 bg-signal-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.11em] text-signal-400 shrink-0">
+                      <Icon name="check" className="h-3 w-3" strokeWidth={2.4} /> Verificado
+                    </span>
+                  </div>
 
-                 <span className="flex items-center gap-1 rounded-full border border-signal-400/35 bg-signal-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.11em] text-signal-400">
-                    <Icon name="check" className="h-3 w-3" strokeWidth={2.4} /> Verificado
-                 </span>
-                 <span className="flex items-center gap-1.5 text-[11px] font-mono tracking-widest uppercase text-ink-400 ml-2">
-                    <Icon name="clock" className="h-3 w-3" /> Membro desde {new Date().getFullYear()}
-                 </span>
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <div 
+                      onClick={() => startEditingProfile("channel")} 
+                      className="group/channel relative flex items-center gap-1.5 cursor-pointer select-none rounded-lg py-0.5 px-2 -ml-2 transition-all hover:bg-signal-400/10 border border-transparent hover:border-signal-400/30"
+                      title="Clique para editar seu nome de usuário (@)"
+                    >
+                      <span className="font-mono text-[13px] text-signal-400 font-medium">
+                        {channel ? (channel.startsWith('@') ? channel : `@${channel}`) : "@usuario"}
+                      </span>
+                      {!channel && (
+                        <span className="text-[9px] font-mono uppercase tracking-wider text-ink-400 bg-ink-800/80 px-1.5 py-0.5 rounded border border-ink-700">
+                          padrão
+                        </span>
+                      )}
+                      <Icon name="type" className="h-3 w-3 opacity-0 group-hover/channel:opacity-80 text-signal-400 transition-opacity" />
+                    </div>
+
+                    <span className="flex items-center gap-1.5 text-[11px] font-mono tracking-widest uppercase text-ink-400">
+                      <Icon name="clock" className="h-3 w-3" /> Membro desde {new Date().getFullYear()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Botões de Ação */}
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 shrink-0 w-full xl:w-auto">
+                  <Button 
+                    variant="solid" 
+                    onClick={() => startEditingProfile()} 
+                    className="col-span-2 sm:col-span-1 justify-center text-[11px] font-semibold uppercase tracking-[0.12em] px-3.5 py-2 sm:px-4 sm:py-2.5 shadow-[0_0_20px_rgba(242,179,61,0.25)] hover:shadow-[0_0_25px_rgba(242,179,61,0.4)]"
+                  >
+                    <Icon name="type" className="h-3.5 w-3.5" /> Editar perfil
+                  </Button>
+                  <button 
+                    type="button"
+                    onClick={handleOpenPublicProfile}
+                    className={`flex items-center justify-center gap-2 rounded-lg border border-ink-700 bg-ink-900/50 px-3.5 py-2 sm:px-4 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-bone-300 transition-colors cursor-pointer ${channel ? 'hover:border-signal-400/60 hover:text-bone-50 hover:bg-ink-800/60' : 'opacity-60 hover:border-signal-400/50 hover:text-signal-400'}`}
+                  >
+                    <Icon name="eye" className="h-3.5 w-3.5" /> Ver público
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyProfileLink}
+                    aria-label="Copiar link do perfil"
+                    title={copiedLink ? "Link copiado para a área de transferência!" : "Copiar link do perfil para compartilhar"}
+                    className={`flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
+                      copiedLink
+                        ? "border-[#2FD4A0]/60 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_15px_rgba(47,212,160,0.25)]"
+                        : "border-ink-700 bg-ink-900/50 text-bone-300 hover:border-signal-400/60 hover:text-bone-50 hover:bg-ink-800/60"
+                    }`}
+                  >
+                    <Icon name={copiedLink ? "check" : "copy"} className="h-3.5 w-3.5" />
+                    <span>{copiedLink ? "Copiado!" : "Copiar link"}</span>
+                  </button>
+                </div>
               </div>
 
+              {/* Bio */}
               <div 
                 onClick={() => startEditingProfile("bio")} 
-                className="group/bio mt-2 max-w-[62ch] cursor-pointer rounded-lg p-2 -ml-2 transition-all hover:bg-white/[0.03] border border-transparent hover:border-ink-800"
+                className="group/bio mt-1.5 max-w-3xl cursor-pointer rounded-lg p-2 -ml-2 transition-all hover:bg-white/[0.03] border border-transparent hover:border-ink-800"
                 title="Clique para editar a bio"
               >
                 <p className="text-[13.5px] leading-relaxed text-bone-400 group-hover/bio:text-bone-200 transition-colors flex items-start gap-2">
@@ -1018,7 +1082,8 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 </p>
               </div>
 
-              <div className="mt-5 flex flex-wrap items-center gap-x-7 gap-y-2">
+              {/* Estatísticas (agora com largura total desobstruída) */}
+              <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-2.5">
                 {[
                   [accountMetrics.projectsCount.toString(), accountMetrics.projectsCount === 1 ? "projeto" : "projetos"],
                   [accountMetrics.ideasCount.toString(), "ideias ranqueadas"],
@@ -1031,7 +1096,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 ))}
               </div>
 
-              {/* Links do Perfil */}
+              {/* Links do Perfil (agora com largura total desobstruída) */}
               {(website || instagram || tiktok || youtube || discord) ? (
                 <div className="mt-4 flex flex-wrap items-center gap-2.5">
                   {website && (
@@ -1078,7 +1143,34 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
             </>
           ) : (
             /* EDIÇÃO ATIVA DO PERFIL */
-            <div className="space-y-4 pr-2 anim-fade">
+            <div className="space-y-4 anim-fade w-full">
+              {/* Top Bar no Modo Edição */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-[#232327]">
+                <div>
+                  <h3 className="font-display text-lg font-bold text-white tracking-tight">Editar Perfil</h3>
+                  <p className="text-[12px] text-ink-400 font-mono mt-0.5">Altere suas informações e gerencie a visibilidade dos cards públicos</p>
+                </div>
+                <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
+                  <Button 
+                    variant="solid" 
+                    onClick={saveProfileChanges} 
+                    disabled={saving}
+                    className="justify-center text-[11px] font-bold uppercase tracking-[0.12em] px-4 py-2.5 bg-signal-400 hover:bg-signal-300 text-ink-950 shadow-[0_0_15px_rgba(242,179,61,0.3)]"
+                  >
+                    <Icon name="check" className="h-3.5 w-3.5 stroke-[3]" /> {saving ? "Salvando..." : "Salvar Perfil"}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    type="button"
+                    onClick={cancelEditingProfile} 
+                    disabled={saving}
+                    className="justify-center text-[11px] font-semibold uppercase tracking-[0.12em] px-3.5 py-2.5 border-ink-700 bg-ink-900/60 text-bone-300 hover:text-white cursor-pointer"
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-mono uppercase tracking-widest text-ink-400 block mb-1.5">
@@ -1202,58 +1294,6 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
               </div>
             </div>
           )}
-        </div>
-
-        {/* Botões */}
-        <div className="flex items-center gap-2 pt-2 shrink-0 self-start">
-          {!isEditingProfile ? (
-            <>
-              <Button variant="solid" onClick={() => startEditingProfile()} className="text-[11px] font-semibold uppercase tracking-[0.12em] px-4 py-2.5">
-                 <Icon name="type" className="h-3.5 w-3.5" /> Editar perfil
-              </Button>
-              <button 
-                type="button"
-                onClick={handleOpenPublicProfile}
-                className={`flex items-center gap-2 rounded-lg border border-ink-700 bg-ink-900/50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-bone-300 transition-colors cursor-pointer ${channel ? 'hover:border-signal-400/60 hover:text-bone-50' : 'opacity-60 hover:border-signal-400/50 hover:text-signal-400'}`}
-              >
-                <Icon name="eye" className="h-3.5 w-3.5" /> Ver público
-              </button>
-            </>
-          ) : (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <Button 
-                variant="solid" 
-                onClick={saveProfileChanges} 
-                disabled={saving}
-                className="text-[11px] font-bold uppercase tracking-[0.12em] px-4 py-2.5 bg-signal-400 hover:bg-signal-300 text-ink-950 shadow-[0_0_15px_rgba(242,179,61,0.3)]"
-              >
-                <Icon name="check" className="h-3.5 w-3.5 stroke-[3]" /> {saving ? "Salvando..." : "Salvar Perfil"}
-              </Button>
-              <Button 
-                variant="outline" 
-                type="button"
-                onClick={cancelEditingProfile} 
-                disabled={saving}
-                className="text-[11px] font-semibold uppercase tracking-[0.12em] px-3.5 py-2.5 border-ink-700 bg-ink-900/60 text-bone-300 hover:text-white cursor-pointer"
-              >
-                Cancelar
-              </Button>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={handleCopyProfileLink}
-            aria-label="Copiar link do perfil"
-            title={copiedLink ? "Link copiado para a área de transferência!" : "Copiar link do perfil para compartilhar"}
-            className={`flex items-center gap-2 rounded-lg border px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
-              copiedLink
-                ? "border-[#2FD4A0]/60 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_15px_rgba(47,212,160,0.25)]"
-                : "border-ink-700 bg-ink-900/50 text-bone-300 hover:border-signal-400/60 hover:text-bone-50 hover:bg-ink-800/60"
-            }`}
-          >
-            <Icon name={copiedLink ? "check" : "copy"} className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{copiedLink ? "Copiado!" : "Copiar link"}</span>
-          </button>
         </div>
       </Reveal>
 
@@ -1905,27 +1945,28 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 <span className="h-3.5 w-1 rounded-full bg-[#F2B33D]" />
                 <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Alterar Senha</h3>
               </div>
-              <div className="p-5">
+              <form onSubmit={e => { e.preventDefault(); handleSavePassword(); }} className="p-5">
+                <input type="text" name="username" autoComplete="username" className="hidden" readOnly value={user?.email || "user"} />
                 <div className="grid gap-5">
                   <div>
                     <Label>Senha Atual</Label>
-                    <Input type="password" placeholder="••••••••" value={pass} onChange={e => setPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
+                    <Input type="password" autoComplete="current-password" placeholder="••••••••" value={pass} onChange={e => setPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                   <div>
                     <Label hint="Mín. 8 caracteres, com letras e números">Nova Senha</Label>
-                    <Input type="password" placeholder="••••••••" value={newPass} onChange={e => setNewPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
+                    <Input type="password" autoComplete="new-password" placeholder="••••••••" value={newPass} onChange={e => setNewPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                   <div>
                     <Label>Confirmar Nova Senha</Label>
-                    <Input type="password" placeholder="••••••••" value={newPassConf} onChange={e => setNewPassConf(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
+                    <Input type="password" autoComplete="new-password" placeholder="••••••••" value={newPassConf} onChange={e => setNewPassConf(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                 </div>
                 <div className="mt-6 flex justify-end">
-                  <Button disabled={passSaving} onClick={handleSavePassword} className="bg-[#101012] text-[#d3d3d8] border border-[#232327] hover:bg-[#232327] shadow-[0_0_15px_rgba(242,179,61,0.1)] transition-shadow hover:shadow-[0_0_20px_rgba(242,179,61,0.2)]">
+                  <Button type="submit" disabled={passSaving} className="bg-[#101012] text-[#d3d3d8] border border-[#232327] hover:bg-[#232327] shadow-[0_0_15px_rgba(242,179,61,0.1)] transition-shadow hover:shadow-[0_0_20px_rgba(242,179,61,0.2)]">
                     {passSaving ? "Atualizando..." : "Atualizar Senha"}
                   </Button>
                 </div>
-              </div>
+              </form>
             </Panel>
           </div>
 

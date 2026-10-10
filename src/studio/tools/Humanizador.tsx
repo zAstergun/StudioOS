@@ -5,6 +5,9 @@ import { Card, CopyButton, ToolShell } from "../components/ToolShell";
 import { burstiness, findCliches, humanScore, rewrite, words, type Hit } from "./textAnalysis";
 import { useAutosave } from "./useAutosave";
 import { useExampleMode } from "../auth";
+import { useToolRestore } from "../utils/toolStateRestore";
+import { type Calib } from "../calibration";
+import { CalibrationNotice } from "../components/CalibrationNotice";
 
 function Marked({ text, hits }: { text: string; hits: Hit[] }) {
   if (!text.trim())
@@ -32,11 +35,41 @@ function Marked({ text, hits }: { text: string; hits: Hit[] }) {
   );
 }
 
-export function Humanizador({ onBack, onGo }: { onBack: () => void; onGo: (id: string) => void }) {
+export function Humanizador({
+  onBack,
+  onGo,
+  calib,
+  profileName,
+  profileColor,
+}: {
+  onBack: () => void;
+  onGo: (id: string) => void;
+  calib?: Calib;
+  profileName?: string;
+  profileColor?: string;
+}) {
   const examples = useExampleMode();
   const [draft, setDraft] = useState(
     examples ? "Neste post, vamos mergulhar na jornada de quem quer otimizar seus investimentos. É importante notar que o cenário atual exige uma estratégia robusta e inovadora. Além disso, existem dicas práticas que podem alavancar seus resultados de forma eficiente e transformar sua relação com o dinheiro em uma verdadeira jornada. Vale lembrar que cada passo conta nessa caminhada transformadora." : ""
   );
+
+  useToolRestore("humanizador", (payload) => {
+    if (payload.metadata?.draft) {
+      setDraft(payload.metadata.draft);
+    } else if (payload.content) {
+      const match = payload.content.match(/RASCUNHO ORIGINAL[\r\n]+([\s\S]*?)(?:[\r\n]+VERSÃO HUMANIZADA|$)/i);
+      if (match && match[1]) {
+        setDraft(match[1].trim());
+      } else {
+        const clean = payload.content
+          .replace(/^HUMANIDADE:.*[\r\n]*/i, "")
+          .replace(/^TROCAS:.*[\r\n]*/i, "")
+          .replace(/^RASCUNHO ORIGINAL[\r\n]*/i, "")
+          .trim();
+        setDraft(clean);
+      }
+    }
+  });
 
   const hits = useMemo(() => findCliches(draft), [draft]);
   const b = useMemo(() => burstiness(draft), [draft]);
@@ -46,16 +79,36 @@ export function Humanizador({ onBack, onGo }: { onBack: () => void; onGo: (id: s
   const newHits = findCliches(fixed).length;
   const newScore = fixed.trim() ? humanScore(fixed) : 0;
 
+  const friendlySummary = useMemo(() => {
+    if (!draft.trim()) return "Nenhum texto inserido";
+    if (w < 12) {
+      if (hits.length === 0) {
+        return `🔍 Frase curta (${w} ${w === 1 ? "palavra" : "palavras"}) · Vocabulário limpo, sem marcas de IA · Insira mais texto para medir cadência e ritmo (Nota ${newScore}/100)`;
+      }
+      return `⚠️ Frase curta (${w} ${w === 1 ? "palavra" : "palavras"}) · ${hits.length} ${hits.length === 1 ? "termo robótico ajustado" : "termos robóticos ajustados"} (Nota ${newScore}/100)`;
+    }
+    if (newScore >= 80) {
+      return `✨ Tom altamente autêntico (${newScore}/100) · Ritmo espontâneo e livre de clichês de IA`;
+    }
+    if (newScore >= 65) {
+      return `🌿 Boa naturalidade (${newScore}/100) · ${hits.length > 0 ? `${hits.length} ${hits.length === 1 ? "marca robótica removida" : "marcas robóticas removidas"} · ` : "Sem marcas evidentes de IA · "}Leitura agradável`;
+    }
+    if (newScore >= 45) {
+      return `⚖️ Tom intermediário (${newScore}/100) · ${hits.length > 0 ? `${hits.length} ${hits.length === 1 ? "expressão ajustada" : "expressões ajustadas"} · ` : ""}Frases com ritmo monótono, requer mais variação`;
+    }
+    return `🤖 Tom engessado (${newScore}/100) · ${hits.length > 0 ? `${hits.length} marcas típicas de IA · ` : ""}Recomendado reescrever com tom de conversa`;
+  }, [draft, w, hits.length, newScore]);
+
   useAutosave(
     () => ({
       tool: "humanizador",
       toolName: "Humanizador",
       title: draft.trim() ? `Humanizado — ${draft.slice(0, 68).trim()}…` : "",
-      summary: `−${hits.length} marcas · humanidade ${score}→${newScore}/100 · burstiness ${burstiness(fixed).toFixed(1)}`,
+      summary: friendlySummary,
       tag: `${newScore}/100`,
       content: `HUMANIDADE: ${score}/100 → ${newScore}/100\nTROCAS: ${hits.length} termos (${hits.slice(0, 8).map((h) => `${h.word}→${h.fix || "corte"}`).join(", ")})\n\nRASCUNHO ORIGINAL\n${draft}\n\nVERSÃO HUMANIZADA\n${fixed}`,
     }),
-    [draft, fixed, score, newScore],
+    [draft, fixed, score, newScore, friendlySummary],
     16
   );
 
@@ -79,6 +132,23 @@ export function Humanizador({ onBack, onGo }: { onBack: () => void; onGo: (id: s
         { k: "Humanidade", v: `${score}/100` },
       ]}
       onBack={onBack}
+      onGo={onGo}
+      saveItem={
+        draft.trim()
+          ? {
+              type: "humanizador",
+              group: "Publicação",
+              toolName: "Humanizador",
+              title: `Texto Humanizado (${newScore}/100)`,
+              summary: friendlySummary,
+              tag: `${newScore}/100`,
+              content: `HUMANIDADE: ${score}/100 → ${newScore}/100\nTROCAS: ${hits.length} termos (${hits.slice(0, 8).map((h) => `${h.word}→${h.fix || "corte"}`).join(", ")})\n\nRASCUNHO ORIGINAL\n${draft}\n\nVERSÃO HUMANIZADA\n${fixed}`,
+              metadata: {
+                draft,
+              },
+            }
+          : null
+      }
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
           <Card title="Índice de humanidade" note="0–100" accent="oxide">
@@ -153,6 +223,15 @@ export function Humanizador({ onBack, onGo }: { onBack: () => void; onGo: (id: s
         </div>
       }
     >
+      <CalibrationNotice
+        calib={calib}
+        profileName={profileName}
+        profileColor={profileColor}
+        toolName="Humanizador"
+        onGo={onGo}
+        onGoCalib={() => onGo("calibracao")}
+      />
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Rascunho com marcas de IA" note={`${hits.length} detectadas`} accent="oxide">
           <Textarea

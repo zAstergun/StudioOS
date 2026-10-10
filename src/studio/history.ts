@@ -115,6 +115,22 @@ export async function purgeTrash() {
   if (user && supabase) {
     const cutoff = Date.now() - (retention * 86400000);
     await supabase.from("studioos_history").delete().not("deleted_at", "is", null).lt("deleted_at", cutoff);
+
+    // Purge automático de projetos expirados na lixeira
+    const cutoffISO = new Date(cutoff).toISOString();
+    const { data: expiredProjects } = await supabase
+      .from("studioos_projects")
+      .select("id")
+      .eq("status", "trashed")
+      .lt("created_at", cutoffISO);
+
+    if (expiredProjects && expiredProjects.length > 0) {
+      const ids = expiredProjects.map(p => String(p.id));
+      await supabase.from("studioos_projects").delete().in("id", ids);
+      for (const id of ids) {
+        await supabase.from("studioos_saved_items").delete().filter("metadata->>id", "eq", id);
+      }
+    }
   } else {
     const trash = read<TrashEntry[]>(TRASH_KEY, []);
     const kept = trash.filter((t) => daysLeft(t, retention) > 0);
@@ -145,8 +161,29 @@ export async function saveToHistory(data: Omit<HistoryEntry, "id" | "createdAt" 
   write(HIST_KEY, [entry, ...history].slice(0, QUOTA));
   window.dispatchEvent(new Event("studioos:history"));
 
-  // Track runs in cloud profile stats (if logged in)
+  // Track runs in cloud profile stats and save into studioos_history (if logged in)
   if (supabase) {
+    supabase.auth.getSession().then(({ data: sess }: { data: any }) => {
+      const user = sess?.session?.user;
+      if (user?.id) {
+        supabase
+          .from("studioos_history")
+          .insert({
+            id: entry.id,
+            user_id: user.id,
+            tool: entry.tool,
+            tool_name: entry.toolName,
+            title: entry.title,
+            summary: entry.summary,
+            tag: entry.tag,
+            content: entry.content,
+            created_at: entry.createdAt,
+            favorite: false,
+          })
+          .then();
+      }
+    });
+
     const isIdeia = entry.tool === 'rank' || entry.toolName === 'Rank de Ideia';
     const isProducao = entry.tool === 'roteiro' || entry.toolName?.includes('Roteiro');
     
@@ -178,8 +215,8 @@ export async function dropToTrash(entry: HistoryEntry) {
   const trash = read<TrashEntry[]>(TRASH_KEY, []);
   write(TRASH_KEY, [{ ...entry, deletedAt: Date.now() }, ...trash].slice(0, TRASH_QUOTA));
 
-  // If it's saved in Supabase, mark deleted there too
-  if (user && supabase && entry.favorite) {
+  // If in Supabase, mark deleted
+  if (user && supabase) {
     await supabase.from("studioos_history").update({ deleted_at: Date.now() }).eq("id", entry.id);
   }
 
@@ -233,16 +270,56 @@ export function useStudioOS() {
     let cloudTrash: TrashEntry[] = [];
 
     if (user && supabase) {
-      const [{ data: hist }, { data: trsh }] = await Promise.all([
-        supabase.from("studioos_history").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
-        supabase.from("studioos_history").select("*").not("deleted_at", "is", null).order("deleted_at", { ascending: false }),
+      const [{ data: hist }, { data: trsh }, { data: trashedProjs }] = await Promise.all([
+        supabase.from("studioos_history").select("*").eq("user_id", user.id).is("deleted_at", null).order("created_at", { ascending: false }),
+        supabase.from("studioos_history").select("*").eq("user_id", user.id).not("deleted_at", "is", null).order("deleted_at", { ascending: false }),
+        supabase.from("studioos_projects").select("*").eq("status", "trashed").order("created_at", { ascending: false }),
       ]);
       if (hist) cloudHist = hist.map(mapFromSupabase) as HistoryEntry[];
       if (trsh) cloudTrash = trsh.map(mapFromSupabase) as TrashEntry[];
+      if (trashedProjs && trashedProjs.length > 0) {
+        trashedProjs.forEach((p) => {
+          cloudTrash.push({
+            id: p.id,
+            tool: "projetos",
+            toolName: "Projeto",
+            title: p.name,
+            summary: "Projeto excluído da área de trabalho",
+            content: "Projeto removido e enviado para a lixeira.",
+            createdAt: new Date(p.created_at).getTime(),
+            deletedAt: p.updated_at ? new Date(p.updated_at).getTime() : new Date(p.created_at).getTime(),
+            favorite: false,
+          });
+        });
+      }
     }
     
     const localHist = read<HistoryEntry[]>(HIST_KEY, []);
     const localTrash = read<TrashEntry[]>(TRASH_KEY, []);
+
+    // Sincronizar itens locais novos para Supabase se logado
+    if (user && supabase && localHist.length > 0) {
+      const cloudIds = new Set(cloudHist.map(h => h.id));
+      const cloudTrashIds = new Set(cloudTrash.map(t => t.id));
+      const toSync = localHist.filter(h => !cloudIds.has(h.id) && !cloudTrashIds.has(h.id));
+      if (toSync.length > 0) {
+        supabase
+          .from("studioos_history")
+          .insert(toSync.map(entry => ({
+            id: entry.id,
+            user_id: user.id,
+            tool: entry.tool,
+            tool_name: entry.toolName,
+            title: entry.title,
+            summary: entry.summary,
+            tag: entry.tag,
+            content: entry.content,
+            created_at: entry.createdAt,
+            favorite: Boolean(entry.favorite),
+          })))
+          .then();
+      }
+    }
 
     const histMap = new Map<string, HistoryEntry>();
     localHist.forEach(h => histMap.set(h.id, h));
@@ -251,6 +328,11 @@ export function useStudioOS() {
     const trashMap = new Map<string, TrashEntry>();
     localTrash.forEach(h => trashMap.set(h.id, h));
     cloudTrash.forEach(h => trashMap.set(h.id, h));
+
+    // Se um item está na lixeira, removê-lo do histórico ativo
+    trashMap.forEach((_, id) => {
+      histMap.delete(id);
+    });
 
     setHistory(Array.from(histMap.values()).sort((a, b) => b.createdAt - a.createdAt));
     setTrash(Array.from(trashMap.values()).sort((a, b) => b.deletedAt - a.deletedAt));
@@ -272,10 +354,22 @@ export function useStudioOS() {
     const onEvt = () => reload();
     window.addEventListener("storage", reload);
     window.addEventListener("studioos:history", onEvt);
+
+    // Ouvir realtime no Supabase caso projetos sejam movidos para lixeira ou logs criados
+    let channel: any = null;
+    if (user && supabase) {
+      const channelId = `history_realtime_${Math.random().toString(36).slice(2, 9)}`;
+      channel = supabase.channel(channelId)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_history' }, () => reload())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_projects' }, () => reload())
+        .subscribe();
+    }
+
     return () => {
       if (id) window.clearInterval(id);
       window.removeEventListener("storage", reload);
       window.removeEventListener("studioos:history", onEvt);
+      if (channel && supabase) supabase.removeChannel(channel);
     };
   }, [reload, user]);
 
@@ -284,15 +378,27 @@ export function useStudioOS() {
       clearHistory: async () => {
         if (user && supabase) {
           await supabase.from("studioos_history").delete().is("deleted_at", null);
+          window.dispatchEvent(new Event("studioos:history"));
           reload();
           return;
         }
         write(HIST_KEY, []);
+        window.dispatchEvent(new Event("studioos:history"));
         reload();
       },
       restore: async (id: string) => {
         if (user && supabase) {
+          // Checar se é um projeto na lixeira
+          const { data: projData } = await supabase.from("studioos_projects").select("id").eq("id", id).eq("status", "trashed").maybeSingle();
+          if (projData) {
+            await supabase.from("studioos_projects").update({ status: "planning" }).eq("id", id);
+            window.dispatchEvent(new Event("studioos:history"));
+            reload();
+            return;
+          }
+
           await supabase.from("studioos_history").update({ deleted_at: null }).eq("id", id);
+          window.dispatchEvent(new Event("studioos:history"));
           reload();
           return;
         }
@@ -303,24 +409,39 @@ export function useStudioOS() {
         const trashNow = read<TrashEntry[]>(TRASH_KEY, []).filter((t) => t.id !== id);
         write(TRASH_KEY, trashNow);
         write(HIST_KEY, [rest, ...read<HistoryEntry[]>(HIST_KEY, [])].slice(0, QUOTA));
+        window.dispatchEvent(new Event("studioos:history"));
         reload();
       },
       deleteForever: async (id: string) => {
         if (user && supabase) {
           await supabase.from("studioos_history").delete().eq("id", id);
+          await supabase.from("studioos_projects").delete().eq("id", id);
+          await supabase.from("studioos_saved_items").delete().filter("metadata->>id", "eq", String(id));
+          window.dispatchEvent(new Event("studioos:history"));
           reload();
           return;
         }
         write(TRASH_KEY, read<TrashEntry[]>(TRASH_KEY, []).filter((t) => t.id !== id));
+        window.dispatchEvent(new Event("studioos:history"));
         reload();
       },
       emptyTrash: async () => {
         if (user && supabase) {
           await supabase.from("studioos_history").delete().not("deleted_at", "is", null);
+          const { data: trashedList } = await supabase.from('studioos_projects').select('id').eq('status', 'trashed');
+          if (trashedList && trashedList.length > 0) {
+            const ids = trashedList.map(p => String(p.id));
+            await supabase.from('studioos_projects').delete().eq('status', 'trashed');
+            for (const id of ids) {
+              await supabase.from('studioos_saved_items').delete().filter('metadata->>id', 'eq', id);
+            }
+          }
+          window.dispatchEvent(new Event("studioos:history"));
           reload();
           return;
         }
         write(TRASH_KEY, []);
+        window.dispatchEvent(new Event("studioos:history"));
         reload();
       },
       setApiKey: (key: string) => {

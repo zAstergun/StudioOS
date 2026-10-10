@@ -1,16 +1,13 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { cn } from "../utils/cn";
 import { Button, Icon, Label, Meter, Textarea } from "../components/ui";
 import { Card, CopyButton, ToolShell } from "../components/ToolShell";
 import { useAutosave } from "./useAutosave";
 import { useStudioOS } from "../history";
 import { useExampleMode } from "../auth";
-
-const SUGGESTIONS = [
-  "R$100 em FIIs não vale mais a pena em 2026",
-  "Testei o método do vídeo flopado por 30 dias",
-  "Mostrei meu extrato real depois de 2 anos aportando",
-];
+import { useToolRestore } from "../utils/toolStateRestore";
+import { getDynamicSuggestions, isCalibrated, type Calib } from "../calibration";
+import { CalibrationNotice } from "../components/CalibrationNotice";
 
 const STOP = new Set([
   "a","o","as","os","um","uma","de","do","da","dos","das","em","no","na","nos","nas","com","sem",
@@ -143,31 +140,35 @@ export function verdict(total: number) {
   return { tag: "Fraca", act: "Descartar", tone: "oxide", note: "Teto baixo e sem prova. Volte ao banco de ideias." };
 }
 
-export function RankIdeia({ onBack, onGo, niche }: { onBack: () => void; onGo: (id: string) => void; niche: string }) {
+export function RankIdeia({
+  onBack,
+  onGo,
+  niche,
+  calib,
+  profileName,
+  profileColor,
+}: {
+  onBack: () => void;
+  onGo: (id: string) => void;
+  niche?: string;
+  calib?: Calib;
+  profileName?: string;
+  profileColor?: string;
+}) {
   const examples = useExampleMode();
-  const [localNiche, setLocalNiche] = useState(niche);
+  const effectiveNiche = niche ?? calib?.niche ?? "";
+  const [localNiche, setLocalNiche] = useState(effectiveNiche);
   const [idea, setIdea] = useState(examples ? "Eu parei de investir R$100 por mês em FIIs e mostrei o extrato na tela" : "");
   const [show, setShow] = useState(true);
 
-  const { crits, total } = useMemo(() => evaluate(idea, localNiche), [idea, localNiche]);
-  const v = verdict(total);
+  useEffect(() => {
+    if (effectiveNiche) {
+      setLocalNiche(effectiveNiche);
+    }
+  }, [effectiveNiche]);
 
-  useAutosave(
-    () => ({
-      tool: "rank",
-      toolName: "Rank de Ideia",
-      title: idea.slice(0, 90),
-      summary: `${v.tag} · ${v.act} · ${crits.map((c) => `${c.label.split(" ")[0].toLowerCase()} ${c.score}`).join(" · ")}`,
-      tag: `${total.toFixed(1)}/10`,
-      content: `RATING:${total.toFixed(1)}/10 — ${v.tag} (${v.act})\nIDEIA: ${idea}\nNICHO: ${localNiche || "(não calibrado)"}\n\nCRITÉRIOS\n${crits.map((c) => `${c.label.padEnd(18, " ")} ${c.score}/10 — ${c.why}`).join("\n")}\n\nPESOS\npool 26% · prova 20% · conexão 18% · fit 20% · outlier 16%`,
-    }),
-    [idea, localNiche, total],
-    6
-  );
-
-  const recentRuns = useStudioOS()
-    .history.filter((h) => h.tool === "rank")
-    .slice(0, 5);
+  const activeSuggestions = useMemo(() => getDynamicSuggestions(calib), [calib]);
+  const calibrated = isCalibrated(calib);
 
   const restore = (content: string) => {
     const ideaM = content.match(/IDEIA: (.*)/);
@@ -176,6 +177,38 @@ export function RankIdeia({ onBack, onGo, niche }: { onBack: () => void; onGo: (
     if (nicheM && !nicheM[1].startsWith("(não")) setLocalNiche(nicheM[1]);
     setShow(true);
   };
+
+  useToolRestore("rank", (payload) => {
+    if (payload.metadata?.idea) {
+      setIdea(payload.metadata.idea);
+      if (payload.metadata.niche) setLocalNiche(payload.metadata.niche);
+      setShow(true);
+    } else if (payload.content) {
+      restore(payload.content);
+    }
+  });
+
+  const { crits, total } = useMemo(() => evaluate(idea, localNiche), [idea, localNiche]);
+  const v = verdict(total);
+
+  const friendlySummary = `Classificação: ${v.tag} (Nota ${total.toFixed(1)}/10) · Próximo passo: ${v.act}`;
+
+  useAutosave(
+    () => ({
+      tool: "rank",
+      toolName: "Rank de Ideia",
+      title: idea.slice(0, 90),
+      summary: friendlySummary,
+      tag: `${total.toFixed(1)}/10`,
+      content: `RATING: ${total.toFixed(1)}/10 — ${v.tag} (${v.act})\nIDEIA: ${idea}\nNICHO: ${localNiche || "(não calibrado)"}\n\nCRITÉRIOS\n${crits.map((c) => `${c.label.padEnd(18, " ")} ${c.score}/10 — ${c.why}`).join("\n")}\n\nPESOS\npool 26% · prova 20% · conexão 18% · fit 20% · outlier 16%`,
+    }),
+    [idea, localNiche, total, friendlySummary],
+    6
+  );
+
+  const recentRuns = useStudioOS()
+    .history.filter((h) => h.tool === "rank")
+    .slice(0, 5);
 
   const dash = 2 * Math.PI * 52;
   const pct = total / 10;
@@ -193,6 +226,20 @@ export function RankIdeia({ onBack, onGo, niche }: { onBack: () => void; onGo: (
         { k: "Avaliadas", v: "128" },
       ]}
       onBack={onBack}
+      onGo={onGo}
+      saveItem={idea.trim() ? {
+        type: "rank",
+        group: "Criação",
+        toolName: "Rank de Ideia",
+        title: idea.slice(0, 90),
+        summary: friendlySummary,
+        tag: `${total.toFixed(1)}/10`,
+        content: `RATING: ${total.toFixed(1)}/10 — ${v.tag} (${v.act})\nIDEIA: ${idea}\nNICHO: ${localNiche || "(não calibrado)"}\n\nCRITÉRIOS\n${crits.map((c) => `${c.label.padEnd(18, " ")} ${c.score}/10 — ${c.why}`).join("\n")}\n\nPESOS\npool 26% · prova 20% · conexão 18% · fit 20% · outlier 16%`,
+        metadata: {
+          idea,
+          niche: localNiche,
+        },
+      } : null}
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
           <Card title="Veredito" note="tempo real">
@@ -320,6 +367,16 @@ export function RankIdeia({ onBack, onGo, niche }: { onBack: () => void; onGo: (
         </div>
       }
     >
+      <CalibrationNotice
+        calib={calib}
+        calibrated={calibrated}
+        profileName={profileName}
+        profileColor={profileColor}
+        toolName="Rank de Ideia"
+        onGo={onGo}
+        onGoCalib={() => onGo("calibracao")}
+      />
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]">
         <Card title="Descreva a ideia do vídeo" note="análise ao digitar" accent="signal">
           <Textarea
@@ -345,21 +402,42 @@ export function RankIdeia({ onBack, onGo, niche }: { onBack: () => void; onGo: (
           </div>
 
           <div className="mt-5 space-y-2 border-t border-ink-800 pt-4">
-            {SUGGESTIONS.map((s) => (
+            <div className="flex items-center justify-between pb-1">
+              <span className="font-mono text-[9px] uppercase tracking-wider text-ink-400">
+                {calibrated ? `Sugestões para ${profileName || "este perfil"}` : "Sugestões de teste"}
+              </span>
+              {calibrated && (
+                <span className="flex items-center gap-1 font-mono text-[8.5px] uppercase tracking-wider text-mint-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-mint-400" />
+                  calibradas
+                </span>
+              )}
+            </div>
+
+            {activeSuggestions.map((s) => (
               <button
                 key={s}
+                type="button"
                 onClick={() => setIdea(s)}
-                className="group flex w-full items-center gap-2.5 rounded-md border border-ink-800 bg-ink-950/50 px-3 py-2 text-left text-[12.5px] text-bone-300 transition-all duration-200 hover:border-signal-400/40 hover:bg-ink-850 hover:text-bone-50"
+                className="group flex w-full items-center gap-2.5 rounded-md border border-ink-800 bg-ink-950/50 px-3 py-2 text-left text-[12.5px] text-bone-300 transition-all duration-200 hover:border-signal-400/40 hover:bg-ink-850 hover:text-bone-50 cursor-pointer"
               >
                 <Icon name="spark" className="h-3.5 w-3.5 shrink-0 text-ink-400 transition-colors group-hover:text-signal-400" />
-                {s}
+                <span className="truncate">{s}</span>
               </button>
             ))}
           </div>
         </Card>
 
-        <Card title="Calibração" note="base" accent="bone">
-          <Label hint="1 frase">Nicho do canal</Label>
+        <Card title="Calibração" note={profileName ? `perfil: ${profileName}` : "base"} accent="bone">
+          <div className="mb-2 flex items-center justify-between">
+            <Label hint="1 frase">Nicho do canal</Label>
+            {profileName && (
+              <span className="font-mono text-[9px] uppercase tracking-wider text-bone-400 flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: profileColor || "#F2B33D" }} />
+                {profileName}
+              </span>
+            )}
+          </div>
           <Textarea
             rows={3}
             value={localNiche}
@@ -378,7 +456,16 @@ export function RankIdeia({ onBack, onGo, niche }: { onBack: () => void; onGo: (
                 </span>
               ))}
             {!keywords(localNiche).length && (
-              <span className="font-mono text-[10px] text-ink-400">sem vocabulário calibrado</span>
+              <div className="flex flex-col gap-1 w-full pt-1">
+                <span className="font-mono text-[10px] text-ink-400">sem vocabulário calibrado</span>
+                <button
+                  type="button"
+                  onClick={() => onGo("calibracao")}
+                  className="self-start font-mono text-[9.5px] uppercase tracking-wider text-signal-400 underline hover:text-signal-300 cursor-pointer"
+                >
+                  Calibrar canal agora →
+                </button>
+              </div>
             )}
           </div>
           <p className="mt-3 border-t border-ink-800 pt-3 text-[11.5px] leading-relaxed text-ink-400">

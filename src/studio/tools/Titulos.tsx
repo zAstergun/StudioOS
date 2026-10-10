@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { cn } from "../utils/cn";
 import { Button, Icon, Input, Kicker, Label, Meter, Select, Textarea } from "../components/ui";
 import { Card, CopyButton, ToolShell } from "../components/ToolShell";
 import { useAutosave } from "./useAutosave";
 import { useExampleMode } from "../auth";
+import { useToolRestore } from "../utils/toolStateRestore";
+import { isCalibrated, type Calib } from "../calibration";
+import { CalibrationNotice } from "../components/CalibrationNotice";
 
 const STOP = new Set([
   "a","o","as","os","de","do","da","dos","das","em","no","na","nos","nas","com","para","pra","por",
@@ -87,16 +90,61 @@ function generate(tema: string, tops: string, ctr: number, platform: string): Ge
     .sort((a, b) => b.ctr - a.ctr);
 }
 
-export function Titulos({ onBack, onGo }: { onBack: () => void; onGo: (id: string) => void }) {
+export function Titulos({
+  onBack,
+  onGo,
+  calib,
+  profileName,
+  profileColor,
+}: {
+  onBack: () => void;
+  onGo: (id: string) => void;
+  calib?: Calib;
+  profileName?: string;
+  profileColor?: string;
+}) {
   const examples = useExampleMode();
-  const [tema, setTema] = useState(examples ? "investir R$100 por mês em FIIs" : "");
-  const [tops, setTops] = useState(
-    examples ? "Como saí de R$0 para R$10 mil em 2 anos\nParei de ouvir gerente de banco\n3 erros que me custaram R$8.000" : ""
+  const calibrated = isCalibrated(calib);
+
+  const [tema, setTema] = useState(
+    examples ? "investir R$100 por mês em FIIs" : calib?.niche ? calib.niche.slice(0, 55) : ""
   );
-  const [flops, setFlops] = useState(examples ? "O que são fundos imobiliários\nMinha carteira completa de FIIs" : "");
-  const [ctr, setCtr] = useState(examples ? "4.8" : "");
+  const [tops, setTops] = useState(
+    calib?.tops ? calib.tops : examples ? "Como saí de R$0 para R$10 mil em 2 anos\nParei de ouvir gerente de banco\n3 erros que me custaram R$8.000" : ""
+  );
+  const [flops, setFlops] = useState(
+    calib?.flops ? calib.flops : examples ? "O que são fundos imobiliários\nMinha carteira completa de FIIs" : ""
+  );
+  const [ctr, setCtr] = useState(
+    calib?.ctr ? calib.ctr : examples ? "4.8" : ""
+  );
   const [platform, setPlatform] = useState("yt");
   const [ran, setRan] = useState(true);
+
+  useEffect(() => {
+    if (calib) {
+      if (calib.tops) setTops(calib.tops);
+      if (calib.flops) setFlops(calib.flops);
+      if (calib.ctr) setCtr(calib.ctr);
+      if (!tema && calib.niche) setTema(calib.niche.slice(0, 55));
+    }
+  }, [calib]);
+
+  useToolRestore("titulos", (payload) => {
+    if (payload.metadata?.tema !== undefined) {
+      setTema(payload.metadata.tema);
+      if (payload.metadata.ctr) setCtr(payload.metadata.ctr);
+      if (payload.metadata.tops) setTops(payload.metadata.tops);
+      if (payload.metadata.platform) setPlatform(payload.metadata.platform);
+    } else if (payload.content) {
+      const matchTema = payload.content.match(/TEMA:\s*(.*)/);
+      const matchCtr = payload.content.match(/CTR BASE:\s*([\d.,]+)%/);
+      const matchPlat = payload.content.match(/PLATAFORMA:\s*(.*)/);
+      if (matchTema) setTema(matchTema[1].trim());
+      if (matchCtr) setCtr(matchCtr[1].trim());
+      if (matchPlat) setPlatform(matchPlat[1].trim());
+    }
+  });
 
   const ctrNum = Math.max(0, parseFloat(ctr.replace(",", ".")) || 0);
   const results = useMemo(
@@ -104,13 +152,16 @@ export function Titulos({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
     [tema, tops, ctrNum, platform]
   );
 
+  const best = results[0]?.ctr ?? 0;
+  const friendlySummary = `${results.length} opções de títulos geradas · CTR estimado de até ${best.toFixed(1)}% (base ${ctrNum.toFixed(1)}%)`;
+
   useAutosave(
     () => ({
       tool: "titulos",
       toolName: "Gerador de Títulos",
       title: tema.trim() ? `Títulos — ${tema}` : "",
-      summary: `${results.length} variações · CTR base ${ctrNum.toFixed(1)}% · topo: proj. ${results[0]?.ctr.toFixed(1) ?? "0"}%`,
-      tag: `${results[0]?.ctr.toFixed(1) ?? "0"}%`,
+      summary: friendlySummary,
+      tag: `${best.toFixed(1)}%`,
       content: `TEMA: ${tema}\nCTR BASE: ${ctrNum.toFixed(1)}% · PLATAFORMA: ${platform}\n\n${results
         .map(
           (r, i) =>
@@ -118,11 +169,10 @@ export function Titulos({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
         )
         .join("\n")}`,
     }),
-    [results, tema, ctrNum, platform],
+    [results, tema, ctrNum, platform, friendlySummary, best],
     4
   );
   const vocab = freq(tops).slice(0, 6);
-  const best = results[0]?.ctr ?? 0;
 
   return (
     <ToolShell
@@ -137,6 +187,27 @@ export function Titulos({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
         { k: "Plataforma", v: platform === "yt" ? "YT" : platform === "shorts" ? "Shorts" : "Post" },
       ]}
       onBack={onBack}
+      onGo={onGo}
+      saveItem={tema.trim() ? {
+        type: "titulos",
+        group: "Criação",
+        toolName: "Gerador de Títulos",
+        title: `Títulos — ${tema}`,
+        summary: friendlySummary,
+        tag: `${best.toFixed(1)}%`,
+        content: `TEMA: ${tema}\nCTR BASE: ${ctrNum.toFixed(1)}% · PLATAFORMA: ${platform}\n\n${results
+          .map(
+            (r, i) =>
+              `${String(i + 1).padStart(2, "0")}. ${r.title}\n    padrão: ${r.pattern} · ctr projetado ${r.ctr.toFixed(1)}%${r.flag ? ` · ${r.flag}` : ""}\n    por que: ${r.why}`
+          )
+          .join("\n")}`,
+        metadata: {
+          tema,
+          ctr,
+          tops,
+          platform,
+        },
+      } : null}
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
           <Card title="Vocabulário do canal" note="extraído dos tops" accent="signal">
@@ -193,7 +264,17 @@ export function Titulos({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
         </div>
       }
     >
-      <Card title="Entrada" note="tema + histórico" accent="oxide">
+      <CalibrationNotice
+        calib={calib}
+        calibrated={calibrated}
+        profileName={profileName}
+        profileColor={profileColor}
+        toolName="Gerador de Títulos"
+        onGo={onGo}
+        onGoCalib={() => onGo("calibracao")}
+      />
+
+      <Card title="Entrada" note={profileName ? `perfil: ${profileName}` : "tema + histórico"} accent="oxide">
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="lg:col-span-2">
             <Label hint="assunto principal">Tema do vídeo</Label>

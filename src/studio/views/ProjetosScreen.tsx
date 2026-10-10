@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Icon, Panel, Reveal, SectionHead } from "../components/ui";
 import { cn } from "../utils/cn";
 
@@ -21,12 +21,35 @@ export interface Project {
   external_link?: string;
 }
 
-const STATUS_MAP: Record<string, { label: string; dot: string }> = {
-  active: { label: "Ativo", dot: "bg-emerald-400" },
+export const STATUS_MAP: Record<string, { label: string; dot: string }> = {
+  active: { label: "Em Andamento", dot: "bg-emerald-400" },
   planning: { label: "Planejamento", dot: "bg-signal-400" },
   completed: { label: "Concluído", dot: "bg-blue-400" },
   archived: { label: "Arquivado", dot: "bg-ink-500" },
 };
+
+export function computeProjectStatus(
+  tasks: Array<{ status: string }>, 
+  currentStatus?: string
+): "active" | "planning" | "completed" | "archived" | "trashed" {
+  if (currentStatus === "trashed" || currentStatus === "archived") {
+    return currentStatus;
+  }
+  const total = tasks.length;
+  if (total === 0) {
+    return "planning";
+  }
+  const doneCount = tasks.filter(t => t.status === "done").length;
+  const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
+
+  if (doneCount === total) {
+    return "completed";
+  }
+  if (inProgressCount > 0 || doneCount > 0) {
+    return "active";
+  }
+  return "planning";
+}
 
 const PALETTE = ["#F2604C", "#F2B33D", "#2FD4A0", "#6E93F5", "#D946EF", "#A855F7", "#F472B6", "#38BDF8"];
 
@@ -45,96 +68,116 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
   const [projectToRemoveFromSalvos, setProjectToRemoveFromSalvos] = useState<Project | null>(null);
   const [savedProjectIds, setSavedProjectIds] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    setMounted(true);
-    if (!user) return;
+  const fetchProjects = useCallback(async () => {
+    if (!supabase || !user) return;
+    const { data, error } = await supabase
+      .from("studioos_projects")
+      .select("*, studioos_project_members(user_id), saved_links, external_link, studioos_tasks(id, status)")
+      .order("created_at", { ascending: false });
+      
+    if (!error && data) {
+      const mapped = data.map((d: any) => {
+        const tasks = d.studioos_tasks || [];
+        const tasksCount = tasks.length;
+        const completedTasks = tasks.filter((t: any) => t.status === "done").length;
+        const progress = tasksCount > 0 ? Math.round((completedTasks / tasksCount) * 100) : (d.progress || 0);
+        const derivedStatus = computeProjectStatus(tasks, d.status);
 
-    const fetchProjects = async () => {
-      if (!supabase) return;
-      const { data, error } = await supabase
-        .from("studioos_projects")
-        .select("*, studioos_project_members(user_id), saved_links, external_link")
-        .order("created_at", { ascending: false });
-        
-      if (!error && data) {
-        const mapped = data.map(d => ({
+        // Auto-heal database status if desynchronized
+        if (derivedStatus !== d.status && d.status !== "trashed" && d.status !== "archived") {
+          supabase!.from("studioos_projects").update({ status: derivedStatus, progress }).eq("id", d.id).then();
+        }
+
+        return {
           id: d.id,
           name: d.name,
-          status: d.status as any,
-          progress: d.progress,
+          status: derivedStatus,
+          progress: progress,
           lastUpdate: d.last_update,
-          tasksCount: 0,
-          completedTasks: 0,
+          tasksCount: tasksCount,
+          completedTasks: completedTasks,
           color: d.color,
           owner_id: d.owner_id,
           isShared: d.owner_id !== user.id || (d.studioos_project_members && d.studioos_project_members.length > 0),
           saved_links: d.saved_links || [],
           external_link: d.external_link || ""
-        }));
-        setProjects(mapped);
+        };
+      });
+      setProjects(mapped);
 
-        try {
-          const urlParams = new URLSearchParams(window.location.search);
-          const openId = urlParams.get("project") || sessionStorage.getItem("studioos_open_project_id");
-          if (openId) {
-            const found = mapped.find(p => String(p.id) === String(openId));
-            if (found) {
-              setSelectedProject(found);
-              sessionStorage.removeItem("studioos_open_project_id");
-            }
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const openId = urlParams.get("project") || sessionStorage.getItem("studioos_open_project_id");
+        if (openId) {
+          const found = mapped.find(p => String(p.id) === String(openId));
+          if (found) {
+            setSelectedProject(found);
+            sessionStorage.removeItem("studioos_open_project_id");
           }
-        } catch {}
-      }
-    };
+        }
+      } catch {}
+    }
+  }, [user]);
+
+  const fetchSavedItems = useCallback(async () => {
+    if (!supabase || !user) return;
+    const { data, error } = await supabase
+      .from("studioos_saved_items")
+      .select("id, metadata")
+      .eq("user_id", user.id)
+      .eq("type", "projeto");
+    if (!error && data) {
+      const mapping: Record<string, string> = {};
+      data.forEach(item => {
+        let meta = item.metadata;
+        if (typeof meta === "string") {
+          try { meta = JSON.parse(meta); } catch {}
+        }
+        if (meta?.id) {
+          mapping[String(meta.id)] = item.id;
+          mapping[meta.id] = item.id;
+        }
+      });
+      setSavedProjectIds(mapping);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    setMounted(true);
+    if (!user) return;
 
     fetchProjects();
-
-    const fetchSavedItems = async () => {
-      if (!supabase || !user) return;
-      const { data, error } = await supabase
-        .from("studioos_saved_items")
-        .select("id, metadata")
-        .eq("user_id", user.id)
-        .eq("type", "projeto");
-      if (!error && data) {
-        const mapping: Record<string, string> = {};
-        data.forEach(item => {
-          let meta = item.metadata;
-          if (typeof meta === "string") {
-            try { meta = JSON.parse(meta); } catch {}
-          }
-          if (meta?.id) {
-            mapping[String(meta.id)] = item.id;
-            mapping[meta.id] = item.id;
-          }
-        });
-        setSavedProjectIds(mapping);
-      }
-    };
     fetchSavedItems();
 
     if (!supabase) return;
 
     const channel = supabase.channel('projects_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_projects' }, fetchProjects)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_saved_items', filter: `user_id=eq.${user.id}` }, fetchSavedItems)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_projects' }, () => {
+        fetchProjects();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_tasks' }, () => {
+        fetchProjects();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_saved_items', filter: `user_id=eq.${user.id}` }, () => {
+        fetchSavedItems();
+      })
       .subscribe();
 
     return () => {
       supabase!.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, fetchProjects, fetchSavedItems]);
 
   const filtered = projects.filter(p => {
     if (showSharedOnly && !p.isShared) return false;
-    if (filter === "active") return p.status === "active" || p.status === "planning";
+    if (filter === "active") return p.status === "active";
     if (filter === "completed") return p.status === "completed";
     return p.status !== "trashed";
   });
 
   const stats = useMemo(() => ({
     total: projects.filter(p => p.status !== "trashed").length,
-    active: projects.filter(p => p.status === "active" || p.status === "planning").length,
+    active: projects.filter(p => p.status === "active").length,
     completed: projects.filter(p => p.status === "completed").length,
     avgProgress: projects.filter(p => p.status !== "trashed").length > 0
       ? Math.round(projects.filter(p => p.status !== "trashed").reduce((a, p) => a + p.progress, 0) / projects.filter(p => p.status !== "trashed").length)
@@ -143,6 +186,9 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
 
   const handleSelectProject = (proj: Project | null) => {
     setSelectedProject(proj);
+    if (!proj) {
+      fetchProjects();
+    }
     try {
       const url = new URL(window.location.href);
       if (proj) {
@@ -157,6 +203,15 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
   };
 
   useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const pid = p.get("project");
+      if (pid && !selectedProject) {
+        const found = projects.find(proj => String(proj.id) === String(pid));
+        if (found) setSelectedProject(found);
+      }
+    } catch {}
+
     const handlePop = () => {
       try {
         const p = new URLSearchParams(window.location.search);
@@ -166,6 +221,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
           if (found) setSelectedProject(found);
         } else {
           setSelectedProject(null);
+          fetchProjects();
         }
       } catch {}
     };
@@ -174,7 +230,17 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
   }, [projects]);
 
   if (selectedProject) {
-    return <ProjetoDetailScreen project={selectedProject} onBack={() => handleSelectProject(null)} />;
+    return (
+      <ProjetoDetailScreen 
+        project={selectedProject} 
+        onBack={() => handleSelectProject(null)} 
+        onUpdateProject={(updated) => {
+          setProjects(prev => prev.map(p => p.id === selectedProject.id ? { ...p, ...updated } : p));
+          setSelectedProject(prev => prev ? { ...prev, ...updated } : null);
+        }}
+        onGo={onGo}
+      />
+    );
   }
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -635,6 +701,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                   if (supabase) {
                     await supabase.from("studioos_projects").update({ status: "trashed" }).eq("id", projectToDelete.id);
                   }
+                  window.dispatchEvent(new Event("studioos:history"));
                   setProjectToDelete(null);
                 }}
                 className="flex-1 rounded-lg bg-red-500/10 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-red-500 uppercase transition-colors hover:bg-red-500 hover:text-white"

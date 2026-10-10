@@ -5,6 +5,9 @@ import { Card, CopyButton, ToolShell } from "../components/ToolShell";
 import { burstiness, findCliches, paragraphs, sentences, words } from "./textAnalysis";
 import { useAutosave } from "./useAutosave";
 import { useExampleMode } from "../auth";
+import { useToolRestore } from "../utils/toolStateRestore";
+import { type Calib } from "../calibration";
+import { CalibrationNotice } from "../components/CalibrationNotice";
 
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
 
@@ -106,28 +109,56 @@ function verdict(total: number) {
   return { tag: "Não publique", tone: "oxide", note: "Ainda é rascunho. Falta tese, prova e ritmo." };
 }
 
-export function ScorePost({ onBack, onGo }: { onBack: () => void; onGo: (id: string) => void }) {
+export function ScorePost({
+  onBack,
+  onGo,
+  calib,
+  profileName,
+  profileColor,
+}: {
+  onBack: () => void;
+  onGo: (id: string) => void;
+  calib?: Calib;
+  profileName?: string;
+  profileColor?: string;
+}) {
   const examples = useExampleMode();
   const [draft, setDraft] = useState(
     examples ? "Parei de aportar R$100 por mês em FIIs.\n\nO resultado em 2 anos: R$2.400 colocados, R$2.311 de saldo. Menos que a poupança.\n\nEu escolhi fundo pelo dividend yield e ignorei a vacância. Você não precisa repetir.\n\nHoje eu divido assim: 60% tesouro, 30% um FII de tijolo com vacância abaixo de 10%, 10% caixa.\n\nSe você aporta R$100 por mês, faça essa conta antes do próximo aporte." : ""
   );
   const [format, setFormat] = useState<"carrossel" | "texto" | "thread" | "legenda">("texto");
 
+  useToolRestore("score", (payload) => {
+    if (payload.metadata?.draft !== undefined) {
+      setDraft(payload.metadata.draft);
+      if (payload.metadata.format) setFormat(payload.metadata.format);
+    } else if (payload.content) {
+      const matchDraft = payload.content.match(/RASCUNHO[\r\n]+([\s\S]*)$/i);
+      const matchFormat = payload.content.match(/formato:\s*([^\s·]+)/i);
+      if (matchDraft) setDraft(matchDraft[1].trim());
+      if (matchFormat && ["carrossel", "texto", "thread", "legenda"].includes(matchFormat[1].trim())) {
+        setFormat(matchFormat[1].trim() as any);
+      }
+    }
+  });
+
   const crits = useMemo(() => scorePost(draft, format), [draft, format]);
   const total = crits.reduce((s, c) => s + c.score, 0);
   const v = verdict(total);
   const worst = [...crits].sort((a, b) => a.score - b.score)[0];
+
+  const friendlySummary = `Avaliação: ${total}/50 (${v.tag}) para post em ${format} · ${total >= 40 ? "Pronto para publicar!" : "Dica de melhoria: " + worst.fix}`;
 
   useAutosave(
     () => ({
       tool: "score",
       toolName: "Score de Post",
       title: draft.trim() ? `Score ${total}/50 — ${draft.split("\n")[0].slice(0, 64)}` : "",
-      summary: `${v.tag} · formato ${format} · pior critério: ${worst.label}`,
+      summary: friendlySummary,
       tag: `${total}/50`,
       content: `SCORE DE POST — ${total}/50 · ${v.tag.toUpperCase()}\nformato: ${format} · ${words(draft).length} palavras · burstiness ${burstiness(draft).toFixed(1)}\n\n${crits.map((c) => `${c.label.padEnd(11, " ")} ${String(c.score).padStart(2)}/10 — ${c.ev}`).join("\n")}\n\ncorreção prioritária: ${worst.fix}\n\nRASCUNHO\n${draft}`,
     }),
-    [draft, format, total],
+    [draft, format, total, friendlySummary],
     16
   );
 
@@ -144,6 +175,24 @@ export function ScorePost({ onBack, onGo }: { onBack: () => void; onGo: (id: str
         { k: "Avaliados", v: "312" },
       ]}
       onBack={onBack}
+      onGo={onGo}
+      saveItem={
+        draft.trim()
+          ? {
+              type: "score",
+              group: "Publicação",
+              toolName: "Score de Post",
+              title: `Score ${total}/50 — ${draft.split("\n")[0].slice(0, 50)}`,
+              summary: friendlySummary,
+              tag: `${total}/50`,
+              content: `SCORE DE POST — ${total}/50 · ${v.tag.toUpperCase()}\nformato: ${format} · ${words(draft).length} palavras · burstiness ${burstiness(draft).toFixed(1)}\n\n${crits.map((c) => `${c.label.padEnd(11, " ")} ${String(c.score).padStart(2)}/10 — ${c.ev}`).join("\n")}\n\ncorreção prioritária: ${worst.fix}\n\nRASCUNHO\n${draft}`,
+              metadata: {
+                draft,
+                format,
+              },
+            }
+          : null
+      }
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
           <Card title="Placar" note="tempo real" accent="mint">
@@ -212,6 +261,15 @@ export function ScorePost({ onBack, onGo }: { onBack: () => void; onGo: (id: str
         </div>
       }
     >
+      <CalibrationNotice
+        calib={calib}
+        profileName={profileName}
+        profileColor={profileColor}
+        toolName="Score de Post"
+        onGo={onGo}
+        onGoCalib={() => onGo("calibracao")}
+      />
+
       <Card title="Cole o rascunho completo" note="avaliação ao digitar" accent="mint">
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <Label>Formato do post</Label>

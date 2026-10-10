@@ -5,6 +5,9 @@ import { Card, CopyButton, ToolShell } from "../components/ToolShell";
 import { FRAMEWORKS, type Framework } from "../data";
 import { useAutosave } from "./useAutosave";
 import { useExampleMode } from "../auth";
+import { useToolRestore } from "../utils/toolStateRestore";
+import { isCalibrated, type Calib } from "../calibration";
+import { CalibrationNotice } from "../components/CalibrationNotice";
 
 const GROUPS = ["Todos", "Criação", "Diagnóstico", "Posicionamento", "Estratégia"];
 
@@ -17,7 +20,7 @@ const MENTORS = [
   "Alex Hormozi",
 ];
 
-function parecer(fw: Framework, situation: string, niche: string) {
+function parecer(fw: Framework, situation: string, niche: string, calib?: Calib, profileName?: string) {
   const s = situation.trim();
   const low = s.toLowerCase();
   const signals = [
@@ -33,6 +36,8 @@ function parecer(fw: Framework, situation: string, niche: string) {
   const matched = signals.filter((x) => x.re.test(low));
   const picked = matched.length ? matched.slice(0, 3) : signals.slice(0, 2);
 
+  const topLines = (calib?.tops || "").split("\n").map(t => t.trim()).filter(Boolean).slice(0, 2);
+
   return `PARECER DO MENTOR · FRAMEWORK ${fw.n} — ${fw.title.toUpperCase()}
 
 LENTE APLICADA
@@ -41,8 +46,10 @@ ${fw.lens}
 PERGUNTA-TRILHO
 ${fw.question}
 
-CONTEXTO DO CANAL
-${niche.trim() || "(nicho ainda não calibrado — o parecer sai genérico sem isso)"}
+CONTEXTO DO CANAL ${profileName ? `(PERFIL: ${profileName.toUpperCase()})` : ""}
+${niche.trim() || "(nicho ainda não calibrado — o parecer sai genérico sem isso)"}${
+  topLines.length ? `\nOutliers de referência no canal:\n${topLines.map(t => `• ${t}`).join("\n")}` : ""
+}
 
 LEITURA DO SEU CASO
 ${s || "(descreva a situação para uma leitura específica)"}
@@ -58,12 +65,48 @@ CRITÉRIO DE SAÍDA
 Rode o teste por 14 dias ou 4 vídeos. Se a métrica não mover, a hipótese estava errada — não o esforço.`;
 }
 
-export function Mentor({ onBack, onGo, niche }: { onBack: () => void; onGo: (id: string) => void; niche: string }) {
+export function Mentor({
+  onBack,
+  onGo,
+  niche,
+  calib,
+  profileName,
+  profileColor,
+}: {
+  onBack: () => void;
+  onGo: (id: string) => void;
+  niche?: string;
+  calib?: Calib;
+  profileName?: string;
+  profileColor?: string;
+}) {
+  const effectiveNiche = niche ?? calib?.niche ?? "";
+  const calibrated = isCalibrated(calib);
   const examples = useExampleMode();
   const [group, setGroup] = useState("Todos");
   const [sel, setSel] = useState<Framework>(FRAMEWORKS[3]);
   const [situation, setSituation] = useState(examples ? "Meus vídeos têm CTR de 3% e retenção de 32%. O canal está travado em 8 mil inscritos." : "");
   const [q, setQ] = useState("");
+
+  useToolRestore("mentor", (payload) => {
+    if (payload.metadata?.situation !== undefined) {
+      setSituation(payload.metadata.situation);
+      if (payload.metadata.group) setGroup(payload.metadata.group);
+      if (payload.metadata.q) setQ(payload.metadata.q);
+      if (payload.metadata.frameworkN) {
+        const found = FRAMEWORKS.find((f) => f.n === payload.metadata.frameworkN);
+        if (found) setSel(found);
+      }
+    } else if (payload.content) {
+      const matchCaso = payload.content.match(/CASO ANALISADO[\r\n]+([\s\S]*?)[\r\n]+LENTE/i);
+      if (matchCaso) setSituation(matchCaso[1].trim());
+      const matchFw = payload.content.match(/PARECER ESTRATÉGICO — MODELO (\d+)/i);
+      if (matchFw) {
+        const found = FRAMEWORKS.find((f) => f.n === matchFw[1]);
+        if (found) setSel(found);
+      }
+    }
+  });
 
   const list = useMemo(
     () =>
@@ -73,18 +116,23 @@ export function Mentor({ onBack, onGo, niche }: { onBack: () => void; onGo: (id:
     [group, q]
   );
 
-  const out = useMemo(() => parecer(sel, situation, niche), [sel, situation, niche]);
+  const out = useMemo(
+    () => parecer(sel, situation, effectiveNiche, calib, profileName),
+    [sel, situation, effectiveNiche, calib, profileName]
+  );
+
+  const friendlySummary = `Parecer estratégico com modelo "${sel.title}" (${sel.group}) · Plano de ação em 3 passos estruturado`;
 
   useAutosave(
     () => ({
       tool: "mentor",
       toolName: "Mentor AI",
       title: situation.trim() ? `Parecer ${sel.n} — ${sel.title}` : "",
-      summary: `framework ${sel.n} · ligado no caso: ${situation.slice(0, 90)}`,
+      summary: friendlySummary,
       tag: sel.n,
       content: out,
     }),
-    [out, sel],
+    [out, sel, friendlySummary],
     20
   );
 
@@ -101,6 +149,26 @@ export function Mentor({ onBack, onGo, niche }: { onBack: () => void; onGo: (id:
         { k: "Saída", v: "Parecer" },
       ]}
       onBack={onBack}
+      onGo={onGo}
+      saveItem={
+        situation.trim()
+          ? {
+              type: "mentor",
+              group: "Estratégia",
+              toolName: "Mentor AI",
+              title: `Parecer ${sel.n} — ${sel.title}`,
+              summary: friendlySummary,
+              tag: sel.n,
+              content: out,
+              metadata: {
+                group,
+                frameworkN: sel.n,
+                situation,
+                q,
+              },
+            }
+          : null
+      }
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
           <Card title={`Framework ${sel.n}`} note={sel.group} accent="sky">
@@ -160,6 +228,16 @@ export function Mentor({ onBack, onGo, niche }: { onBack: () => void; onGo: (id:
         </div>
       }
     >
+      <CalibrationNotice
+        calib={calib}
+        calibrated={calibrated}
+        profileName={profileName}
+        profileColor={profileColor}
+        toolName="Mentor AI"
+        onGo={onGo}
+        onGoCalib={() => onGo("calibracao")}
+      />
+
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap gap-1.5">
           {GROUPS.map((g) => (
@@ -233,15 +311,23 @@ export function Mentor({ onBack, onGo, niche }: { onBack: () => void; onGo: (id:
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
-        <Card title="Seu caso" note="entrada do parecer" accent="signal">
+        <Card title="Seu caso" note={profileName ? `perfil: ${profileName}` : "entrada do parecer"} accent="signal">
           <Label hint="seja específico">Situação atual</Label>
           <Textarea rows={7} value={situation} onChange={(e) => setSituation(e.target.value)} placeholder="Ex.: CTR 3%, retenção 32%, canal travado em 8 mil inscritos, 2 vídeos por semana." />
           <div className="mt-3">
-            <Label>Nicho calibrado</Label>
+            <div className="flex items-center justify-between mb-1">
+              <Label>Nicho calibrado</Label>
+              {profileName && (
+                <span className="font-mono text-[9px] uppercase tracking-wider text-bone-400 flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: profileColor || "#F2B33D" }} />
+                  {profileName}
+                </span>
+              )}
+            </div>
             <div className="rounded-md border border-ink-700 bg-ink-950/60 px-3 py-2.5 text-[13px] text-bone-300">
-              {niche.trim() || <span className="text-ink-400">não calibrado — </span>}
-              {!niche.trim() && (
-                <button onClick={() => onGo("calibracao")} className="font-mono text-[11px] text-signal-400 underline underline-offset-2 hover:text-signal-300">
+              {effectiveNiche.trim() || <span className="text-ink-400">não calibrado — </span>}
+              {!effectiveNiche.trim() && (
+                <button type="button" onClick={() => onGo("calibracao")} className="font-mono text-[11px] text-signal-400 underline underline-offset-2 hover:text-signal-300">
                   calibrar agora
                 </button>
               )}

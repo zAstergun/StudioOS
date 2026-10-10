@@ -16,6 +16,7 @@ import {
 import { Button, Icon, Input, Meter } from "../components/ui";
 import { Card, CopyButton } from "../components/ToolShell";
 import { SaveToSalvosModal } from "../components/SaveToSalvosModal";
+import { formatFriendlySummary } from "../utils/toolStateRestore";
 
 const TOOL_ACCENTS: Record<string, Accent> = {
   rank: "signal",
@@ -99,38 +100,11 @@ export function HistoricoX({
   const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sort, setSort] = useState<"recentes" | "antigos" | "score">("recentes");
-  const [trashedProjects, setTrashedProjects] = useState<TrashEntry[]>([]);
   const [savingItem, setSavingItem] = useState<HistoryEntry | null>(null);
   const [itemToRemoveFromSalvos, setItemToRemoveFromSalvos] = useState<HistoryEntry | null>(null);
   const [savedItemIds, setSavedItemIds] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    async function fetchTrashedProjects() {
-      if (!auth.user || !supabase) return;
-      const { data, error } = await supabase
-        .from("studioos_projects")
-        .select("*")
-        .eq("status", "trashed")
-        .order("created_at", { ascending: false });
-
-      if (!error && data) {
-        setTrashedProjects(
-          data.map((p) => ({
-            id: p.id,
-            tool: "projetos",
-            toolName: "Projeto",
-            title: p.name,
-            summary: "Projeto excluído da área de trabalho",
-            content: "Projeto removido e enviado para a lixeira.",
-            createdAt: new Date(p.created_at).getTime(),
-            deletedAt: Date.now(), // Fallback
-            favorite: false,
-          }))
-        );
-      }
-    }
-    fetchTrashedProjects();
-
     async function fetchSavedItems() {
       if (!auth.user || !supabase) return;
       const { data, error } = await supabase
@@ -156,7 +130,8 @@ export function HistoricoX({
 
     if (!supabase) return;
 
-    const channel = supabase.channel('history_saved_items')
+    const channelId = `history_saved_items_${Math.random().toString(36).slice(2, 9)}`;
+    const channel = supabase.channel(channelId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_saved_items', filter: `user_id=eq.${auth.user?.id}` }, fetchSavedItems)
       .subscribe();
 
@@ -174,14 +149,14 @@ export function HistoricoX({
 
   const pillSavedCount = useMemo(() => {
     if (tab === "lixeira") {
-      return [...os.trash, ...trashedProjects].filter(
+      return os.trash.filter(
         (t) => Boolean(t.favorite || savedItemIds[t.id] || savedItemIds[String(t.id)])
       ).length;
     }
     return os.history.filter(
       (h) => Boolean(h.favorite || savedItemIds[h.id] || savedItemIds[String(h.id)])
     ).length;
-  }, [tab, os.trash, trashedProjects, os.history, savedItemIds]);
+  }, [tab, os.trash, os.history, savedItemIds]);
 
   const list = useMemo(() => {
     let l = os.history.filter((h) =>
@@ -202,14 +177,14 @@ export function HistoricoX({
   }, [os.history, fmt, pill, showFav, savedItemIds, q, sort]);
 
   const listTrash = useMemo(() => {
-    let l: TrashEntry[] = [...os.trash, ...trashedProjects];
+    let l: TrashEntry[] = os.trash;
     if (fmt !== "todos") l = l.filter((t) => t.tool === fmt);
     l = l.filter((t) => matchesFilter(t, pill, showFav, savedItemIds));
     if (q.trim()) l = l.filter((t) => (t.title + t.summary + t.content + (t.toolName || "")).toLowerCase().includes(q.toLowerCase()));
     return [...l].sort((a, b) =>
       sort === "antigos" ? a.deletedAt - b.deletedAt : b.deletedAt - a.deletedAt
     );
-  }, [os.trash, trashedProjects, fmt, pill, showFav, savedItemIds, q, sort]);
+  }, [os.trash, fmt, pill, showFav, savedItemIds, q, sort]);
 
   const retention = os.config.trashDays;
 
@@ -254,7 +229,7 @@ export function HistoricoX({
           {[
             { k: "Itens", v: `${os.history.length}${auth.user ? "" : `/${QUOTA}`}`, a: "text-signal-300" },
             { k: "Salvos na Nuvem", v: String(cloudCount), a: "text-bone-100" },
-            { k: "Lixeira", v: `${os.trash.length + trashedProjects.length}${auth.user ? "" : `/${TRASH_QUOTA}`}`, a: (os.trash.length + trashedProjects.length) ? "text-oxide-400" : "text-mint-300" },
+            { k: "Lixeira", v: `${os.trash.length}${auth.user ? "" : `/${TRASH_QUOTA}`}`, a: os.trash.length ? "text-oxide-400" : "text-mint-300" },
             { k: "Expira em", v: retention === 1 ? "1d" : `${retention}d`, a: "text-sky-400" },
           ].map((m) => (
             <div key={m.k} className="bg-ink-900 px-4 py-3">
@@ -293,7 +268,7 @@ export function HistoricoX({
                   tab === id ? "bg-ink-950/20" : "bg-ink-800 text-ink-400"
                 )}
               >
-                {id === "historico" ? os.history.length : (os.trash.length + trashedProjects.length)}
+                {id === "historico" ? os.history.length : os.trash.length}
               </span>
             </button>
           ))}
@@ -484,27 +459,11 @@ export function HistoricoX({
                       expanded={expanded === t.id}
                       onToggle={() => setExpanded(expanded === t.id ? null : t.id)}
                       onRestore={() => {
-                        if (t.tool === 'projetos') {
-                          if (supabase) {
-                            supabase.from('studioos_projects').update({ status: 'planning' }).eq('id', t.id).then(() => {
-                              setTrashedProjects(prev => prev.filter(p => p.id !== t.id));
-                            });
-                          }
-                        } else {
-                          os.restore(t.id);
-                        }
+                        os.restore(t.id);
                       }}
-                      onDestroy={() => {
+                      onDestroy={async () => {
                         if (window.confirm("Excluir permanentemente? Não dá para desfazer.")) {
-                          if (t.tool === 'projetos') {
-                            if (supabase) {
-                              supabase.from('studioos_projects').delete().eq('id', t.id).then(() => {
-                                setTrashedProjects(prev => prev.filter(p => p.id !== t.id));
-                              });
-                            }
-                          } else {
-                            os.deleteForever(t.id);
-                          }
+                          await os.deleteForever(t.id);
                         }
                       }}
                       onGo={onGo}
@@ -518,9 +477,9 @@ export function HistoricoX({
                       <strong className="text-bone-50">{retention === 1 ? "1 dia" : `${retention} dias`}</strong>
                     </span>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (window.confirm("Esvaziar a lixeira inteira? Não dá para recuperar.")) {
-                          os.emptyTrash();
+                          await os.emptyTrash();
                         }
                       }}
                       className="ml-auto rounded border border-oxide-400/40 px-2.5 py-1 font-mono text-[9.5px] tracking-[0.14em] text-oxide-400 uppercase transition-colors hover:bg-oxide-400/15"
@@ -599,7 +558,7 @@ export function HistoricoX({
             <Card title="Ocupação" accent="signal">
               <div className="space-y-3">
                 <Meter value={os.history.length} max={QUOTA} accent="signal" label="Histórico" />
-                <Meter value={os.trash.length + trashedProjects.length} max={TRASH_QUOTA} accent="oxide" label="Lixeira" />
+                <Meter value={os.trash.length} max={TRASH_QUOTA} accent="oxide" label="Lixeira" />
               </div>
             </Card>
           )}
@@ -793,7 +752,9 @@ function HistoryRow({
                 <Icon name="bookmark" fill="currentColor" className="ml-2 inline h-3 w-3 -translate-y-0.5 fill-signal-400 text-signal-400" strokeWidth={1} />
               )}
             </span>
-            <span className="mt-0.5 block truncate text-[11px] text-ink-400">{entry.summary}</span>
+            <span className="mt-0.5 block truncate text-[11px] text-ink-400">
+              {formatFriendlySummary(entry.tool, entry.summary, entry.content)}
+            </span>
           </span>
           <TagChip tag={entry.tag} />
           <span className="hidden shrink-0 font-mono text-[10px] text-ink-500 tabular-nums lg:inline" suppressHydrationWarning>
@@ -968,7 +929,7 @@ function TrashRow({
               )}
             </span>
             <span className="mt-0.5 block truncate text-[11px] text-ink-500">
-              {entry.summary}
+              {formatFriendlySummary(entry.tool, entry.summary, entry.content)}
             </span>
           </span>
           <span

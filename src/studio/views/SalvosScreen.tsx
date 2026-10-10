@@ -2,8 +2,17 @@ import { useState, useEffect, useRef } from "react";
 import { Icon, Reveal } from "../components/ui";
 import { cn } from "../utils/cn";
 import { useAuth, supabase } from "../auth";
+import { prepareToolRestore, formatFriendlySummary } from "../utils/toolStateRestore";
 
 const PALETTE = ["#F2604C", "#F2B33D", "#2FD4A0", "#6E93F5", "#D946EF", "#A855F7", "#F472B6", "#38BDF8"];
+
+const STATUS_LABEL_MAP: Record<string, string> = {
+  planning: "Planejamento",
+  active: "Em Andamento",
+  completed: "Concluído",
+  archived: "Arquivado",
+  trashed: "Lixeira",
+};
 
 export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
   const { user } = useAuth();
@@ -81,6 +90,58 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
         .order("created_at", { ascending: false });
         
       if (!error && data) {
+        // Sincronizar status atualizado de projetos salvos
+        const projIds = data
+          .filter(d => d.type === "projeto" && d.metadata?.id)
+          .map(d => String(d.metadata.id));
+
+        if (projIds.length > 0) {
+          const { data: projectsData } = await supabase!
+            .from("studioos_projects")
+            .select("id, status, color")
+            .in("id", projIds);
+
+          if (projectsData) {
+            const projMap = new Map(projectsData.map(p => [String(p.id), p]));
+
+            // Identificar e remover itens órfãos (projetos deletados permanentemente da lixeira ou do banco)
+            const orphanedItems = data.filter(item => 
+              item.type === "projeto" && 
+              item.metadata?.id && 
+              !projMap.has(String(item.metadata.id))
+            );
+
+            if (orphanedItems.length > 0) {
+              const orphanedIds = orphanedItems.map(o => o.id);
+              supabase!.from("studioos_saved_items").delete().in("id", orphanedIds).then();
+            }
+
+            // Manter apenas itens válidos
+            const validData = data.filter(item => 
+              !(item.type === "projeto" && item.metadata?.id && !projMap.has(String(item.metadata.id)))
+            );
+
+            const synced = validData.map(item => {
+              if (item.type === "projeto" && item.metadata?.id) {
+                const liveProj = projMap.get(String(item.metadata.id));
+                if (liveProj) {
+                  return {
+                    ...item,
+                    metadata: {
+                      ...item.metadata,
+                      status: liveProj.status,
+                      color: liveProj.color || item.metadata.color
+                    }
+                  };
+                }
+              }
+              return item;
+            });
+            setSavedItems(synced);
+            setLoadingItems(false);
+            return;
+          }
+        }
         setSavedItems(data);
       }
       setLoadingItems(false);
@@ -95,6 +156,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
 
     const channelItems = supabase!.channel('items_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_saved_items', filter: `user_id=eq.${user.id}` }, fetchItems)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_projects' }, fetchItems)
       .subscribe();
 
     return () => {
@@ -368,36 +430,68 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                   <h4 className="font-display text-[15px] font-bold text-bone-100 line-clamp-2">
                     {item.title}
                   </h4>
-                  
-                  {item.metadata?.summary && (
-                    <p className="mt-2 text-[11px] text-ink-300 line-clamp-3">
-                      {item.metadata.summary}
+                             {item.metadata?.summary && (
+                    <p className="mt-2 text-[11px] text-ink-300 line-clamp-3 leading-relaxed">
+                      {formatFriendlySummary(item.metadata?.tool || item.type, item.metadata.summary, item.metadata.content)}
                     </p>
                   )}
                   
                   {item.metadata?.status && (
                     <div className="mt-3 flex items-center gap-2 font-mono text-[10px] text-bone-400">
-                      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.metadata.color }} />
-                      Projeto: {item.metadata.status}
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.metadata.color || "#F2B33D" }} />
+                      Projeto: {STATUS_LABEL_MAP[item.metadata.status] || item.metadata.status}
                     </div>
                   )}
 
                   <div className="mt-4 flex flex-wrap items-center gap-2 pt-3 border-t border-ink-800/50">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenItem(item);
-                      }}
-                      className="flex items-center gap-1.5 rounded bg-signal-400/15 border border-signal-400/30 px-3 py-1.5 font-mono text-[9.5px] tracking-widest text-signal-400 uppercase transition-all duration-200 hover:bg-signal-400 hover:text-ink-950 hover:border-signal-400"
-                    >
-                      {item.type === "projeto" ? "Abrir Projeto" : item.type === "link" ? "Abrir Link" : "Abrir"}
-                      <Icon name="arrow" className="h-3 w-3" strokeWidth={2} />
-                    </button>
+                    {(() => {
+                      const toolTarget = item.metadata?.tool || (["humanizador", "rank", "titulos", "hooks", "roteiro", "thumbnail", "receita", "score", "mentor", "membros"].includes(item.type) ? item.type : null);
+                      if (toolTarget && onGo) {
+                        return (
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              prepareToolRestore(toolTarget, item);
+                              onGo(toolTarget);
+                            }}
+                            className="flex items-center gap-1.5 rounded bg-signal-400 px-3 py-1.5 font-mono text-[9.5px] font-bold tracking-wider text-ink-950 uppercase transition-all duration-200 hover:bg-signal-300 shadow-[0_2px_10px_-2px_rgba(242,179,61,0.4)] cursor-pointer"
+                            title="Abrir ferramenta com estes dados carregados"
+                          >
+                            Abrir Ferramenta
+                            <Icon name="arrow" className="h-3 w-3" strokeWidth={2.2} />
+                          </button>
+                        );
+                      }
+                      return (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenItem(item);
+                          }}
+                          className="flex items-center gap-1.5 rounded bg-signal-400/15 border border-signal-400/30 px-3 py-1.5 font-mono text-[9.5px] tracking-widest text-signal-400 uppercase transition-all duration-200 hover:bg-signal-400 hover:text-ink-950 hover:border-signal-400 cursor-pointer"
+                        >
+                          {item.type === "projeto" ? "Abrir Projeto" : item.type === "link" ? "Abrir Link" : "Abrir"}
+                          <Icon name="arrow" className="h-3 w-3" strokeWidth={2} />
+                        </button>
+                      );
+                    })()}
+                    {item.type !== "projeto" && item.type !== "link" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingItem(item);
+                        }}
+                        className="rounded bg-ink-800/60 px-2 py-1.5 font-mono text-[9px] tracking-wider text-bone-300 uppercase hover:bg-ink-700 hover:text-bone-50 transition-colors cursor-pointer"
+                        title="Ver conteúdo completo"
+                      >
+                        Visualizar
+                      </button>
+                    )}
                     {item.url && item.type !== "link" && (
                       <a 
                         href={item.url} 
                         target="_blank" 
-                        rel="noreferrer"
+                        rel="noreferrer" 
                         onClick={(e) => e.stopPropagation()}
                         className="flex items-center gap-1 rounded bg-ink-800/60 px-2 py-1.5 font-mono text-[9px] tracking-wider text-bone-300 uppercase hover:bg-ink-700 hover:text-bone-50 transition-colors"
                         title="Abrir Link Externo"
@@ -707,6 +801,11 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                         • {categories.find(c => c.id === viewingItem.category_id)?.name}
                       </span>
                     )}
+                    {viewingItem.metadata?.status && (
+                      <span className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-signal-400">
+                        • {STATUS_LABEL_MAP[viewingItem.metadata.status] || viewingItem.metadata.status}
+                      </span>
+                    )}
                   </div>
                   <h3 className="font-display text-lg font-bold text-bone-50 line-clamp-1">
                     {viewingItem.title}
@@ -729,7 +828,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                     Resumo
                   </span>
                   <p className="text-[13px] leading-relaxed text-bone-200">
-                    {viewingItem.metadata.summary}
+                    {formatFriendlySummary(viewingItem.metadata?.tool || viewingItem.type, viewingItem.metadata.summary, viewingItem.metadata.content)}
                   </p>
                 </div>
               )}
@@ -785,19 +884,24 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
               >
                 Fechar
               </button>
-              {viewingItem.metadata?.tool && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const tool = viewingItem.metadata.tool;
-                    setViewingItem(null);
-                    onGo?.(tool);
-                  }}
-                  className="rounded-lg bg-signal-400 px-5 py-2 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-950 uppercase transition-colors hover:bg-signal-300 shadow-[0_4px_16px_-4px_rgba(242,179,61,0.5)]"
-                >
-                  Reabrir na Ferramenta
-                </button>
-              )}
+              {(() => {
+                const toolTarget = viewingItem.metadata?.tool || (["humanizador", "rank", "titulos", "hooks", "roteiro", "thumbnail", "receita", "score", "mentor", "membros"].includes(viewingItem.type) ? viewingItem.type : null);
+                if (!toolTarget) return null;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      prepareToolRestore(toolTarget, viewingItem);
+                      setViewingItem(null);
+                      onGo?.(toolTarget);
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg bg-signal-400 px-5 py-2 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-950 uppercase transition-colors hover:bg-signal-300 shadow-[0_4px_16px_-4px_rgba(242,179,61,0.5)] cursor-pointer"
+                  >
+                    Abrir na Ferramenta
+                    <Icon name="arrow" className="h-3 w-3" strokeWidth={2.2} />
+                  </button>
+                );
+              })()}
               {viewingItem.type === "projeto" && (
                 <button
                   type="button"

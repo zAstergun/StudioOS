@@ -17,6 +17,8 @@ type Props = {
   historyCount: number;
   trashCount: number;
   authenticated: boolean;
+  profileName?: string;
+  profileColor?: string;
 };
 
 export function Sidebar({
@@ -30,6 +32,8 @@ export function Sidebar({
   historyCount,
   trashCount,
   authenticated,
+  profileName,
+  profileColor,
 }: Props) {
   const auth = useAuth();
 
@@ -113,9 +117,8 @@ export function Sidebar({
             onClick={() => go("historico")}
             icon="historico"
             label="Histórico & Lixeira"
-            kicker={authenticated ? `${historyCount} logs · ${trashCount} lixeira` : "entre para acessar"}
+            kicker={authenticated ? `${historyCount} ${historyCount === 1 ? "log" : "logs"} · ${trashCount} na lixeira` : "entre para acessar"}
             accent="signal"
-            badge={authenticated ? historyCount : undefined}
           />
           <NavItem
             active={active === "calibracao"}
@@ -182,13 +185,16 @@ export function Sidebar({
       {/* footer status */}
       <div className="border-t border-ink-800 p-4">
         <div className="mb-3 rounded-md border border-ink-800 bg-ink-900/70 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="font-mono text-[9.5px] tracking-[0.18em] text-ink-400 uppercase">
-              Calibração
+          <div className="mb-2 flex items-center justify-between gap-1">
+            <span className="flex items-center gap-1.5 min-w-0 font-mono text-[9.5px] tracking-[0.14em] text-ink-400 uppercase truncate" title={profileName || "Calibração"}>
+              {profileColor && (
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: profileColor }} />
+              )}
+              <span className="truncate">{profileName || "Calibração"}</span>
             </span>
             <span
               className={cn(
-                "font-mono text-[10px] tabular-nums",
+                "font-mono text-[10px] tabular-nums shrink-0",
                 progress >= 100 ? "text-mint-400" : "text-signal-400"
               )}
             >
@@ -328,12 +334,6 @@ function NavItem({
         >
           {badge > 99 ? "99+" : badge}
         </span>
-      )}
-      {badge === 0 && active && (
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
-      )}
-      {badge === undefined && active && (
-        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", `bg-current`)} />
       )}
     </button>
   );
