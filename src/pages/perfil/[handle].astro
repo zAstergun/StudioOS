@@ -242,7 +242,17 @@ const hasAnyPublicCard = cardVis.stats !== false || (cardVis.projects !== false 
                 <span class="text-[10px] font-mono tracking-widest text-ink-400 uppercase">ideias ranqueadas</span>
               </div>
               <div class="flex items-baseline gap-2">
-                <span class="font-display text-[16px] font-bold text-bone-50 tabular-nums">{userStats.avg_rating || "-"}</span>
+                <span class="font-display text-[16px] font-bold text-bone-50 tabular-nums">
+                  {(() => {
+                    if (!userStats.avg_rating) return "-";
+                    const match = String(userStats.avg_rating).match(/([\d.]+)\/5/);
+                    if (match) {
+                      const n = parseFloat(match[1]);
+                      if (!isNaN(n) && n > 5) return `${Math.min(5, (n / 10)).toFixed(1)}/5`;
+                    }
+                    return userStats.avg_rating;
+                  })()}
+                </span>
                 <span class="text-[10px] font-mono tracking-widest text-ink-400 uppercase">nota média</span>
               </div>
             </div>
