@@ -39,6 +39,7 @@ import { AuthScreen } from "./views/AuthScreen";
 import PerfilScreen from "./views/PerfilScreen";
 import { ProjetosScreen } from "./views/ProjetosScreen";
 import { SalvosScreen } from "./views/SalvosScreen";
+import { RankingScreen } from "./views/RankingScreen";
 
 /* ------------------------------------------------------------- footer */
 
@@ -501,6 +502,7 @@ export default function App() {
       config: "Provedor de IA — StudioOS",
       historico: "Histórico & Lixeira — StudioOS",
       lixeira: "Lixeira — StudioOS",
+      ranking: "Ranking de Criadores — StudioOS",
       perfil: "Meu Perfil — StudioOS",
       projetos: "Meus Projetos — StudioOS",
       salvos: "Itens Salvos — StudioOS",
@@ -564,6 +566,8 @@ export default function App() {
                 ? "StudioOS"
                 : view === "login"
                   ? "Login"
+                : view === "ranking"
+                  ? "Ranking"
                 : tool?.name ??
                   (view === "historico" || view === "lixeira" ? "Histórico & Lixeira" : "Configuração")}
             </span>
@@ -694,6 +698,7 @@ export default function App() {
                     profileColor={activeProfile.color}
                   />
                 )}
+                {view === "ranking" && <RankingScreen onGo={go} />}
                 {view === "perfil" && (
                   <PerfilScreen
                     onGo={go}

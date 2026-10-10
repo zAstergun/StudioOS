@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import Cropper from "react-easy-crop";
 import { Panel, Reveal, Icon, Button, Input, Label, Select } from "../components/ui";
 import { useAuth, supabase } from "../auth";
 import { computeProjectStatus } from "./ProjetosScreen";
+import { cn } from "../utils/cn";
 
 const getCroppedImg = async (imageSrc: string, pixelCrop: any): Promise<File | null> => {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -98,6 +99,7 @@ export default function PerfilScreen({
     projects: true,
     video: true,
     achievements: true,
+    comments: true,
   });
 
   // Modo de edição do perfil
@@ -121,12 +123,13 @@ export default function PerfilScreen({
       setTargetNotFound(false);
       return;
     }
+    const client = supabase;
     setTargetLoading(true);
     setTargetNotFound(false);
 
     const fetchTargetProfile = async () => {
       try {
-        const { data: prof, error: profErr } = await supabase
+        const { data: prof, error: profErr } = await client
           .from("profiles")
           .select("*")
           .ilike("channel", cleanViewedHandle)
@@ -139,7 +142,7 @@ export default function PerfilScreen({
         }
         setTargetProfile(prof);
 
-        const { data: projs } = await supabase
+        const { data: projs } = await client
           .from("studioos_projects")
           .select("id, name, status, progress, color, external_link, studioos_tasks(status)")
           .eq("owner_id", prof.id)
@@ -260,6 +263,177 @@ export default function PerfilScreen({
     }
   };
 
+  // Estados e lógica de comentários do perfil
+  const [comments, setComments] = useState<any[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+  const [commentToDelete, setCommentToDelete] = useState<any | null>(null);
+  const [isDeletingComment, setIsDeletingComment] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
+
+  const fetchComments = useCallback(async () => {
+    if (!currentProfileId || !supabase) return;
+    setCommentsLoading(true);
+    setCommentError(null);
+    try {
+      const { data, error } = await supabase.rpc("studioos_get_profile_comments", {
+        p_profile_id: currentProfileId,
+      });
+      if (!error && Array.isArray(data)) {
+        setComments(data);
+      } else {
+        const { data: raw, error: rawErr } = await supabase
+          .from("studioos_profile_comments")
+          .select("id, profile_id, author_id, content, created_at, profiles:author_id(full_name, channel, avatar_url)")
+          .eq("profile_id", currentProfileId)
+          .order("created_at", { ascending: false });
+        if (!rawErr && raw) {
+          setComments(raw.map((r: any) => ({
+            id: r.id,
+            profile_id: r.profile_id,
+            author_id: r.author_id,
+            content: r.content,
+            created_at: r.created_at,
+            author_name: r.profiles?.full_name || "Criador",
+            author_channel: r.profiles?.channel || "usuario",
+            author_avatar: r.profiles?.avatar_url || null,
+          })));
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setCommentsLoading(false);
+    }
+  }, [currentProfileId]);
+
+  useEffect(() => {
+    fetchComments();
+  }, [fetchComments]);
+
+  // Real-time listener para novos comentários e exclusões
+  useEffect(() => {
+    if (!currentProfileId || !supabase) return;
+    const client = supabase;
+    const channel = client
+      .channel(`profile_comments_${currentProfileId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "studioos_profile_comments",
+          filter: `profile_id=eq.${currentProfileId}`,
+        },
+        () => {
+          fetchComments();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  }, [currentProfileId, fetchComments]);
+
+  const handlePostComment = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!user || user.provider === "demo") {
+      alert("Apenas usuários autenticados com conta podem comentar nos perfis do StudioOS.");
+      onGo?.("login");
+      return;
+    }
+    if (!currentProfileId || !supabase) return;
+
+    const trimmed = commentText.trim();
+    if (!trimmed) return;
+    if (trimmed.length > 500) {
+      alert("O comentário deve ter no máximo 500 caracteres.");
+      return;
+    }
+
+    setPostingComment(true);
+    setCommentError(null);
+
+    try {
+      const { error } = await supabase
+        .from("studioos_profile_comments")
+        .insert({
+          profile_id: currentProfileId,
+          author_id: user.id,
+          content: trimmed,
+        });
+
+      if (error) {
+        setCommentError(error.message || "Erro ao publicar comentário.");
+      } else {
+        setCommentText("");
+        fetchComments();
+      }
+    } catch (err: any) {
+      setCommentError(err?.message || "Erro inesperado ao comentar.");
+    } finally {
+      setPostingComment(false);
+    }
+  };
+
+  const handleDeleteComment = (comment: any) => {
+    setCommentToDelete(comment);
+  };
+
+  const confirmDeleteComment = async () => {
+    if (!commentToDelete || !user || !supabase) return;
+
+    setIsDeletingComment(true);
+    setDeletingCommentId(commentToDelete.id);
+    try {
+      const { error } = await supabase
+        .from("studioos_profile_comments")
+        .delete()
+        .eq("id", commentToDelete.id);
+
+      if (error) {
+        alert(error.message || "Não foi possível excluir o comentário.");
+      } else {
+        setComments((prev) => prev.filter((c) => c.id !== commentToDelete.id));
+        setCommentToDelete(null);
+      }
+    } catch {
+      alert("Erro ao excluir comentário.");
+    } finally {
+      setIsDeletingComment(false);
+      setDeletingCommentId(null);
+    }
+  };
+
+  // Fecha modal de exclusão ao apertar Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && commentToDelete && !isDeletingComment) {
+        setCommentToDelete(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [commentToDelete, isDeletingComment]);
+
+  const handleToggleCommentsVisibility = async () => {
+    if (isViewingOther || !user || !supabase) return;
+    const currentVal = cardVisibility.comments !== false;
+    const nextVal = !currentVal;
+    const nextVis = { ...cardVisibility, comments: nextVal };
+    setCardVisibility(nextVis);
+    setDraftCardVisibility(nextVis);
+    try {
+      localStorage.setItem(`studioos.cardVis.${user.id}`, JSON.stringify(nextVis));
+      await supabase.from("profiles").update({ card_visibility: nextVis }).eq("id", user.id);
+    } catch (err) {
+      console.error("Erro ao alternar visibilidade dos comentários:", err);
+    }
+  };
+
   const nameInputRef = useRef<HTMLInputElement>(null);
   const channelInputRef = useRef<HTMLInputElement>(null);
   const bioInputRef = useRef<HTMLTextAreaElement>(null);
@@ -296,6 +470,7 @@ export default function PerfilScreen({
   const [hideOnboarding, setHideOnboarding] = useState(false);
 
   const [ongoingProjects, setOngoingProjects] = useState<any[]>([]);
+  const [completedProjectsCount, setCompletedProjectsCount] = useState<number>(0);
 
   useEffect(() => {
     if (user && supabase) {
@@ -334,6 +509,15 @@ export default function PerfilScreen({
             .filter((p: any) => p.statusCode !== "completed");
 
           setOngoingProjects(mappedOngoing);
+        }
+
+        const { count: compCount } = await supabase!
+          .from("studioos_projects")
+          .select("id", { count: "exact", head: true })
+          .eq("owner_id", user.id)
+          .eq("status", "completed");
+        if (typeof compCount === "number") {
+          setCompletedProjectsCount(compCount);
         }
       };
       fetchProjects();
@@ -740,6 +924,7 @@ export default function PerfilScreen({
       avgRatingStr,
       avgRatingNum,
       bestDowName,
+      completedProjectsCount,
       hasActivity: totalRuns > 0 || ideasCount > 0 || projectsCount > 0
     };
   }, [ongoingProjects, userStats, historyTick]);
@@ -810,7 +995,7 @@ export default function PerfilScreen({
   const metrics = effectiveMetrics;
 
   const displayedCardVis = isViewingOther 
-    ? (targetProfile?.card_visibility || { stats: true, projects: true, video: true, achievements: true }) 
+    ? (targetProfile?.card_visibility || { stats: true, projects: true, video: true, achievements: true, comments: true }) 
     : cardVisibility;
   const displayedName = isViewingOther ? (targetProfile?.full_name || `@${cleanViewedHandle}`) : (name || "Usuário");
   const displayedChannel = isViewingOther ? `@${cleanViewedHandle}` : (channel ? (channel.startsWith('@') ? channel : `@${channel}`) : "@usuario");
@@ -828,6 +1013,7 @@ export default function PerfilScreen({
         total_runs: accountMetrics.totalRuns,
         ideias_ranqueadas: accountMetrics.ideasCount,
         projetos: accountMetrics.projectsCount,
+        projetos_concluidos: accountMetrics.completedProjectsCount,
         streak: accountMetrics.streak,
         studio_minutes: accountMetrics.studioMinutes,
         dow_totals: accountMetrics.dowCounts,
@@ -841,6 +1027,184 @@ export default function PerfilScreen({
       supabase.from('profiles').update({ stats: payload }).eq('id', user.id).then();
     }
   }, [user, accountMetrics, isViewingOther, likesCount]);
+
+  // Carrega e calcula posição do perfil no Ranking Global de Criadores (Top 10)
+  const [userRank, setUserRank] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!currentProfileId) return;
+
+    let isSubscribed = true;
+
+    const fetchRank = async () => {
+      try {
+        if (!supabase) return;
+
+        let list: any[] = [];
+        const { data, error } = await supabase.rpc("studioos_get_creators_ranking");
+        if (!error && Array.isArray(data) && data.length > 0) {
+          list = data;
+        } else {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id, full_name, channel, stats");
+          if (profs && Array.isArray(profs)) {
+            list = profs.map((p: any) => {
+              const stats = p.stats || {};
+              return {
+                id: p.id,
+                likes_count: Number(stats.likes_count ?? stats.curtidas_recebidas) || 0,
+                completed_projects: Number(stats.projetos_concluidos) || 0,
+                ideias_ranqueadas: Number(stats.ideias_ranqueadas) || 0,
+                total_runs: Number(stats.total_runs) || 0,
+                streak: Number(stats.streak) || 0,
+              };
+            });
+          }
+        }
+
+        if (list.length > 0) {
+          // Atualiza dados locais para o criador logado
+          const scored = list.map((item) => {
+            let likes = Number(item.likes_count) || 0;
+            let completed = Number(item.completed_projects) || 0;
+            let ideas = Number(item.ideias_ranqueadas) || 0;
+            let runs = Number(item.total_runs) || 0;
+            let streak = Number(item.streak) || 0;
+
+            if (!isViewingOther && user?.id && item.id === user.id) {
+              likes = Math.max(likes, likesCount);
+              completed = Math.max(completed, accountMetrics.completedProjectsCount);
+              ideas = Math.max(ideas, accountMetrics.ideasCount);
+              runs = Math.max(runs, accountMetrics.totalRuns);
+              streak = Math.max(streak, accountMetrics.streak);
+            }
+
+            const score = likes * 15 + completed * 25 + ideas * 6 + runs * 2 + streak * 4;
+            return { id: item.id, score };
+          });
+
+          scored.sort((a, b) => b.score - a.score);
+
+          const idx = scored.findIndex((c) => c.id === currentProfileId);
+          if (isSubscribed) {
+            if (idx >= 0 && idx < 10) {
+              setUserRank(idx + 1);
+            } else {
+              setUserRank(null);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Erro ao carregar ranking do perfil:", err);
+      }
+    };
+
+    fetchRank();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [
+    currentProfileId,
+    isViewingOther,
+    user?.id,
+    likesCount,
+    accountMetrics.completedProjectsCount,
+    accountMetrics.ideasCount,
+    accountMetrics.totalRuns,
+    accountMetrics.streak,
+  ]);
+
+  const renderRankingBadge = (rank: number | null) => {
+    if (!rank || rank < 1 || rank > 10) return null;
+
+    if (rank === 1) {
+      return (
+        <button
+          type="button"
+          onClick={() => onGo?.("ranking")}
+          title="#1 no Ranking Global do StudioOS. Clique para abrir a tabela de criadores."
+          className="group relative inline-flex items-center gap-1.5 rounded-full border border-[#F2B33D] bg-gradient-to-r from-[#2c1d06] via-[#4a300a] to-[#2c1d06] px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-[0.14em] text-[#FFDF79] shadow-[0_0_20px_rgba(242,179,61,0.5),inset_0_1px_1px_rgba(255,255,255,0.4)] ring-1 ring-[#F2B33D]/60 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_28px_rgba(242,179,61,0.75)] cursor-pointer overflow-hidden shrink-0"
+        >
+          <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-sweep" />
+          <Icon name="crown" className="h-3.5 w-3.5 text-[#FFDF79] drop-shadow-[0_0_6px_rgba(242,179,61,0.9)] animate-pulse" />
+          <span className="bg-gradient-to-r from-[#FFF5D0] via-[#FFDF79] to-[#F2B33D] bg-clip-text text-transparent font-display font-black">
+            #1 TOP CRIADOR
+          </span>
+          <span className="h-1.5 w-1.5 rounded-full bg-[#FFF5D0] shadow-[0_0_6px_#FFDF79] shrink-0" />
+        </button>
+      );
+    }
+
+    if (rank === 2) {
+      return (
+        <button
+          type="button"
+          onClick={() => onGo?.("ranking")}
+          title="#2 no Ranking Global do StudioOS. Clique para abrir a tabela de criadores."
+          className="group relative inline-flex items-center gap-1.5 rounded-full border border-[#A7C8FF] bg-gradient-to-r from-[#0d1624] via-[#1a2b47] to-[#0d1624] px-2.5 py-0.5 text-[10.5px] font-extrabold uppercase tracking-[0.13em] text-[#E0EDFF] shadow-[0_0_18px_rgba(167,200,255,0.4),inset_0_1px_1px_rgba(255,255,255,0.4)] ring-1 ring-[#A7C8FF]/50 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_25px_rgba(167,200,255,0.65)] cursor-pointer overflow-hidden shrink-0"
+        >
+          <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-sweep" />
+          <Icon name="trophy" className="h-3.5 w-3.5 text-[#CFE2FF] drop-shadow-[0_0_6px_rgba(167,200,255,0.85)]" />
+          <span className="bg-gradient-to-r from-white via-[#E0EDFF] to-[#A7C8FF] bg-clip-text text-transparent font-display font-extrabold">
+            #2 RANKING
+          </span>
+          <span className="h-1.5 w-1.5 rounded-full bg-[#CFE2FF] shadow-[0_0_5px_#A7C8FF] shrink-0" />
+        </button>
+      );
+    }
+
+    if (rank === 3) {
+      return (
+        <button
+          type="button"
+          onClick={() => onGo?.("ranking")}
+          title="#3 no Ranking Global do StudioOS. Clique para abrir a tabela de criadores."
+          className="group relative inline-flex items-center gap-1.5 rounded-full border border-[#F28C38] bg-gradient-to-r from-[#241308] via-[#3d1c0a] to-[#241308] px-2.5 py-0.5 text-[10.5px] font-extrabold uppercase tracking-[0.13em] text-[#FFB677] shadow-[0_0_16px_rgba(242,140,56,0.35),inset_0_1px_1px_rgba(255,255,255,0.3)] ring-1 ring-[#F28C38]/45 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_22px_rgba(242,140,56,0.6)] cursor-pointer overflow-hidden shrink-0"
+        >
+          <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/15 to-transparent animate-sweep" />
+          <Icon name="medal" className="h-3.5 w-3.5 text-[#FFB677] drop-shadow-[0_0_5px_rgba(242,140,56,0.8)]" />
+          <span className="bg-gradient-to-r from-[#FFE5CF] via-[#FFB677] to-[#F28C38] bg-clip-text text-transparent font-display font-extrabold">
+            #3 RANKING
+          </span>
+          <span className="h-1.5 w-1.5 rounded-full bg-[#FFB677] shadow-[0_0_5px_#F28C38] shrink-0" />
+        </button>
+      );
+    }
+
+    if (rank <= 5) {
+      return (
+        <button
+          type="button"
+          onClick={() => onGo?.("ranking")}
+          title={`#${rank} no Ranking Global do StudioOS (Top 5). Clique para abrir a tabela de criadores.`}
+          className="group relative inline-flex items-center gap-1.5 rounded-full border border-[#A855F7]/70 bg-gradient-to-r from-[#170c26] via-[#24133b] to-[#170c26] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#E9D5FF] shadow-[0_0_14px_rgba(168,85,247,0.3)] ring-1 ring-[#A855F7]/30 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_18px_rgba(168,85,247,0.5)] cursor-pointer shrink-0"
+        >
+          <Icon name="flame" className="h-3 w-3 text-[#D8B4FE] drop-shadow-[0_0_4px_rgba(168,85,247,0.7)]" />
+          <span className="font-mono font-bold tracking-[0.12em]">
+            #{rank} TOP 5
+          </span>
+          <span className="h-1.5 w-1.5 rounded-full bg-[#D8B4FE] shadow-[0_0_4px_#A855F7] shrink-0" />
+        </button>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={() => onGo?.("ranking")}
+        title={`#${rank} no Ranking Global do StudioOS (Top 10). Clique para abrir a tabela de criadores.`}
+        className="group relative inline-flex items-center gap-1.5 rounded-full border border-[#2FD4A0]/60 bg-gradient-to-r from-[#0a1a15] via-[#102922] to-[#0a1a15] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.11em] text-[#A7F3D0] shadow-[0_0_12px_rgba(47,212,160,0.25)] ring-1 ring-[#2FD4A0]/25 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_16px_rgba(47,212,160,0.45)] cursor-pointer shrink-0"
+      >
+        <Icon name="award" className="h-3 w-3 text-[#2FD4A0] drop-shadow-[0_0_4px_rgba(47,212,160,0.6)]" />
+        <span className="font-mono font-bold tracking-[0.11em]">
+          #{rank} TOP 10
+        </span>
+        <span className="h-1.5 w-1.5 rounded-full bg-[#2FD4A0] shadow-[0_0_4px_#2FD4A0] shrink-0" />
+      </button>
+    );
+  };
 
   const [sessions, setSessions] = useState([
     { id: 1, name: "Chrome no Windows", location: "São Paulo, BR • Sessão Ativa", current: true, time: "Atual" },
@@ -1177,7 +1541,7 @@ export default function PerfilScreen({
   const strokeDashoffset = 238.7 - (238.7 * (completedCount / 5));
   const remainingItems = 5 - completedCount;
 
-  const renderCardVisibilityBanner = (cardKey: "stats" | "projects" | "video" | "achievements", cardLabel: string) => {
+  const renderCardVisibilityBanner = (cardKey: "stats" | "projects" | "video" | "achievements" | "comments", cardLabel: string) => {
     if (isViewingOther) return null;
     const isVisible = isEditingProfile ? draftCardVisibility[cardKey] : cardVisibility[cardKey];
 
@@ -1387,9 +1751,7 @@ export default function PerfilScreen({
                       )}
                     </div>
 
-                    <span className="flex items-center gap-1 rounded-full border border-signal-400/35 bg-signal-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.11em] text-signal-400 shrink-0">
-                      <Icon name="check" className="h-3 w-3" strokeWidth={2.4} /> Verificado
-                    </span>
+                    {renderRankingBadge(userRank)}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -2030,6 +2392,253 @@ export default function PerfilScreen({
 
               </Panel>
             )}
+
+            {/* Card de Comentários da Comunidade */}
+            {(!isViewingOther || displayedCardVis.comments !== false) && (
+              <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
+                {renderCardVisibilityBanner("comments", "Mural de Comentários")}
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
+                  <div className="flex items-center gap-3">
+                    <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
+                    <div className="flex items-center gap-2">
+                      <Icon name="message" className="h-4 w-4 text-[#6E93F5]" />
+                      <h3 className="font-display text-[15px] font-bold text-white tracking-tight">
+                        Mural de Comentários
+                      </h3>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {!isViewingOther && !isEditingProfile && (
+                      <button
+                        onClick={handleToggleCommentsVisibility}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-[9.5px] transition-colors",
+                          cardVisibility.comments !== false
+                            ? "border-[#232327] bg-[#101012] text-[#8c8c94] hover:text-bone-200"
+                            : "border-signal-500/40 bg-signal-500/10 text-signal-400"
+                        )}
+                        title={cardVisibility.comments !== false ? "Clique para ocultar este mural do perfil público" : "Clique para tornar este mural visível no perfil público"}
+                      >
+                        <Icon name={cardVisibility.comments !== false ? "eye" : "eyeOff"} className="h-3 w-3" />
+                        <span>{cardVisibility.comments !== false ? "Visível" : "Oculto"}</span>
+                      </button>
+                    )}
+                    <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">
+                      {comments.length} {comments.length === 1 ? "comentário" : "comentários"}
+                    </span>
+                  </div>
+                </div>
+
+              <div className="p-5 space-y-5">
+                {/* Formulário para novo comentário */}
+                {user && user.provider !== "demo" ? (
+                  <form onSubmit={handlePostComment} className="space-y-3">
+                    <div className="flex gap-3">
+                      {/* Avatar do autor logado */}
+                      <div className="shrink-0">
+                        {user.avatarUrl ? (
+                          <img
+                            src={user.avatarUrl}
+                            alt={user.name || "Você"}
+                            className="h-8 w-8 rounded-full object-cover ring-1 ring-ink-700"
+                          />
+                        ) : (
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-800 font-display text-xs font-bold text-bone-200 ring-1 ring-ink-700">
+                            {(user.name || "U").charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Campo de texto */}
+                      <div className="flex-1">
+                        <textarea
+                          value={commentText}
+                          onChange={(e) => setCommentText(e.target.value)}
+                          placeholder={
+                            isViewingOther
+                              ? `Deixe uma mensagem ou feedback para @${cleanViewedHandle}…`
+                              : "Deixe um recado no seu mural de criador…"
+                          }
+                          rows={2}
+                          maxLength={500}
+                          className="w-full resize-none rounded-lg border border-[#232327] bg-[#101012] p-3 text-xs text-bone-100 placeholder-[#52525b] focus:border-[#6E93F5]/60 focus:outline-none transition-colors"
+                        />
+                        <div className="mt-1.5 flex items-center justify-between">
+                          <span className="font-mono text-[9px] text-[#52525b]">
+                            {commentText.length}/500 caracteres
+                          </span>
+                          <button
+                            type="submit"
+                            disabled={postingComment || !commentText.trim()}
+                            className="inline-flex items-center gap-1.5 rounded-md bg-[#6E93F5] px-3 py-1.5 font-mono text-[11px] font-bold text-ink-950 transition-all hover:bg-[#86A5F7] disabled:opacity-40 disabled:hover:bg-[#6E93F5]"
+                          >
+                            {postingComment ? (
+                              <>
+                                <Icon name="refresh" className="h-3 w-3 animate-spin" />
+                                <span>Enviando…</span>
+                              </>
+                            ) : (
+                              <>
+                                <Icon name="send" className="h-3 w-3" />
+                                <span>Comentar</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {commentError && (
+                      <p className="font-mono text-[11px] text-signal-400">{commentError}</p>
+                    )}
+                  </form>
+                ) : (
+                  /* Bloqueio amigável para visitantes sem login */
+                  <div className="flex flex-col gap-3 rounded-lg border border-[#232327] bg-[#101012]/80 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#6E93F5]/10 text-[#6E93F5]">
+                        <Icon name="lock" className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-bone-200">
+                          Apenas usuários com conta podem comentar
+                        </p>
+                        <p className="text-[11px] text-[#8c8c94]">
+                          Faça login para interagir e deixar seu recado no perfil.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => onGo?.("login")}
+                      className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-[#6E93F5]/40 bg-[#6E93F5]/10 px-3.5 py-1.5 font-mono text-[11px] font-bold text-[#6E93F5] hover:bg-[#6E93F5] hover:text-ink-950 transition-all"
+                    >
+                      <span>Entrar com conta</span>
+                      <Icon name="arrow" className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Divisor */}
+                <div className="h-px w-full bg-[#1c1c20]" />
+
+                {/* Lista de Comentários */}
+                <div className="space-y-3.5">
+                  {commentsLoading && comments.length === 0 ? (
+                    <div className="flex items-center justify-center py-6 font-mono text-xs text-[#8c8c94]">
+                      <Icon name="refresh" className="mr-2 h-3.5 w-3.5 animate-spin text-[#6E93F5]" />
+                      Carregando comentários…
+                    </div>
+                  ) : comments.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#18181b] text-[#52525b]">
+                        <Icon name="message" className="h-5 w-5" />
+                      </div>
+                      <p className="mt-2.5 text-xs font-medium text-bone-300">
+                        Nenhum comentário por aqui ainda
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-[#52525b]">
+                        {isViewingOther
+                          ? `Seja o primeiro a deixar uma mensagem para @${cleanViewedHandle}!`
+                          : "Seu mural está vazio. Usuários que visitarem seu perfil poderão comentar aqui."}
+                      </p>
+                    </div>
+                  ) : (
+                    comments.map((c) => {
+                      const isAuthor = user?.id === c.author_id;
+                      const isProfileOwner = Boolean(user?.id && user.id === currentProfileId);
+                      const canDelete = isAuthor || isProfileOwner;
+                      const isTargetOwner = c.author_id === currentProfileId;
+
+                      return (
+                        <div
+                          key={c.id}
+                          className="group relative flex gap-3 rounded-xl border border-transparent bg-[#101012]/60 p-3.5 transition-colors hover:border-[#232327] hover:bg-[#101012]"
+                        >
+                          {/* Avatar do autor */}
+                          <button
+                            onClick={() => onGo?.("perfil", c.author_channel)}
+                            className="shrink-0 focus:outline-none"
+                          >
+                            {c.author_avatar ? (
+                              <img
+                                src={c.author_avatar}
+                                alt={c.author_name}
+                                className="h-8 w-8 rounded-full object-cover ring-1 ring-ink-700"
+                              />
+                            ) : (
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-800 font-display text-xs font-bold text-bone-200 ring-1 ring-ink-700">
+                                {(c.author_name || "U").charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                          </button>
+
+                          {/* Conteúdo */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <button
+                                  onClick={() => onGo?.("perfil", c.author_channel)}
+                                  className="text-xs font-bold text-bone-100 hover:text-[#6E93F5] transition-colors"
+                                >
+                                  {c.author_name}
+                                </button>
+                                <button
+                                  onClick={() => onGo?.("perfil", c.author_channel)}
+                                  className="font-mono text-[10.5px] text-[#71717a] hover:text-bone-300 transition-colors"
+                                >
+                                  @{c.author_channel}
+                                </button>
+                                {isTargetOwner && (
+                                  <span className="rounded bg-[#F2B33D]/10 px-1.5 py-0.2 font-mono text-[8.5px] font-bold text-[#F2B33D] uppercase border border-[#F2B33D]/20">
+                                    Dono do Perfil
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-[9.5px] text-[#52525b]">
+                                  {new Date(c.created_at).toLocaleDateString("pt-BR", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+
+                                {/* Botão de Excluir */}
+                                {canDelete && (
+                                  <button
+                                    onClick={() => handleDeleteComment(c)}
+                                    disabled={deletingCommentId === c.id}
+                                    className="opacity-0 group-hover:opacity-100 p-1 text-[#71717a] hover:text-signal-400 transition-all rounded hover:bg-signal-500/10"
+                                    title={
+                                      isProfileOwner && !isAuthor
+                                        ? "Excluir comentário (Você é o dono do perfil)"
+                                        : "Excluir meu comentário"
+                                    }
+                                  >
+                                    {deletingCommentId === c.id ? (
+                                      <Icon name="refresh" className="h-3 w-3 animate-spin text-signal-400" />
+                                    ) : (
+                                      <Icon name="trash" className="h-3 w-3" />
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <p className="mt-1.5 text-xs leading-relaxed text-[#d3d3d8] whitespace-pre-wrap break-words">
+                              {c.content}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </Panel>
+          )}
           </div>
 
           {/* Coluna Direita: Caderno & Conquistas */}
@@ -2784,6 +3393,134 @@ export default function PerfilScreen({
               </div>
             </Panel>
           </Reveal>
+        </div>
+      )}
+
+      {/* MODAL DE EXCLUSÃO DE COMENTÁRIO */}
+      {commentToDelete && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!isDeletingComment) setCommentToDelete(null);
+          }}
+        >
+          <div 
+            className="w-full max-w-md animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Panel className="border-[#232327] bg-[#0c0c0e] p-6 shadow-2xl w-full mx-auto relative overflow-hidden">
+              {/* Linha de acento decorativa vermelha */}
+              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#F2604C] to-transparent opacity-80" />
+
+              {/* Cabeçalho */}
+              <div className="mb-5 flex items-start gap-3.5">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#2a1616] border border-[#F2604C]/30 text-[#F2604C] shadow-inner">
+                  <Icon name="trash" className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display text-lg font-bold text-white tracking-tight">
+                      Excluir Comentário
+                    </h3>
+                    {user?.id !== commentToDelete.author_id && (
+                      <span className="rounded bg-[#F2604C]/10 border border-[#F2604C]/25 px-2 py-0.5 font-mono text-[9px] font-bold text-[#F2604C] uppercase tracking-wider">
+                        Moderação
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-[#8c8c94] leading-relaxed">
+                    {user?.id === commentToDelete.author_id
+                      ? "Tem certeza de que deseja remover seu comentário deste perfil?"
+                      : "Como dono do perfil, você pode moderar e remover mensagens do seu mural."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCommentToDelete(null)}
+                  disabled={isDeletingComment}
+                  className="text-[#71717a] hover:text-white transition-colors p-1.5 rounded-lg hover:bg-[#18181b]"
+                  title="Fechar"
+                >
+                  <Icon name="close" className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Pré-visualização do Comentário */}
+              <div className="mb-5 rounded-xl border border-[#232327] bg-[#101012] p-4 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {commentToDelete.author_avatar ? (
+                      <img
+                        src={commentToDelete.author_avatar}
+                        alt={commentToDelete.author_name}
+                        className="h-6 w-6 rounded-full object-cover ring-1 ring-ink-700"
+                      />
+                    ) : (
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-ink-800 font-display text-[11px] font-bold text-bone-200 ring-1 ring-ink-700">
+                        {(commentToDelete.author_name || "U").charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <span className="text-xs font-bold text-bone-100 truncate">
+                      {commentToDelete.author_name}
+                    </span>
+                    <span className="font-mono text-[10.5px] text-[#71717a] truncate">
+                      @{commentToDelete.author_channel}
+                    </span>
+                  </div>
+
+                  <span className="font-mono text-[9.5px] text-[#52525b] shrink-0">
+                    {commentToDelete.created_at
+                      ? new Date(commentToDelete.created_at).toLocaleDateString("pt-BR", {
+                          day: "2-digit",
+                          month: "short",
+                        })
+                      : ""}
+                  </span>
+                </div>
+
+                <div className="rounded-lg bg-[#0a0a0c] border border-[#1e1e22] p-3">
+                  <p className="text-xs text-[#d3d3d8] leading-relaxed whitespace-pre-wrap break-words italic">
+                    "{commentToDelete.content}"
+                  </p>
+                </div>
+              </div>
+
+              {/* Aviso Destrutivo */}
+              <div className="mb-6 rounded-lg bg-[#18181c]/70 border border-[#27272c] px-3.5 py-2.5 text-[11.5px] text-[#8c8c94] flex items-center gap-2.5">
+                <Icon name="alert" className="h-4 w-4 text-[#F2604C] shrink-0" />
+                <span>Esta ação é definitiva e não poderá ser desfeita.</span>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setCommentToDelete(null)}
+                  disabled={isDeletingComment}
+                  className="sm:w-auto border border-[#232327] bg-[#101012] text-[#8c8c94] hover:bg-[#18181b] hover:text-white transition-colors font-semibold text-xs py-2 px-4"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={confirmDeleteComment}
+                  disabled={isDeletingComment}
+                  className="sm:w-auto bg-[#F2604C] hover:bg-[#dc4c38] text-white font-semibold border-none shadow-[0_4px_16px_-4px_rgba(242,96,76,0.45)] transition-all text-xs py-2 px-4 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isDeletingComment ? (
+                    <>
+                      <Icon name="refresh" className="h-3.5 w-3.5 animate-spin" />
+                      <span>Excluindo…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="trash" className="h-3.5 w-3.5" />
+                      <span>Excluir permanentemente</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </Panel>
+          </div>
         </div>
       )}
     </div>

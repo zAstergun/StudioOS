@@ -630,3 +630,97 @@ grant execute on function public.get_profile_likes_info(uuid) to anon, authentic
 grant execute on function public.toggle_profile_like(uuid) to authenticated;
 grant execute on function public.toggle_profile_like_guest(uuid, boolean) to anon, authenticated;
 
+-- Função oficial para buscar o ranking público dos criadores no StudioOS
+create or replace function public.studioos_get_creators_ranking()
+returns table (
+  id uuid,
+  full_name text,
+  channel text,
+  avatar_url text,
+  bio text,
+  likes_count bigint,
+  completed_projects bigint,
+  total_projects bigint,
+  ideias_ranqueadas bigint,
+  total_runs bigint,
+  streak bigint
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    p.id,
+    coalesce(nullif(trim(p.full_name), ''), 'Criador StudioOS') as full_name,
+    coalesce(nullif(trim(p.channel), ''), 'user_' || substr(p.id::text, 1, 6)) as channel,
+    p.avatar_url,
+    p.bio,
+    coalesce((select count(*) from public.studioos_profile_likes l where l.target_user_id = p.id), ((p.stats->>'likes_count')::bigint), 0::bigint) as likes_count,
+    coalesce((select count(*) from public.studioos_projects pr where pr.owner_id = p.id and (pr.status = 'completed' or pr.progress >= 100)), ((p.stats->>'projetos_concluidos')::bigint), 0::bigint) as completed_projects,
+    coalesce((select count(*) from public.studioos_projects pr where pr.owner_id = p.id and pr.status != 'trashed'), ((p.stats->>'projetos')::bigint), 0::bigint) as total_projects,
+    coalesce(((p.stats->>'ideias_ranqueadas')::bigint), 0::bigint) as ideias_ranqueadas,
+    coalesce(((p.stats->>'total_runs')::bigint), 0::bigint) as total_runs,
+    coalesce(((p.stats->>'streak')::bigint), 0::bigint) as streak
+  from public.profiles p
+  order by likes_count desc, completed_projects desc, ideias_ranqueadas desc;
+$$;
+
+grant execute on function public.studioos_get_creators_ranking() to anon, authenticated;
+
+-- ==============================================================================
+-- StudioOS · Sistema de Comentários de Perfis
+-- Regra 1: Qualquer um pode visualizar os comentários públicos.
+-- Regra 2: Apenas usuários autenticados com conta real podem comentar nos perfis.
+-- Regra 3: O autor do comentário OU o dono do perfil podem apagar os comentários.
+-- ==============================================================================
+
+create table if not exists public.studioos_profile_comments (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  author_id uuid not null references public.profiles(id) on delete cascade,
+  content text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.studioos_profile_comments enable row level security;
+
+create policy "comments_select_all" on public.studioos_profile_comments for select using (true);
+create policy "comments_insert_authenticated" on public.studioos_profile_comments for insert with check (auth.uid() = author_id);
+create policy "comments_delete_owner_or_author" on public.studioos_profile_comments for delete using (auth.uid() = author_id or auth.uid() = profile_id);
+
+create or replace function public.studioos_get_profile_comments(p_profile_id uuid)
+returns table (
+  id uuid,
+  profile_id uuid,
+  author_id uuid,
+  content text,
+  created_at timestamptz,
+  author_name text,
+  author_channel text,
+  author_avatar text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    c.id,
+    c.profile_id,
+    c.author_id,
+    c.content,
+    c.created_at,
+    coalesce(p.full_name, 'Criador') as author_name,
+    p.channel as author_channel,
+    p.avatar_url as author_avatar
+  from public.studioos_profile_comments c
+  join public.profiles p on p.id = c.author_id
+  where c.profile_id = p_profile_id
+  order by c.created_at desc;
+$$;
+
+grant execute on function public.studioos_get_profile_comments(uuid) to anon, authenticated;
+grant select, insert, update, delete on table public.studioos_profile_comments to anon, authenticated;
+
+
+
