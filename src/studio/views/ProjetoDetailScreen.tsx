@@ -1,10 +1,19 @@
 import { useState, useEffect } from "react";
-import { Icon, Panel, Reveal } from "../components/ui";
+import { Icon, Panel, Reveal, Button } from "../components/ui";
 import { cn } from "../utils/cn";
 
-import { type Project } from "./ProjetosScreen";
-
+import { type Project, computeProjectStatus } from "./ProjetosScreen";
 import { useAuth, supabase } from "../auth";
+import { useStudioOS } from "../history";
+import { TOOLS } from "../data";
+import { 
+  type ProjectSavedItem, 
+  TOOL_GROUP_MAP, 
+  TOOL_NAME_MAP, 
+  TOOL_ICON_MAP, 
+  TOOL_ACCENT_STYLES 
+} from "../types/projectSavedItem";
+import { prepareToolRestore, formatFriendlySummary } from "../utils/toolStateRestore";
 
 interface Task {
   id: string;
@@ -21,7 +30,41 @@ const COL_CONFIG: Record<string, { label: string; icon: string; accent: string; 
   done:        { label: "Concluído",     icon: "check",   accent: "text-emerald-400", dotColor: "bg-emerald-400" },
 };
 
-export function ProjetoDetailScreen({ project, onBack }: { project: Project, onBack: () => void }) {
+const normalizeSavedItems = (raw: any[]): ProjectSavedItem[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item, idx) => {
+    if (!item) return null;
+    const isUrlLink = Boolean(item.url && !item.content && (!item.type || item.type === "link"));
+    const type = item.type || (isUrlLink ? "link" : "custom");
+    const group = item.group || (isUrlLink ? "Link" : TOOL_GROUP_MAP[type] || "Criação");
+    const toolName = item.toolName || (isUrlLink ? "Link Externo" : TOOL_NAME_MAP[type] || "Item");
+    return {
+      id: item.id || `psi_${idx}_${Date.now()}`,
+      title: item.title || "Sem título",
+      url: item.url,
+      type,
+      group,
+      toolName,
+      summary: item.summary,
+      content: item.content,
+      tag: item.tag,
+      metadata: item.metadata,
+      createdAt: item.createdAt || Date.now(),
+    };
+  }).filter(Boolean) as ProjectSavedItem[];
+};
+
+export function ProjetoDetailScreen({ 
+  project, 
+  onBack,
+  onUpdateProject,
+  onGo,
+}: { 
+  project: Project, 
+  onBack: () => void,
+  onUpdateProject?: (updated: Partial<Project>) => void,
+  onGo?: (view: string) => void,
+}) {
   const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -47,14 +90,43 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [editNoteContent, setEditNoteContent] = useState("");
 
-  const [savedLinks, setSavedLinks] = useState<Array<{ title: string, url: string }>>(project.saved_links || []);
+  const os = useStudioOS();
+  const [savedItems, setSavedItems] = useState<ProjectSavedItem[]>(() => normalizeSavedItems(project.saved_links || []));
+  const [itemsFilter, setItemsFilter] = useState<"todos" | "Criação" | "Publicação" | "Estratégia" | "Link">("todos");
+  const [viewingSavedItem, setViewingSavedItem] = useState<ProjectSavedItem | null>(null);
+  const [showAddToolModal, setShowAddToolModal] = useState(false);
+  const [toolSearch, setToolSearch] = useState("");
+  const [toolFilterGroup, setToolFilterGroup] = useState<"todos" | "Criação" | "Publicação" | "Estratégia">("todos");
+  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
+  const [copiedModalContent, setCopiedModalContent] = useState(false);
+
   const [showAddLink, setShowAddLink] = useState(false);
   const [newLinkTitle, setNewLinkTitle] = useState("");
   const [newLinkUrl, setNewLinkUrl] = useState("");
-  const [copiedLinkIndex, setCopiedLinkIndex] = useState<number | null>(null);
   const [isEditingExternalLink, setIsEditingExternalLink] = useState(false);
   const [tempExternalLink, setTempExternalLink] = useState("");
   const [localExternalLink, setLocalExternalLink] = useState(project.external_link || "");
+
+  const syncProjectProgress = async (taskList: Task[]) => {
+    const total = taskList.length;
+    const done = taskList.filter(t => t.status === "done").length;
+    const newProg = total > 0 ? Math.round((done / total) * 100) : 0;
+    const newStatus = computeProjectStatus(taskList, project.status);
+
+    onUpdateProject?.({
+      status: newStatus,
+      progress: newProg,
+      tasksCount: total,
+      completedTasks: done
+    });
+
+    if (supabase) {
+      await supabase
+        .from("studioos_projects")
+        .update({ progress: newProg, status: newStatus })
+        .eq("id", project.id);
+    }
+  };
 
   useEffect(() => {
     setLocalExternalLink(project.external_link || "");
@@ -62,8 +134,21 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
   }, [project.external_link]);
 
   useEffect(() => {
-    setSavedLinks(project.saved_links || []);
+    setSavedItems(normalizeSavedItems(project.saved_links || []));
   }, [project.saved_links]);
+
+  useEffect(() => {
+    const handleSavedEvent = (e: any) => {
+      if (e.detail?.projectId === project.id && e.detail?.savedItem) {
+        setSavedItems(prev => {
+          if (prev.some(p => p.id === e.detail.savedItem.id)) return prev;
+          return [e.detail.savedItem, ...prev];
+        });
+      }
+    };
+    window.addEventListener("studioos:project_saved_items", handleSavedEvent);
+    return () => window.removeEventListener("studioos:project_saved_items", handleSavedEvent);
+  }, [project.id]);
 
   useEffect(() => {
     setMounted(true);
@@ -78,13 +163,15 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
         .order("created_at", { ascending: true });
 
       if (!error && data) {
-        setTasks(data.map(d => ({
+        const loadedTasks: Task[] = data.map(d => ({
           id: d.id,
           title: d.title,
           description: d.description,
           status: d.status as any,
           project_id: d.project_id
-        })));
+        }));
+        setTasks(loadedTasks);
+        syncProjectProgress(loadedTasks);
       }
     };
 
@@ -146,7 +233,10 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
       assignee_id: user.id
     };
 
-    setTasks([...tasks, { ...newTask, status: newTask.status as any }]);
+    const nextTasks = [...tasks, { ...newTask, status: newTask.status as any }];
+    setTasks(nextTasks);
+    syncProjectProgress(nextTasks);
+
     setShowTaskModal(null);
     setNewTaskTitle("");
     setNewTaskDescription("");
@@ -165,7 +255,10 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
     
     const taskId = taskToDelete.id;
     setTaskToDelete(null);
-    setTasks(prev => prev.filter(t => t.id !== taskId));
+    const nextTasks = tasks.filter(t => t.id !== taskId);
+    setTasks(nextTasks);
+    syncProjectProgress(nextTasks);
+
     await supabase.from("studioos_tasks").delete().eq("id", taskId);
   };
 
@@ -173,7 +266,9 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
     const task = tasks.find(t => t.id === taskId);
     if (!task || task.status === newStatus) return;
 
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+    const nextTasks = tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
+    setTasks(nextTasks);
+    syncProjectProgress(nextTasks);
 
     if (supabase) {
       await supabase.from("studioos_tasks").update({ status: newStatus }).eq("id", taskId);
@@ -237,6 +332,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
   const handleRestoreProject = async () => {
     if (!supabase || project.owner_id !== user?.id) return;
     await supabase.from("studioos_projects").update({ status: "planning" }).eq("id", project.id);
+    window.dispatchEvent(new Event("studioos:history"));
     onBack();
   };
 
@@ -270,6 +366,43 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
     setIsEditingExternalLink(false);
   };
 
+  const handleSaveItemDirect = async (newItem: ProjectSavedItem) => {
+    const updated = [newItem, ...savedItems.filter(s => s.id !== newItem.id)];
+    setSavedItems(updated);
+    if (supabase) {
+      await supabase.from("studioos_projects").update({ saved_links: updated }).eq("id", project.id);
+    }
+  };
+
+  const handleDeleteSavedItem = async (itemId: string) => {
+    const updated = savedItems.filter(item => item.id !== itemId);
+    setSavedItems(updated);
+    if (viewingSavedItem?.id === itemId) setViewingSavedItem(null);
+    if (supabase) {
+      await supabase.from("studioos_projects").update({ saved_links: updated }).eq("id", project.id);
+    }
+  };
+
+  const handleImportHistoryRun = async (run: any) => {
+    const toolType = run.tool;
+    const group = TOOL_GROUP_MAP[toolType] || "Criação";
+    const toolName = run.toolName || TOOL_NAME_MAP[toolType] || "Ferramenta";
+
+    const newItem: ProjectSavedItem = {
+      id: `psi_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: toolType,
+      group,
+      toolName,
+      title: run.title || `${toolName} - ${new Date().toLocaleDateString("pt-BR")}`,
+      summary: run.summary,
+      content: run.content,
+      tag: run.tag,
+      createdAt: run.createdAt || Date.now(),
+    };
+
+    await handleSaveItemDirect(newItem);
+  };
+
   const handleSaveLink = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLinkTitle.trim() || !newLinkUrl.trim()) return;
@@ -277,23 +410,20 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
     let url = newLinkUrl.trim();
     if (!url.startsWith('http')) url = `https://${url}`;
 
-    const newLinks = [...savedLinks, { title: newLinkTitle.trim(), url }];
-    setSavedLinks(newLinks);
+    const newItem: ProjectSavedItem = {
+      id: `psi_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: "link",
+      group: "Link",
+      toolName: "Link Externo",
+      title: newLinkTitle.trim(),
+      url,
+      createdAt: Date.now(),
+    };
+
+    await handleSaveItemDirect(newItem);
     setShowAddLink(false);
     setNewLinkTitle("");
     setNewLinkUrl("");
-
-    if (supabase) {
-      await supabase.from("studioos_projects").update({ saved_links: newLinks }).eq("id", project.id);
-    }
-  };
-
-  const handleDeleteLink = async (index: number) => {
-    const newLinks = savedLinks.filter((_, i) => i !== index);
-    setSavedLinks(newLinks);
-    if (supabase) {
-      await supabase.from("studioos_projects").update({ saved_links: newLinks }).eq("id", project.id);
-    }
   };
 
   const columns = [
@@ -306,7 +436,8 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
   const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
   const doneCount = tasks.filter(t => t.status === "done").length;
   const totalTasks = tasks.length;
-  const progressPercent = totalTasks > 0 ? Math.round((doneCount / totalTasks) * 100) : project.progress;
+  const progressPercent = totalTasks > 0 ? Math.round((doneCount / totalTasks) * 100) : (project.progress || 0);
+  const currentStatus = computeProjectStatus(tasks, project.status);
 
   return (
     <div className="mx-auto w-full pt-4">
@@ -328,25 +459,27 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
               className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl"
               style={{ backgroundColor: `${project.color}12`, color: project.color }}
             >
-              <Icon name={project.status === 'completed' ? 'check' : 'layers'} className="h-5 w-5" strokeWidth={1.6} />
+              <Icon name={currentStatus === 'completed' ? 'check' : 'layers'} className="h-5 w-5" strokeWidth={1.6} />
             </div>
             <div>
               <div className="mb-1.5 flex items-center gap-2.5">
                 <span className={cn(
                   "flex items-center gap-1.5 rounded px-2 py-0.5 font-mono text-[9px] tracking-[0.12em] uppercase",
-                  project.status === 'active' ? "bg-emerald-400/10 text-emerald-400" :
-                  project.status === 'planning' ? "bg-signal-400/10 text-signal-400" :
-                  project.status === 'trashed' ? "bg-red-400/10 text-red-400" :
+                  currentStatus === 'active' ? "bg-emerald-400/10 text-emerald-400" :
+                  currentStatus === 'planning' ? "bg-signal-400/10 text-signal-400" :
+                  currentStatus === 'completed' ? "bg-blue-400/10 text-blue-400" :
+                  currentStatus === 'trashed' ? "bg-red-400/10 text-red-400" :
                   "bg-ink-800 text-ink-300"
                 )}>
                   <span className={cn(
                     "h-1.5 w-1.5 rounded-full",
-                    project.status === 'active' ? "bg-emerald-400" :
-                    project.status === 'planning' ? "bg-signal-400" :
-                    project.status === 'trashed' ? "bg-red-400" :
+                    currentStatus === 'active' ? "bg-emerald-400" :
+                    currentStatus === 'planning' ? "bg-signal-400" :
+                    currentStatus === 'completed' ? "bg-blue-400" :
+                    currentStatus === 'trashed' ? "bg-red-400" :
                     "bg-ink-500"
                   )} />
-                  {project.status === 'active' ? 'Ativo' : project.status === 'planning' ? 'Planejamento' : project.status === 'trashed' ? 'Na Lixeira' : 'Concluído'}
+                  {currentStatus === 'active' ? 'Em Andamento' : currentStatus === 'planning' ? 'Planejamento' : currentStatus === 'trashed' ? 'Na Lixeira' : 'Concluído'}
                 </span>
                 <span className="font-mono text-[9px] text-ink-400">·</span>
                 <span className="font-mono text-[9px] text-bone-300">{project.lastUpdate}</span>
@@ -591,18 +724,67 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
 
       {/* NOTES & EXTRAS */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* SAVED ITEMS */}
+        {/* ITENS SALVOS DO PROJETO */}
         <Reveal delay={240}>
           <div className="overflow-hidden rounded-xl border border-ink-800/40 bg-ink-900/20">
-            <div className="flex items-center justify-between border-b border-ink-800/30 px-5 py-3.5">
+            {/* Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-800/30 px-5 py-3.5">
               <div className="flex items-center gap-2.5">
-                <Icon name="bookmark" className="h-3.5 w-3.5 text-bone-300" strokeWidth={1.8} />
-                <h3 className="font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase">
-                  Itens Salvos
+                <Icon name="bookmark" className="h-3.5 w-3.5 text-signal-400" strokeWidth={2} />
+                <h3 className="font-mono text-[10px] font-bold tracking-[0.14em] text-bone-200 uppercase">
+                  Itens Salvos do Projeto
                 </h3>
+                <span className="rounded-full bg-signal-400/15 border border-signal-400/30 px-2 py-0.5 font-mono text-[9px] font-bold text-signal-400">
+                  {savedItems.length}
+                </span>
               </div>
-              <button onClick={() => setShowAddLink(true)} className="rounded bg-signal-400/10 px-2 py-0.5 font-mono text-[8px] font-bold tracking-[0.1em] text-signal-400 uppercase hover:bg-signal-400/20 transition-colors">+ Adicionar Link</button>
+
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setShowAddToolModal(true)} 
+                  className="flex items-center gap-1.5 rounded-lg border border-signal-400/40 bg-signal-400/10 px-2.5 py-1 font-mono text-[9.5px] font-bold tracking-[0.1em] text-signal-400 uppercase hover:bg-signal-400 hover:text-ink-950 transition-all cursor-pointer"
+                  title="Salvar ou vincular execuções de Criação, Publicação e Estratégia"
+                >
+                  <Icon name="plus" className="h-3 w-3" strokeWidth={2.5} />
+                  Vincular Ferramenta
+                </button>
+                <button 
+                  onClick={() => setShowAddLink(true)} 
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-800/60 px-2.5 py-1 font-mono text-[9.5px] tracking-[0.1em] text-bone-300 uppercase hover:bg-ink-700 hover:text-bone-100 transition-colors cursor-pointer"
+                >
+                  <Icon name="link" className="h-3 w-3" />
+                  Link
+                </button>
+              </div>
             </div>
+
+            {/* Filter Pills */}
+            {savedItems.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-ink-800/30 px-4 py-2.5 bg-ink-950/20">
+                {[
+                  { id: "todos", label: "Todos", count: savedItems.length },
+                  { id: "Criação", label: "Criação", count: savedItems.filter(i => i.group === "Criação").length },
+                  { id: "Publicação", label: "Publicação", count: savedItems.filter(i => i.group === "Publicação").length },
+                  { id: "Estratégia", label: "Estratégia", count: savedItems.filter(i => i.group === "Estratégia").length },
+                  { id: "Link", label: "Links", count: savedItems.filter(i => i.group === "Link" || i.type === "link").length },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setItemsFilter(tab.id as any)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-[9.5px] tracking-wider uppercase transition-colors cursor-pointer",
+                      itemsFilter === tab.id
+                        ? "bg-signal-400/15 border border-signal-400/30 text-signal-400 font-bold"
+                        : "text-ink-400 hover:text-bone-200 hover:bg-ink-800/50"
+                    )}
+                  >
+                    <span>{tab.label}</span>
+                    <span className="opacity-70 tabular-nums">({tab.count})</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="flex min-h-[140px] flex-col gap-3 p-4">
               {showAddLink && (
                 <form onSubmit={handleSaveLink} className="flex flex-col gap-2 rounded-lg bg-ink-900/50 p-3 border border-ink-800">
@@ -622,48 +804,150 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                     className="w-full rounded bg-ink-950 px-2 py-1.5 text-[11px] text-bone-300 border border-ink-800 focus:outline-none focus:border-signal-400/50"
                   />
                   <div className="flex justify-end gap-2 mt-1">
-                    <button type="button" onClick={() => setShowAddLink(false)} className="text-[10px] text-ink-400 hover:text-bone-300 transition-colors">Cancelar</button>
-                    <button type="submit" className="text-[10px] text-signal-400 hover:text-signal-300 transition-colors">Salvar</button>
+                    <button type="button" onClick={() => setShowAddLink(false)} className="text-[10px] text-ink-400 hover:text-bone-300 transition-colors cursor-pointer">Cancelar</button>
+                    <button type="submit" className="text-[10px] text-signal-400 hover:text-signal-300 font-bold transition-colors cursor-pointer">Salvar</button>
                   </div>
                 </form>
               )}
-              {savedLinks.length === 0 && !showAddLink ? (
-                <div className="flex flex-col items-center justify-center gap-2 py-6">
-                  <Icon name="bookmark" className="h-5 w-5 text-ink-700" strokeWidth={1.2} />
-                  <p className="font-mono text-[9px] tracking-[0.1em] text-ink-400 uppercase">Nenhum item salvo</p>
+
+              {savedItems.filter(item => {
+                if (itemsFilter === "todos") return true;
+                if (itemsFilter === "Link") return item.group === "Link" || item.type === "link";
+                return item.group === itemsFilter;
+              }).length === 0 && !showAddLink ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ink-800/50 text-ink-600 border border-ink-800">
+                    <Icon name="bookmark" className="h-5 w-5" strokeWidth={1.5} />
+                  </div>
+                  <p className="font-mono text-[10px] tracking-[0.12em] text-ink-400 uppercase font-medium">
+                    {itemsFilter === "todos" ? "Nenhum item salvo no projeto" : `Nenhum item de ${itemsFilter} salvo`}
+                  </p>
+                  <p className="max-w-xs text-[11px] text-ink-500">
+                    Salve avaliações de ideias, roteiros, títulos, receitas virais ou links externos para organizar este projeto.
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button 
+                      onClick={() => setShowAddToolModal(true)} 
+                      className="rounded-lg bg-signal-400/10 border border-signal-400/25 px-3 py-1.5 font-mono text-[9px] font-bold uppercase tracking-wider text-signal-400 hover:bg-signal-400/20 transition-colors cursor-pointer"
+                    >
+                      + Vincular Ferramenta
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div className="flex flex-col gap-2">
-                  {savedLinks.map((link, i) => (
-                    <a href={link.url} target="_blank" rel="noopener noreferrer" key={i} className="group flex items-center justify-between rounded-lg border border-ink-800/50 bg-ink-900/30 p-2.5 transition-colors hover:border-signal-400/30 hover:bg-ink-900/50 cursor-pointer">
-                      <div className="flex flex-col gap-0.5 overflow-hidden flex-1 mr-2">
-                        <span className="text-[11.5px] font-medium text-bone-300 truncate group-hover:text-signal-400 transition-colors">{link.title}</span>
-                        <span className="text-[9px] font-mono text-ink-500 truncate">{link.url}</span>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0">
-                        <button 
-                          onClick={(e) => { 
-                            e.preventDefault(); 
-                            e.stopPropagation(); 
-                            navigator.clipboard.writeText(link.url); 
-                            setCopiedLinkIndex(i);
-                            setTimeout(() => setCopiedLinkIndex(null), 2000);
+                <div className="flex flex-col gap-2.5 max-h-[420px] overflow-y-auto pr-1">
+                  {savedItems
+                    .filter(item => {
+                      if (itemsFilter === "todos") return true;
+                      if (itemsFilter === "Link") return item.group === "Link" || item.type === "link";
+                      return item.group === itemsFilter;
+                    })
+                    .map((item) => {
+                      const icon = TOOL_ICON_MAP[item.type] || "bookmark";
+                      const style = TOOL_ACCENT_STYLES[item.type] || TOOL_ACCENT_STYLES.link;
+                      const isLink = item.type === "link" && Boolean(item.url);
+
+                      return (
+                        <div 
+                          key={item.id}
+                          onClick={() => {
+                            if (isLink && item.url) {
+                              window.open(item.url, "_blank", "noopener,noreferrer");
+                            } else {
+                              setViewingSavedItem(item);
+                            }
                           }}
-                          className={cn("transition-colors p-1", copiedLinkIndex === i ? "text-emerald-400" : "text-ink-600 hover:text-signal-400")}
-                          title="Copiar link"
+                          className="group flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-ink-800/60 bg-ink-900/35 p-3 transition-all hover:border-signal-400/30 hover:bg-ink-900/60 cursor-pointer"
                         >
-                          <Icon name={copiedLinkIndex === i ? "check" : "copy"} className="h-3.5 w-3.5" />
-                        </button>
-                        <button 
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteLink(i); }}
-                          className="text-ink-600 hover:text-red-400 transition-colors p-1" 
-                          title="Remover link"
-                        >
-                          <Icon name="trash" className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </a>
-                  ))}
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border mt-0.5 sm:mt-0", style.badge)}>
+                              <Icon name={icon} className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                                <span className="font-mono text-[8.5px] uppercase tracking-wider font-bold text-signal-400">
+                                  {item.group}
+                                </span>
+                                <span className="font-mono text-[8.5px] uppercase tracking-wider text-ink-500">
+                                  • {item.toolName}
+                                </span>
+                                {item.tag && (
+                                  <span className="rounded bg-signal-400/10 border border-signal-400/20 px-1 py-0.2 font-mono text-[8px] font-bold text-signal-300">
+                                    {item.tag}
+                                  </span>
+                                )}
+                              </div>
+                              <h4 className="text-[12.5px] font-bold text-bone-100 truncate group-hover:text-signal-300 transition-colors">
+                                {item.title}
+                              </h4>
+                              {(item.summary || item.url) && (
+                                <p className="text-[10.5px] text-ink-400 line-clamp-1 mt-0.5">
+                                  {formatFriendlySummary(item.type, item.summary, item.content) || item.url}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center opacity-80 group-hover:opacity-100 transition-opacity">
+                            {!isLink && (
+                              <>
+                                {onGo && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      prepareToolRestore(item.type, item);
+                                      onGo(item.type);
+                                    }}
+                                    className="rounded p-1.5 text-signal-400 hover:text-signal-300 hover:bg-ink-800 transition-colors cursor-pointer"
+                                    title="Abrir ferramenta com estes dados carregados"
+                                  >
+                                    <Icon name="arrow" className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setViewingSavedItem(item);
+                                  }}
+                                  className="rounded p-1.5 text-ink-400 hover:text-signal-300 hover:bg-ink-800 transition-colors cursor-pointer"
+                                  title="Visualizar conteúdo"
+                                >
+                                  <Icon name="eye" className="h-3.5 w-3.5" />
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const textToCopy = item.content || item.summary || item.url || item.title;
+                                navigator.clipboard.writeText(textToCopy);
+                                setCopiedItemId(item.id);
+                                setTimeout(() => setCopiedItemId(null), 2000);
+                              }}
+                              className={cn(
+                                "rounded p-1.5 transition-colors cursor-pointer",
+                                copiedItemId === item.id ? "text-emerald-400" : "text-ink-400 hover:text-signal-300 hover:bg-ink-800"
+                              )}
+                              title="Copiar conteúdo"
+                            >
+                              <Icon name={copiedItemId === item.id ? "check" : "copy"} className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm(`Remover "${item.title}" dos salvos do projeto?`)) {
+                                  handleDeleteSavedItem(item.id);
+                                }
+                              }}
+                              className="rounded p-1.5 text-ink-500 hover:text-red-400 hover:bg-ink-800 transition-colors cursor-pointer"
+                              title="Remover do projeto"
+                            >
+                              <Icon name="trash" className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               )}
             </div>
@@ -1182,6 +1466,7 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                   if (supabase) {
                     await supabase.from("studioos_projects").update({ status: "trashed" }).eq("id", project.id);
                   }
+                  window.dispatchEvent(new Event("studioos:history"));
                   setShowDeleteModal(false);
                   onBack();
                 }}
@@ -1259,7 +1544,9 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
                 onClick={async () => {
                   if (supabase) {
                     await supabase.from("studioos_projects").delete().eq("id", project.id);
+                    await supabase.from("studioos_saved_items").delete().filter("metadata->>id", "eq", String(project.id));
                   }
+                  window.dispatchEvent(new Event("studioos:history"));
                   setShowDeleteForeverModal(false);
                   onBack();
                 }}
@@ -1267,6 +1554,312 @@ export function ProjetoDetailScreen({ project, onBack }: { project: Project, onB
               >
                 Excluir de vez
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL VISUALIZAR ITEM SALVO */}
+      {viewingSavedItem && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/85 p-4 backdrop-blur-md"
+          onClick={(e) => { if (e.target === e.currentTarget) setViewingSavedItem(null); }}
+        >
+          <div 
+            className="relative w-full max-w-[620px] max-h-[85vh] flex flex-col overflow-hidden rounded-2xl border border-ink-700/60 bg-ink-900 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)] animate-in fade-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-ink-800/80 px-6 py-4 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border", TOOL_ACCENT_STYLES[viewingSavedItem.type]?.badge || TOOL_ACCENT_STYLES.link.badge)}>
+                  <Icon name={TOOL_ICON_MAP[viewingSavedItem.type] || "bookmark"} className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[9px] uppercase tracking-wider font-bold text-signal-400">
+                      {viewingSavedItem.group}
+                    </span>
+                    <span className="font-mono text-[9px] uppercase tracking-wider text-ink-400">
+                      • {viewingSavedItem.toolName}
+                    </span>
+                    {viewingSavedItem.tag && (
+                      <span className="rounded bg-signal-400/10 border border-signal-400/20 px-1.5 py-0.2 font-mono text-[9px] font-bold text-signal-300">
+                        {viewingSavedItem.tag}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="font-display text-base font-bold text-bone-100 truncate">
+                    {viewingSavedItem.title}
+                  </h3>
+                </div>
+              </div>
+              <button 
+                onClick={() => setViewingSavedItem(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-400 transition-colors hover:bg-ink-800 hover:text-bone-100 shrink-0 cursor-pointer"
+              >
+                <Icon name="close" className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {viewingSavedItem.summary && (
+                <div className="rounded-lg border border-ink-800/80 bg-ink-950/60 p-3.5">
+                  <span className="block font-mono text-[9px] uppercase tracking-wider text-ink-400 mb-1 font-bold">
+                    Resumo
+                  </span>
+                  <p className="text-[12.5px] text-bone-200 leading-relaxed">
+                    {formatFriendlySummary(viewingSavedItem.type, viewingSavedItem.summary, viewingSavedItem.content)}
+                  </p>
+                </div>
+              )}
+
+              {viewingSavedItem.content && (
+                <div className="rounded-lg border border-ink-800/80 bg-ink-950/80 p-4 font-mono text-[11.5px] leading-relaxed text-bone-300 whitespace-pre-wrap select-text">
+                  {viewingSavedItem.content}
+                </div>
+              )}
+
+              {viewingSavedItem.url && (
+                <div className="flex items-center justify-between rounded-lg border border-ink-800 bg-ink-950/50 p-3">
+                  <span className="font-mono text-[11px] text-signal-400 truncate mr-3">
+                    {viewingSavedItem.url}
+                  </span>
+                  <a 
+                    href={viewingSavedItem.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="flex items-center gap-1 rounded bg-signal-400/15 border border-signal-400/30 px-2.5 py-1 font-mono text-[9.5px] text-signal-400 uppercase hover:bg-signal-400 hover:text-ink-950 transition-all shrink-0"
+                  >
+                    Acessar Link
+                    <Icon name="arrow" className="h-3 w-3" />
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between border-t border-ink-800/80 px-6 py-3.5 bg-ink-950/40 shrink-0">
+              <span className="font-mono text-[9.5px] text-ink-500 uppercase">
+                Salvo em {new Date(viewingSavedItem.createdAt).toLocaleDateString("pt-BR")}
+              </span>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const text = viewingSavedItem.content || viewingSavedItem.summary || viewingSavedItem.url || viewingSavedItem.title;
+                    navigator.clipboard.writeText(text);
+                    setCopiedModalContent(true);
+                    setTimeout(() => setCopiedModalContent(false), 2000);
+                  }}
+                  className="font-mono text-[10px] uppercase tracking-wider gap-1.5"
+                >
+                  <Icon name={copiedModalContent ? "check" : "copy"} className="h-3.5 w-3.5" />
+                  {copiedModalContent ? "Copiado!" : "Copiar Tudo"}
+                </Button>
+
+                {onGo && viewingSavedItem.type !== "link" && (
+                  <Button
+                    variant="solid"
+                    onClick={() => {
+                      prepareToolRestore(viewingSavedItem.type, viewingSavedItem);
+                      setViewingSavedItem(null);
+                      onGo(viewingSavedItem.type);
+                    }}
+                    className="font-mono text-[10px] uppercase tracking-wider gap-1.5 shadow-[0_0_15px_rgba(242,179,61,0.25)]"
+                  >
+                    Abrir Ferramenta
+                    <Icon name="arrow" className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL VINCULAR FERRAMENTA */}
+      {showAddToolModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/85 p-4 backdrop-blur-md"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowAddToolModal(false); }}
+        >
+          <div 
+            className="relative w-full max-w-[680px] max-h-[85vh] flex flex-col overflow-hidden rounded-2xl border border-ink-700/60 bg-ink-900 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)] animate-in fade-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-ink-800/80 px-6 py-4 shrink-0">
+              <div>
+                <h3 className="font-display text-base font-bold text-bone-100">
+                  Vincular Ferramenta ao Projeto
+                </h3>
+                <p className="font-mono text-[10.5px] text-ink-400">
+                  Importe execuções do histórico de Criação, Publicação e Estratégia ou acesse a ferramenta
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowAddToolModal(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-400 transition-colors hover:bg-ink-800 hover:text-bone-100 shrink-0 cursor-pointer"
+              >
+                <Icon name="close" className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Filter & Search */}
+            <div className="p-5 border-b border-ink-800/60 bg-ink-950/30 space-y-3 shrink-0">
+              <input
+                type="text"
+                placeholder="Buscar execuções no histórico (título, ferramenta, conteúdo)..."
+                value={toolSearch}
+                onChange={(e) => setToolSearch(e.target.value)}
+                className="w-full rounded-lg border border-ink-800 bg-ink-950 px-3.5 py-2 text-[12px] text-bone-100 placeholder:text-ink-500 focus:border-signal-400/50 focus:outline-none"
+              />
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { id: "todos", label: "Todas Ferramentas" },
+                  { id: "Criação", label: "01 Criação" },
+                  { id: "Publicação", label: "02 Publicação" },
+                  { id: "Estratégia", label: "03 Estratégia" },
+                ].map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => setToolFilterGroup(g.id as any)}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 font-mono text-[9.5px] tracking-wider uppercase transition-colors cursor-pointer",
+                      toolFilterGroup === g.id
+                        ? "bg-signal-400/15 border border-signal-400/30 text-signal-400 font-bold"
+                        : "text-ink-400 hover:text-bone-200 hover:bg-ink-800"
+                    )}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* List of Runs from History */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-2.5">
+              {(() => {
+                const availableTools = ["rank", "titulos", "hooks", "roteiro", "thumbnail", "receita", "humanizador", "score", "mentor", "membros"];
+                const runs = os.history.filter((h) => {
+                  if (!availableTools.includes(h.tool)) return false;
+                  const grp = TOOL_GROUP_MAP[h.tool];
+                  if (toolFilterGroup !== "todos" && grp !== toolFilterGroup) return false;
+                  if (toolSearch.trim()) {
+                    const q = toolSearch.toLowerCase();
+                    return (
+                      h.title.toLowerCase().includes(q) ||
+                      h.toolName.toLowerCase().includes(q) ||
+                      (h.summary && h.summary.toLowerCase().includes(q))
+                    );
+                  }
+                  return true;
+                });
+
+                if (runs.length === 0) {
+                  return (
+                    <div className="rounded-xl border border-dashed border-ink-800 p-8 text-center">
+                      <Icon name="layers" className="mx-auto h-8 w-8 text-ink-600 mb-2" />
+                      <p className="text-[13px] font-semibold text-bone-300">Nenhuma execução encontrada no histórico</p>
+                      <p className="text-[11.5px] text-ink-400 mt-1 max-w-sm mx-auto">
+                        Abra uma das ferramentas abaixo para gerar conteúdo e ele poderá ser salvo neste projeto com 1 clique.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return runs.map((run) => {
+                  const grp = TOOL_GROUP_MAP[run.tool] || "Criação";
+                  const style = TOOL_ACCENT_STYLES[run.tool] || TOOL_ACCENT_STYLES.link;
+                  const isAlreadySaved = savedItems.some(s => s.title === run.title || (s.summary && s.summary === run.summary));
+
+                  return (
+                    <div
+                      key={run.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-ink-800/70 bg-ink-950/40 p-3.5 transition-all hover:border-ink-700 hover:bg-ink-900/60"
+                    >
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border mt-0.5", style.badge)}>
+                          <Icon name={TOOL_ICON_MAP[run.tool] || "bookmark"} className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="font-mono text-[9px] font-bold text-signal-400 uppercase">
+                              {grp} · {run.toolName}
+                            </span>
+                            {run.tag && (
+                              <span className="rounded bg-signal-400/10 border border-signal-400/20 px-1.5 py-0.2 font-mono text-[8.5px] font-bold text-signal-300">
+                                {run.tag}
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="text-[13px] font-bold text-bone-100 truncate">
+                            {run.title}
+                          </h4>
+                          {run.summary && (
+                            <p className="text-[11px] text-ink-400 line-clamp-1 mt-0.5">
+                              {run.summary}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="shrink-0">
+                        {isAlreadySaved ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 font-mono text-[9px] font-bold text-emerald-400 uppercase">
+                            <Icon name="check" className="h-3 w-3" />
+                            Já Salvo
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              handleImportHistoryRun(run);
+                              setShowAddToolModal(false);
+                            }}
+                            className="flex items-center gap-1.5 rounded-lg border border-signal-400/40 bg-signal-400/10 px-3 py-1.5 font-mono text-[9.5px] font-bold tracking-wider text-signal-400 uppercase hover:bg-signal-400 hover:text-ink-950 transition-all cursor-pointer shadow-sm"
+                          >
+                            <Icon name="plus" className="h-3 w-3" strokeWidth={2.5} />
+                            Vincular ao Projeto
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+
+              {/* Seção Atalhos para Ferramentas */}
+              <div className="pt-4 border-t border-ink-800/80">
+                <span className="block font-mono text-[10px] uppercase tracking-wider text-ink-400 mb-2.5 font-bold">
+                  Ou crie direto em uma ferramenta:
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {TOOLS.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setShowAddToolModal(false);
+                        onGo?.(t.id);
+                      }}
+                      className="flex items-center gap-2 rounded-lg border border-ink-800 bg-ink-950/40 p-2.5 text-left transition-all hover:border-signal-400/40 hover:bg-ink-800/50 cursor-pointer group"
+                    >
+                      <Icon name={t.icon} className="h-3.5 w-3.5 text-signal-400 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <span className="block truncate text-[11px] font-bold text-bone-200 group-hover:text-signal-300">
+                          {t.name}
+                        </span>
+                        <span className="font-mono text-[8.5px] text-ink-500 uppercase">
+                          {t.group}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>

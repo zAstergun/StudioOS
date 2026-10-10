@@ -16,7 +16,22 @@ import { Humanizador } from "./tools/Humanizador";
 import { ScorePost } from "./tools/ScorePost";
 import { Mentor } from "./tools/Mentor";
 import { Membros } from "./tools/Membros";
-import { Calibracao, Config, Wiki, calibProgress, emptyCalib, type Calib } from "./tools/Painel";
+import {
+  Calibracao,
+  Config,
+  Wiki,
+  calibProgress,
+  emptyCalib,
+  exampleCalib,
+  type Calib,
+  type CalibProfile,
+} from "./tools/Painel";
+import {
+  loadCalibProfiles,
+  saveCalibProfiles,
+  deleteCalibProfile,
+  isCalibrated,
+} from "./calibration";
 import { HistoricoX } from "./views/Historico";
 import { useStudioOS } from "./history";
 import { useAuth, supabase } from "./auth";
@@ -24,35 +39,6 @@ import { AuthScreen } from "./views/AuthScreen";
 import PerfilScreen from "./views/PerfilScreen";
 import { ProjetosScreen } from "./views/ProjetosScreen";
 import { SalvosScreen } from "./views/SalvosScreen";
-const LS_CALIB = "studioos.calib.v1";
-
-const exampleCalib: Calib = {
-  niche: "Finanças pessoais para quem começa com pouco dinheiro e quer investir sem jargão de banco.",
-  answers: [
-    "Pessoas entre 22 e 35 anos que querem organizar o primeiro salário e têm medo de perder dinheiro.",
-    "Explicações diretas, com extratos reais na tela e decisões financeiras do dia a dia.",
-    "Comparações com números, testes por algumas semanas e erros que eu mesmo cometi.",
-    "Promessas de enriquecimento rápido, siglas sem explicação e recomendações sem mostrar dados.",
-  ],
-  tops: "Como saí de R$0 para R$10 mil em 2 anos\nParei de ouvir gerente de banco\n3 erros que me custaram R$8.000",
-  flops: "O que são fundos imobiliários\nMinha carteira completa de FIIs\nComo funciona a bolsa de valores",
-  ctr: "4.8",
-  prova: "Extrato da corretora, planilha de aportes e comparação com a poupança.",
-  historias: "Meu primeiro aporte de R$100; a vez em que segui uma dica sem pesquisar; Psicologia Financeira.",
-};
-
-function loadCalib(isGuest: boolean): Calib {
-  try {
-    const raw = localStorage.getItem(LS_CALIB);
-    if (!raw) return isGuest ? exampleCalib : emptyCalib;
-    const saved = { ...emptyCalib, ...(JSON.parse(raw) as Calib) };
-    const hasData = [saved.niche, ...saved.answers, saved.tops, saved.flops, saved.ctr, saved.prova, saved.historias]
-      .some((field) => field.trim().length > 0);
-    return isGuest && !hasData ? exampleCalib : saved;
-  } catch {
-    return isGuest ? exampleCalib : emptyCalib;
-  }
-}
 
 /* ------------------------------------------------------------- footer */
 
@@ -252,7 +238,46 @@ export default function App() {
   const [view, setView] = useState<string>(getInitialView);
   const [protectedViewAfterLogin, setProtectedViewAfterLogin] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
-  const [calib, setCalib] = useState<Calib>(() => loadCalib(!auth.user));
+  const [calibStore, setCalibStore] = useState<{
+    profiles: CalibProfile[];
+    activeProfileId: string;
+    activeCalib: Calib;
+  }>(() => loadCalibProfiles(!auth.user));
+
+  const activeProfile = useMemo(() => {
+    return (
+      calibStore.profiles.find((p) => p.id === calibStore.activeProfileId) ||
+      calibStore.profiles[0] || {
+        id: "profile_default",
+        name: "Canal Principal",
+        color: "#F2B33D",
+        calib: emptyCalib,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }
+    );
+  }, [calibStore.profiles, calibStore.activeProfileId]);
+
+  const activeCalib = activeProfile.calib;
+  const progress = useMemo(() => calibProgress(activeCalib), [activeCalib]);
+
+  useEffect(() => {
+    const handleCalibEvent = (e: Event) => {
+      const custom = e as CustomEvent;
+      if (custom.detail) {
+        setCalibStore({
+          profiles: custom.detail.profiles,
+          activeProfileId: custom.detail.activeProfileId,
+          activeCalib: custom.detail.activeCalib,
+        });
+      } else {
+        setCalibStore(loadCalibProfiles(!auth.user));
+      }
+    };
+    window.addEventListener("studioos:calib_changed", handleCalibEvent);
+    return () => window.removeEventListener("studioos:calib_changed", handleCalibEvent);
+  }, [auth.user]);
+
   const lastAuthId = useRef(auth.user?.id ?? null);
   const os = useStudioOS();
 
@@ -261,17 +286,53 @@ export default function App() {
     const nextAuthId = auth.user?.id ?? null;
     if (lastAuthId.current === nextAuthId) return;
     lastAuthId.current = nextAuthId;
-    setCalib(auth.user ? emptyCalib : exampleCalib);
+    setCalibStore(loadCalibProfiles(!auth.user));
   }, [auth.loading, auth.user?.id]);
 
-  useEffect(() => {
-    if (auth.loading) return;
-    try {
-      localStorage.setItem(LS_CALIB, JSON.stringify(calib));
-    } catch {
-      /* ignore */
-    }
-  }, [calib]);
+  const handleSelectActiveProfile = (id: string) => {
+    const nextActive = calibStore.profiles.find((p) => p.id === id);
+    if (!nextActive) return;
+    saveCalibProfiles(calibStore.profiles, id);
+    setCalibStore((prev) => ({
+      ...prev,
+      activeProfileId: id,
+      activeCalib: nextActive.calib,
+    }));
+  };
+
+  const handleUpdateProfile = (updated: CalibProfile) => {
+    const nextProfiles = calibStore.profiles.map((p) => (p.id === updated.id ? updated : p));
+    saveCalibProfiles(nextProfiles, calibStore.activeProfileId);
+    setCalibStore((prev) => ({
+      profiles: nextProfiles,
+      activeProfileId: prev.activeProfileId,
+      activeCalib: prev.activeProfileId === updated.id ? updated.calib : prev.activeCalib,
+    }));
+  };
+
+  const handleCreateProfile = (newProfile: CalibProfile) => {
+    const nextProfiles = [...calibStore.profiles, newProfile];
+    saveCalibProfiles(nextProfiles, newProfile.id);
+    setCalibStore({
+      profiles: nextProfiles,
+      activeProfileId: newProfile.id,
+      activeCalib: newProfile.calib,
+    });
+  };
+
+  const handleDeleteProfile = (idToDelete: string) => {
+    const res = deleteCalibProfile(calibStore.profiles, idToDelete, calibStore.activeProfileId);
+    setCalibStore(res);
+  };
+
+  const handleSetCalib = (newCalib: Calib) => {
+    const updatedProfile: CalibProfile = {
+      ...activeProfile,
+      calib: newCalib,
+      updatedAt: Date.now(),
+    };
+    handleUpdateProfile(updatedProfile);
+  };
 
   useEffect(() => {
     if (view === "login" && auth.user && !auth.recovering) {
@@ -316,8 +377,6 @@ export default function App() {
       }
     }
   }, [auth.loading, auth.user]);
-
-  const progress = useMemo(() => calibProgress(calib), [calib]);
 
   const go = (id: string) => {
     if (!auth.user && (id === "historico" || id === "lixeira" || id === "perfil" || id === "projetos" || id === "salvos")) {
@@ -428,6 +487,8 @@ export default function App() {
           historyCount={os.history.length}
           trashCount={os.trash.length}
           authenticated={Boolean(auth.user)}
+          profileName={activeProfile.name}
+          profileColor={activeProfile.color}
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -438,6 +499,8 @@ export default function App() {
               demo={!auth.user}
               userName={auth.user?.name}
               onSignOut={auth.signOut}
+              profileName={activeProfile.name}
+              profileColor={activeProfile.color}
             />
           )}
           {/* mobile topbar */}
@@ -484,7 +547,7 @@ export default function App() {
                     humanizados: auth.user ? os.history.filter((h) => h.tool === "humanizador").length : 2176,
                   }}
                 />
-                <Home onGo={go} progress={progress} niche={calib.niche} />
+                <Home onGo={go} progress={progress} niche={activeCalib.niche} />
               </>
             ) : (
               <div
@@ -494,23 +557,117 @@ export default function App() {
                   "relative"
                 )}
               >
-                {view === "rank" && <RankIdeia onBack={back} onGo={go} niche={calib.niche} />}
-                {view === "titulos" && <Titulos onBack={back} onGo={go} />}
-                {view === "hooks" && <Hooks onBack={back} onGo={go} />}
-                {view === "roteiro" && <Roteiro onBack={back} onGo={go} />}
-                {view === "thumbnail" && <Thumbnail onBack={back} onGo={go} />}
-                {view === "receita" && <ReceitaViral onBack={back} onGo={go} />}
-                {view === "humanizador" && <Humanizador onBack={back} onGo={go} />}
-                {view === "score" && <ScorePost onBack={back} onGo={go} />}
-                {view === "mentor" && <Mentor onBack={back} onGo={go} niche={calib.niche} />}
-                {view === "membros" && <Membros onBack={back} onGo={go} />}
+                {view === "rank" && (
+                  <RankIdeia
+                    onBack={back}
+                    onGo={go}
+                    niche={activeCalib.niche}
+                    calib={activeCalib}
+                    profileName={activeProfile.name}
+                    profileColor={activeProfile.color}
+                  />
+                )}
+                {view === "titulos" && (
+                  <Titulos
+                    onBack={back}
+                    onGo={go}
+                    calib={activeCalib}
+                    profileName={activeProfile.name}
+                    profileColor={activeProfile.color}
+                  />
+                )}
+                {view === "hooks" && (
+                  <Hooks
+                    onBack={back}
+                    onGo={go}
+                    calib={activeCalib}
+                    profileName={activeProfile.name}
+                    profileColor={activeProfile.color}
+                  />
+                )}
+                {view === "roteiro" && (
+                  <Roteiro
+                    onBack={back}
+                    onGo={go}
+                    calib={activeCalib}
+                    profileName={activeProfile.name}
+                    profileColor={activeProfile.color}
+                  />
+                )}
+                {view === "thumbnail" && (
+                  <Thumbnail
+                    onBack={back}
+                    onGo={go}
+                    calib={activeCalib}
+                    profileName={activeProfile.name}
+                    profileColor={activeProfile.color}
+                  />
+                )}
+                {view === "receita" && (
+                  <ReceitaViral
+                    onBack={back}
+                    onGo={go}
+                    calib={activeCalib}
+                    profileName={activeProfile.name}
+                    profileColor={activeProfile.color}
+                  />
+                )}
+                {view === "humanizador" && (
+                  <Humanizador
+                    onBack={back}
+                    onGo={go}
+                    calib={activeCalib}
+                    profileName={activeProfile.name}
+                    profileColor={activeProfile.color}
+                  />
+                )}
+                {view === "score" && (
+                  <ScorePost
+                    onBack={back}
+                    onGo={go}
+                    calib={activeCalib}
+                    profileName={activeProfile.name}
+                    profileColor={activeProfile.color}
+                  />
+                )}
+                {view === "mentor" && (
+                  <Mentor
+                    onBack={back}
+                    onGo={go}
+                    niche={activeCalib.niche}
+                    calib={activeCalib}
+                    profileName={activeProfile.name}
+                    profileColor={activeProfile.color}
+                  />
+                )}
+                {view === "membros" && (
+                  <Membros
+                    onBack={back}
+                    onGo={go}
+                    calib={activeCalib}
+                    profileName={activeProfile.name}
+                    profileColor={activeProfile.color}
+                  />
+                )}
                 {view === "perfil" && <PerfilScreen onGo={go} />}
                 {view === "projetos" && <ProjetosScreen onGo={go} />}
                 {view === "salvos" && <SalvosScreen onGo={go} />}
-            {view === "wiki" && <Wiki onBack={back} onGo={go} />}
-            {view === "historico" && <HistoricoX onBack={back} onGo={go} />}
-            {view === "lixeira" && <HistoricoX onBack={back} onGo={go} initialTab="lixeira" />}
-            {view === "calibracao" && <Calibracao onBack={back} calib={calib} setCalib={setCalib} />}
+                {view === "wiki" && <Wiki onBack={back} onGo={go} />}
+                {view === "historico" && <HistoricoX onBack={back} onGo={go} />}
+                {view === "lixeira" && <HistoricoX onBack={back} onGo={go} initialTab="lixeira" />}
+                {view === "calibracao" && (
+                  <Calibracao
+                    onBack={back}
+                    calib={activeCalib}
+                    setCalib={handleSetCalib}
+                    profiles={calibStore.profiles}
+                    activeProfileId={calibStore.activeProfileId}
+                    onSelectActiveProfile={handleSelectActiveProfile}
+                    onUpdateProfile={handleUpdateProfile}
+                    onCreateProfile={handleCreateProfile}
+                    onDeleteProfile={handleDeleteProfile}
+                  />
+                )}
             {view === "config" && (
               <Config
                 onBack={back}

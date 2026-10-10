@@ -110,12 +110,73 @@ export function rewrite(t: string) {
 }
 
 export function humanScore(t: string) {
-  const b = burstiness(t);
-  const c = findCliches(t).length;
+  if (!t.trim()) return 0;
   const w = words(t).length;
-  const burst = Math.min(30, (b / 8) * 30);
-  const clean = Math.max(0, 40 - c * 8);
-  const size = Math.min(20, (w / 120) * 20);
-  const lines = Math.min(10, paragraphs(t).length * 2.5);
-  return Math.round(burst + clean + size + lines);
+  if (w === 0) return 0;
+
+  const cliches = findCliches(t);
+  const c = cliches.length;
+  const sents = sentences(t);
+  const b = burstiness(t);
+  const paras = paragraphs(t).length;
+
+  // 1. Ausência de clichês e vocabulário robótico (0 a 45 pontos)
+  // Densidade relativa de termos de IA por volume de texto
+  const clicheDensity = c / Math.max(10, w);
+  const cleanScore = Math.max(0, Math.round(45 - (c * 7) - (clicheDensity * 60)));
+
+  // 2. Ritmo, Cadência e Alternância de Frases (0 a 30 pontos)
+  let rhythmScore = 0;
+  if (w < 12 || sents.length < 2) {
+    // Amostra muito curta ou frase única:
+    // Não penalizar injustamente como robô se a frase for direta e enxuta
+    if (w <= 18) {
+      rhythmScore = 20; // Frase direta e concisa
+    } else if (w <= 28) {
+      rhythmScore = 15; // Frase média
+    } else {
+      rhythmScore = 8; // Frase excessivamente longa e arrastada sem pausas
+    }
+  } else {
+    // Múltiplas frases: burstiness estatístico
+    if (b >= 5.5) {
+      rhythmScore = 30; // Excelente variação de frases curtas e longas
+    } else if (b >= 4.0) {
+      rhythmScore = 25; // Boa dinâmica de fala
+    } else if (b >= 2.5) {
+      rhythmScore = 18; // Ritmo aceitável
+    } else if (b >= 1.0) {
+      rhythmScore = 12; // Pouca variação
+    } else {
+      rhythmScore = 6; // Frases com comprimento monótono (estilo típico de IA)
+    }
+  }
+
+  // 3. Extensão e Substância do Texto (0 a 15 pontos)
+  let substanceScore = 0;
+  if (w >= 45) {
+    substanceScore = 15;
+  } else if (w >= 28) {
+    substanceScore = 13;
+  } else if (w >= 16) {
+    substanceScore = 10;
+  } else if (w >= 10) {
+    substanceScore = 8;
+  } else {
+    substanceScore = 5; // Frase curta de teste
+  }
+
+  // 4. Estrutura e Escaneabilidade (0 a 10 pontos)
+  let structureScore = 0;
+  if (paras >= 3) {
+    structureScore = 10;
+  } else if (paras >= 2) {
+    structureScore = 8;
+  } else {
+    structureScore = w <= 40 ? 7 : 4;
+  }
+
+  const total = Math.min(100, Math.max(0, cleanScore + rhythmScore + substanceScore + structureScore));
+  return Math.round(total);
 }
+

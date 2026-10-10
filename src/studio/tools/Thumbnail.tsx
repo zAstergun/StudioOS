@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "../utils/cn";
 import { Button, Icon, Input, Label, Textarea } from "../components/ui";
 import { Card, CopyButton, ToolShell } from "../components/ToolShell";
 import { THUMB_COLOR, THUMB_COMPOSITION } from "../data";
 import { useAutosave } from "./useAutosave";
 import { useExampleMode } from "../auth";
+import { useToolRestore } from "../utils/toolStateRestore";
+import { type Calib } from "../calibration";
+import { CalibrationNotice } from "../components/CalibrationNotice";
 
 const SWATCHES = [
   { name: "Âmbar sinal", hex: "#f7b733" },
@@ -15,16 +18,66 @@ const SWATCHES = [
   { name: "Osso", hex: "#f2ede2" },
 ];
 
-export function Thumbnail({ onBack, onGo }: { onBack: () => void; onGo: (id: string) => void }) {
+export function Thumbnail({
+  onBack,
+  onGo,
+  calib,
+  profileName,
+  profileColor,
+}: {
+  onBack: () => void;
+  onGo: (id: string) => void;
+  calib?: Calib;
+  profileName?: string;
+  profileColor?: string;
+}) {
   const examples = useExampleMode();
-  const [tema, setTema] = useState(examples ? "FIIs com R$100 não valem mais a pena" : "");
-  const [ctr, setCtr] = useState(examples ? "4.8" : "");
+  const [tema, setTema] = useState(examples ? "FIIs com R$100 não valem mais a pena" : calib?.niche ? calib.niche.slice(0, 50) : "");
+  const [ctr, setCtr] = useState(examples ? "4.8" : calib?.ctr || "");
   const [appearance, setAppearance] = useState(examples ? "Meio-corpo, lado direito, expressão de susto contido" : "");
   const [brand, setBrand] = useState(examples ? "Âmbar + grafite, logo circular no centro" : "");
-  const [topThumbs, setTopThumbs] = useState(examples ? "Print de extrato + rosto à direita\nGráfico caindo + expressão neutra" : "");
+  const [topThumbs, setTopThumbs] = useState(
+    examples
+      ? "Print de extrato + rosto à direita\nGráfico caindo + expressão neutra"
+      : calib?.tops && calib.tops.length > 0
+      ? calib.tops.slice(0, 3).map((t) => `Estilo do top: ${t}`).join("\n")
+      : ""
+  );
   const [bg, setBg] = useState("#f7b733");
   const [fg, setFg] = useState("#0d0f13");
-  const [slot, setSlot] = useState("extrato");
+  const [slot, setSlot] = useState(calib?.prova ? calib.prova.slice(0, 30) : "extrato");
+
+  useEffect(() => {
+    if (calib) {
+      if (!ctr && calib.ctr) setCtr(calib.ctr);
+      if (!tema && calib.niche) setTema(calib.niche.slice(0, 50));
+      if (!topThumbs && calib.tops && calib.tops.length > 0) {
+        setTopThumbs(calib.tops.slice(0, 3).map((t) => `Estilo do top: ${t}`).join("\n"));
+      }
+    }
+  }, [calib]);
+
+  useToolRestore("thumbnail", (payload) => {
+    if (payload.metadata?.tema !== undefined) {
+      setTema(payload.metadata.tema);
+      if (payload.metadata.ctr) setCtr(payload.metadata.ctr);
+      if (payload.metadata.appearance) setAppearance(payload.metadata.appearance);
+      if (payload.metadata.brand) setBrand(payload.metadata.brand);
+      if (payload.metadata.topThumbs) setTopThumbs(payload.metadata.topThumbs);
+      if (payload.metadata.bg) setBg(payload.metadata.bg);
+      if (payload.metadata.fg) setFg(payload.metadata.fg);
+      if (payload.metadata.slot) setSlot(payload.metadata.slot);
+    } else if (payload.content) {
+      const matchTema = payload.content.match(/BRIEFING DE THUMBNAIL — (.*)/);
+      const matchSlot = payload.content.match(/Elemento:\s*([^\s(]+)/);
+      const matchBg = payload.content.match(/Fundo da pauta:\s*([#\w]+)/);
+      const matchFg = payload.content.match(/Elemento gráfico:\s*([#\w]+)/);
+      if (matchTema) setTema(matchTema[1].trim());
+      if (matchSlot) setSlot(matchSlot[1].trim());
+      if (matchBg) setBg(matchBg[1].trim());
+      if (matchFg) setFg(matchFg[1].trim());
+    }
+  });
 
   const brief = `BRIEFING DE THUMBNAIL — ${tema}
 
@@ -44,16 +97,18 @@ SLOT DA PAUTA
 REGRA DE OURO
 Nunca regenerar o rosto. Sempre compor por cima da foto real, preservando rosto e expressão.`;
 
+  const friendlySummary = `Briefing visual planejado na regra 45/45 (destaque: ${slot}) · Paleta e acabamentos prontos para designer`;
+
   useAutosave(
     () => ({
       tool: "thumbnail",
       toolName: "Briefing Thumbnail",
       title: tema.trim() ? `Thumb — ${tema}` : "",
-      summary: `slot ${slot} · pauta ${bg} · marca cruzando o centro · CTR base ${ctr}%`,
+      summary: friendlySummary,
       tag: "45/45",
       content: brief,
     }),
-    [brief, tema],
+    [brief, tema, friendlySummary],
     8
   );
 
@@ -70,6 +125,30 @@ Nunca regenerar o rosto. Sempre compor por cima da foto real, preservando rosto 
         { k: "CTR base", v: `${ctr}%` },
       ]}
       onBack={onBack}
+      onGo={onGo}
+      saveItem={
+        tema.trim()
+          ? {
+              type: "thumbnail",
+              group: "Criação",
+              toolName: "Briefing Thumbnail",
+              title: `Thumb — ${tema}`,
+              summary: friendlySummary,
+              tag: "45/45",
+              content: brief,
+              metadata: {
+                tema,
+                ctr,
+                appearance,
+                brand,
+                topThumbs,
+                bg,
+                fg,
+                slot,
+              },
+            }
+          : null
+      }
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
           <Card title="Composição" note="padrão do canal" accent="plum">
@@ -124,6 +203,15 @@ Nunca regenerar o rosto. Sempre compor por cima da foto real, preservando rosto 
         </div>
       }
     >
+      <CalibrationNotice
+        calib={calib}
+        profileName={profileName}
+        profileColor={profileColor}
+        toolName="Briefing Thumbnail"
+        onGo={onGo}
+        onGoCalib={() => onGo("calibracao")}
+      />
+
       {/* live preview */}
       <Card title="Planta baixa da capa" note="prévia ao vivo" accent="plum">
         <div className="relative aspect-video w-full overflow-hidden rounded-md border border-ink-700 bg-ink-950">

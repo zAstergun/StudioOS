@@ -1,10 +1,13 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { cn } from "../utils/cn";
 import { Button, Icon, Input, Label, Meter, Segmented, Select } from "../components/ui";
 import { Card, CopyButton, ToolShell } from "../components/ToolShell";
 import { HOOK_ANGLES } from "../data";
 import { useAutosave } from "./useAutosave";
 import { useExampleMode } from "../auth";
+import { useToolRestore } from "../utils/toolStateRestore";
+import { isCalibrated, type Calib } from "../calibration";
+import { CalibrationNotice } from "../components/CalibrationNotice";
 
 function cap(s: string) {
   const t = s.trim();
@@ -71,29 +74,76 @@ function build(theme: string, tone: string, promise: string): Out[] {
   }).sort((x, y) => y.retention - x.retention);
 }
 
-export function Hooks({ onBack, onGo }: { onBack: () => void; onGo: (id: string) => void }) {
+export function Hooks({
+  onBack,
+  onGo,
+  calib,
+  profileName,
+  profileColor,
+}: {
+  onBack: () => void;
+  onGo: (id: string) => void;
+  calib?: Calib;
+  profileName?: string;
+  profileColor?: string;
+}) {
   const examples = useExampleMode();
-  const [theme, setTheme] = useState(examples ? "investir R$100 por mês em FIIs" : "");
-  const [promise, setPromise] = useState(examples ? "o rendimento real com o extrato na tela" : "");
+  const calibrated = isCalibrated(calib);
+  const [theme, setTheme] = useState(
+    examples ? "investir R$100 por mês em FIIs" : calib?.niche ? calib.niche.slice(0, 50) : ""
+  );
+  const [promise, setPromise] = useState(
+    examples ? "o rendimento real com o extrato na tela" : calib?.prova ? calib.prova.slice(0, 50) : ""
+  );
   const [tone, setTone] = useState<"provocador" | "didático" | "neutro">("provocador");
   const [format, setFormat] = useState("shorts");
   const [picked, setPicked] = useState<string | null>(examples ? "confissao" : null);
 
+  useEffect(() => {
+    if (calib) {
+      if (!theme && calib.niche) setTheme(calib.niche.slice(0, 50));
+      if (!promise && calib.prova) setPromise(calib.prova.slice(0, 50));
+    }
+  }, [calib]);
+
+  useToolRestore("hooks", (payload) => {
+    if (payload.metadata?.theme !== undefined) {
+      setTheme(payload.metadata.theme);
+      if (payload.metadata.promise) setPromise(payload.metadata.promise);
+      if (payload.metadata.tone) setTone(payload.metadata.tone);
+      if (payload.metadata.format) setFormat(payload.metadata.format);
+      if (payload.metadata.picked) setPicked(payload.metadata.picked);
+    } else if (payload.content) {
+      const matchTema = payload.content.match(/TEMA:\s*(.*)/);
+      const matchProm = payload.content.match(/PROMESSA:\s*(.*)/);
+      const matchTom = payload.content.match(/TOM:\s*([^·]+)/);
+      const matchDest = payload.content.match(/DESTINO:\s*(.*)/);
+      if (matchTema) setTheme(matchTema[1].trim());
+      if (matchProm) setPromise(matchProm[1].trim());
+      if (matchTom && ["provocador", "didático", "neutro"].includes(matchTom[1].trim())) {
+        setTone(matchTom[1].trim() as any);
+      }
+      if (matchDest) setFormat(matchDest[1].trim());
+    }
+  });
+
   const outs = useMemo(() => theme.trim() || promise.trim() ? build(theme, tone, promise) : [], [theme, tone, promise]);
   const selected = outs.find((o) => o.id === picked);
+
+  const friendlySummary = `6 opções de ganchos criadas no tom ${tone} · Gancho recomendado: ${outs[0]?.angle ?? "—"} (${outs[0]?.retention ?? 0}% retenção estimada)`;
 
   useAutosave(
     () => ({
       tool: "hooks",
       toolName: "Gerador de Hooks",
       title: theme.trim() || promise.trim() ? `Hooks — ${theme}` : "",
-      summary: `6 ângulos · tom ${tone} · melhor: ${outs[0]?.angle ?? "—"} (ret. ${outs[0]?.retention ?? 0}%)`,
+      summary: friendlySummary,
       tag: `${outs[0]?.retention ?? 0}%`,
       content: `TEMA: ${theme}\nPROMESSA: ${promise}\nTOM: ${tone} · DESTINO: ${format}\n\n${outs
         .map((o, i) => `${String(i + 1).padStart(2, "0")}. ${o.angle} · ${o.seconds.toFixed(1)}s · ret. ${o.retention}%\n    ${o.l1}\n    ${o.l2}`)
         .join("\n")}`,
     }),
-    [outs, theme, promise, tone, format],
+    [outs, theme, promise, tone, format, friendlySummary],
     6
   );
 
@@ -110,6 +160,29 @@ export function Hooks({ onBack, onGo }: { onBack: () => void; onGo: (id: string)
         { k: "Tom", v: cap(tone) },
       ]}
       onBack={onBack}
+      onGo={onGo}
+      saveItem={
+        theme.trim() || promise.trim()
+          ? {
+              type: "hooks",
+              group: "Criação",
+              toolName: "Gerador de Hooks",
+              title: theme.trim() ? `Hooks — ${theme}` : "Hooks de Conteúdo",
+              summary: friendlySummary,
+              tag: `${outs[0]?.retention ?? 0}%`,
+              content: `TEMA: ${theme}\nPROMESSA: ${promise}\nTOM: ${tone} · DESTINO: ${format}\n\n${outs
+                .map((o, i) => `${String(i + 1).padStart(2, "0")}. ${o.angle} · ${o.seconds.toFixed(1)}s · ret. ${o.retention}%\n    ${o.l1}\n    ${o.l2}`)
+                .join("\n")}`,
+              metadata: {
+                theme,
+                promise,
+                tone,
+                format,
+                picked,
+              },
+            }
+          : null
+      }
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
           <Card title="Hook selecionado" note="pronto pro teleprompter" accent="mint">
@@ -177,6 +250,15 @@ export function Hooks({ onBack, onGo }: { onBack: () => void; onGo: (id: string)
         </div>
       }
     >
+      <CalibrationNotice
+        calib={calib}
+        profileName={profileName}
+        profileColor={profileColor}
+        toolName="Gerador de Hooks"
+        onGo={onGo}
+        onGoCalib={() => onGo("calibracao")}
+      />
+
       <Card title="Sobre o que é o conteúdo?" note="entrada" accent="mint">
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto_auto]">
           <div className="md:col-span-1">

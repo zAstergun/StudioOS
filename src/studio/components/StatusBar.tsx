@@ -23,12 +23,16 @@ export function StatusBar({
   demo,
   userName,
   onSignOut,
+  profileName,
+  profileColor,
 }: {
   onGo: (id: string) => void;
   calibrated: boolean;
   demo?: boolean;
   userName?: string;
   onSignOut?: () => void;
+  profileName?: string;
+  profileColor?: string;
 }) {
   return (
     <div className="relative z-30 flex items-center gap-x-4 sm:gap-x-5 border-b border-ink-700/70 bg-ink-950/90 px-4 py-2 backdrop-blur-sm sm:px-6 lg:px-8 overflow-x-auto scrollbar-hide whitespace-nowrap">
@@ -49,13 +53,26 @@ export function StatusBar({
         <Icon name="arrow" className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" strokeWidth={2.6} />
       </button>
       <span className="hidden shrink-0 h-3 w-px bg-ink-600 sm:block" />
-      <span className={cn(
-        "flex shrink-0 items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] uppercase",
-        demo ? "text-signal-400" : calibrated ? "text-mint-400" : "text-signal-400"
-      )}>
-        <Icon name={demo ? "eye" : calibrated ? "check" : "dial"} className="h-3.5 w-3.5" strokeWidth={2} />
-        {demo ? "Dados de exemplo" : calibrated ? "Canal calibrado" : "Calibração pendente"}
-      </span>
+      <button
+        type="button"
+        onClick={() => onGo("calibracao")}
+        className={cn(
+          "flex shrink-0 items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] uppercase transition-colors hover:opacity-80",
+          demo ? "text-signal-400" : calibrated ? "text-mint-400" : "text-signal-400"
+        )}
+        title="Ver ou trocar perfil de calibração"
+      >
+        {profileColor ? (
+          <span className="h-2 w-2 rounded-full shrink-0 shadow-[0_0_6px_currentColor]" style={{ backgroundColor: profileColor }} />
+        ) : (
+          <Icon name={demo ? "eye" : calibrated ? "check" : "dial"} className="h-3.5 w-3.5" strokeWidth={2} />
+        )}
+        {demo
+          ? "Dados de exemplo"
+          : calibrated
+          ? (profileName ? `Perfil: ${profileName}` : "Canal calibrado")
+          : "Calibração pendente"}
+      </button>
       <div className="ml-auto flex shrink-0 items-center gap-4 pl-4 sm:pl-0">
         <Clock />
         {userName ? (

@@ -1,10 +1,13 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { cn } from "../utils/cn";
 import { Button, Icon, Input, Label, Select, Textarea } from "../components/ui";
 import { Card, CopyButton, ToolShell } from "../components/ToolShell";
 import { burstiness, paragraphs, sentences, words } from "./textAnalysis";
 import { useAutosave } from "./useAutosave";
 import { useExampleMode } from "../auth";
+import { useToolRestore } from "../utils/toolStateRestore";
+import { type Calib } from "../calibration";
+import { CalibrationNotice } from "../components/CalibrationNotice";
 
 const PARTS = [
   { id: "hook", label: "1. Hook de ruptura", role: "Primeira linha: afirmação que quebra o esperado, sem aquecimento." },
@@ -31,15 +34,52 @@ function cap(s: string) {
   return t ? t[0].toUpperCase() + t.slice(1) : t;
 }
 
-export function ReceitaViral({ onBack, onGo }: { onBack: () => void; onGo: (id: string) => void }) {
+export function ReceitaViral({
+  onBack,
+  onGo,
+  calib,
+  profileName,
+  profileColor,
+}: {
+  onBack: () => void;
+  onGo: (id: string) => void;
+  calib?: Calib;
+  profileName?: string;
+  profileColor?: string;
+}) {
   const examples = useExampleMode();
   const [original, setOriginal] = useState(
     examples ? "Vendi meu carro e não me arrependi.\n\nFoi em 2022, quando o seguro subiu 40% e eu usava o carro três vezes por semana.\n\nEu achava que carro era liberdade. Era custo fixo disfarçado de conquista.\n\nSomei tudo: R$2.100 por mês entre parcela, seguro, combustível e estacionamento. Em um ano, R$25.200.\n\nComprei bicicleta elétrica e passei a usar aplicativo. Gasto atual: R$430 por mês.\n\nSe você faz as contas do seu carro uma vez por ano, faz agora. Comenta o valor que eu te ajudo a interpretar." : ""
   );
   const [format, setFormat] = useState("texto");
-  const [tema, setTema] = useState(examples ? "trocar o plano de internet caro por um combo mais barato" : "");
-  const [para, setPara] = useState(examples ? "quem trabalha de casa e paga boleto sem olhar" : "");
-  const [insumo, setInsumo] = useState(examples ? "minha fatura real dos últimos 12 meses" : "");
+  const [tema, setTema] = useState(examples ? "trocar o plano de internet caro por um combo mais barato" : calib?.niche ? calib.niche.slice(0, 50) : "");
+  const [para, setPara] = useState(examples ? "quem trabalha de casa e paga boleto sem olhar" : calib?.niche || "");
+  const [insumo, setInsumo] = useState(examples ? "minha fatura real dos últimos 12 meses" : calib?.prova || "");
+
+  useEffect(() => {
+    if (calib) {
+      if (!tema && calib.niche) setTema(calib.niche.slice(0, 50));
+      if (!para && calib.niche) setPara(calib.niche);
+      if (!insumo && calib.prova) setInsumo(calib.prova);
+    }
+  }, [calib]);
+
+  useToolRestore("receita", (payload) => {
+    if (payload.metadata?.tema !== undefined) {
+      setTema(payload.metadata.tema);
+      if (payload.metadata.original) setOriginal(payload.metadata.original);
+      if (payload.metadata.format) setFormat(payload.metadata.format);
+      if (payload.metadata.para) setPara(payload.metadata.para);
+      if (payload.metadata.insumo) setInsumo(payload.metadata.insumo);
+    } else if (payload.content) {
+      const matchTema = payload.content.match(/APLICAÇÃO — (.*?) \(tema novo\)/);
+      const matchPara = payload.content.match(/Para quem:\s*(.*)/);
+      const matchInsumo = payload.content.match(/Insumo que só você tem:\s*(.*)/);
+      if (matchTema) setTema(matchTema[1].trim());
+      if (matchPara) setPara(matchPara[1].trim());
+      if (matchInsumo) setInsumo(matchInsumo[1].trim());
+    }
+  });
 
   const analysis = useMemo(() => {
     const s = sentences(original);
@@ -92,16 +132,18 @@ Espelhe a estrutura, não o conteúdo. A receita funcionou porque um dia pareceu
 
   const RECIPE_MIN = 12;
 
+  const friendlySummary = `Estrutura viral desconstruída em 5 etapas · Tom ${analysis.tone} adaptado ao novo tema`;
+
   useAutosave(
     () => ({
       tool: "receita",
       toolName: "Receita Viral",
       title: original.trim() || tema.trim() ? `Receita — ${cap(tema.trim() || "seu tema")}` : "",
-      summary: `tom ${analysis.tone} · ${analysis.paragraphs} blocos originais · ${PARTS.length} partes extraídas`,
+      summary: friendlySummary,
       tag: analysis.tone,
       content: out,
     }),
-    [out, tema],
+    [out, tema, friendlySummary],
     RECIPE_MIN
   );
 
@@ -118,6 +160,27 @@ Espelhe a estrutura, não o conteúdo. A receita funcionou porque um dia pareceu
         { k: "Burstiness", v: analysis.burst.toFixed(1) },
       ]}
       onBack={onBack}
+      onGo={onGo}
+      saveItem={
+        original.trim() || tema.trim()
+          ? {
+              type: "receita",
+              group: "Criação",
+              toolName: "Receita Viral",
+              title: tema.trim() ? `Receita — ${cap(tema.trim())}` : "Receita Viral",
+              summary: friendlySummary,
+              tag: analysis.tone,
+              content: out,
+              metadata: {
+                original,
+                format,
+                tema,
+                para,
+                insumo,
+              },
+            }
+          : null
+      }
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
           <Card title="Raio-X do original" accent="sky">
@@ -179,6 +242,15 @@ Espelhe a estrutura, não o conteúdo. A receita funcionou porque um dia pareceu
         </div>
       }
     >
+      <CalibrationNotice
+        calib={calib}
+        profileName={profileName}
+        profileColor={profileColor}
+        toolName="Receita Viral"
+        onGo={onGo}
+        onGoCalib={() => onGo("calibracao")}
+      />
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Post original" note="cole inteiro" accent="signal">
           <Textarea rows={12} value={original} onChange={(e) => setOriginal(e.target.value)} placeholder="Cole o post que performou, inteiro, com as quebras de linha" />

@@ -1,7 +1,9 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "../utils/cn";
 import { TOOL_BY_ID, accentSoft, type Accent } from "../data";
 import { Icon } from "./ui";
+import { SaveToProjectModal, type SaveToProjectPayload } from "./SaveToProjectModal";
+import { useStudioOS } from "../history";
 
 export function ToolShell({
   id,
@@ -12,6 +14,9 @@ export function ToolShell({
   children,
   aside,
   onBack,
+  saveItem,
+  onGo,
+  canSaveToProject,
 }: {
   id: string;
   title: string;
@@ -21,21 +26,69 @@ export function ToolShell({
   children: ReactNode;
   aside?: ReactNode;
   onBack: () => void;
+  saveItem?: SaveToProjectPayload | (() => SaveToProjectPayload | null) | null;
+  onGo?: (view: string) => void;
+  canSaveToProject?: boolean;
 }) {
   const tool = TOOL_BY_ID[id];
+  const os = useStudioOS();
+  const [openSaveModal, setOpenSaveModal] = useState(false);
+  const [currentSaveItem, setCurrentSaveItem] = useState<SaveToProjectPayload | null>(null);
+
+  const isSystemTool = id === "wiki" || id === "calibracao" || id === "config";
+  const allowSave = canSaveToProject !== undefined ? canSaveToProject : !isSystemTool;
+
+  const lastHistoryRun = os.history.find((h) => h.tool === id);
+
+  const handleOpenSaveToProject = () => {
+    const itemToSave = typeof saveItem === "function" ? saveItem() : saveItem;
+    if (itemToSave && itemToSave.title) {
+      setCurrentSaveItem(itemToSave);
+      setOpenSaveModal(true);
+    } else if (lastHistoryRun) {
+      setCurrentSaveItem({
+        type: id,
+        group: tool?.group,
+        toolName: tool?.name,
+        title: lastHistoryRun.title,
+        summary: lastHistoryRun.summary,
+        content: lastHistoryRun.content,
+        tag: lastHistoryRun.tag,
+      });
+      setOpenSaveModal(true);
+    } else {
+      alert("Preencha ou execute a ferramenta primeiro para gerar um conteúdo e salvar no projeto.");
+    }
+  };
+
   return (
     <div className="anim-rise">
-      <button
-        onClick={onBack}
-        className="group mb-6 inline-flex items-center gap-2 font-mono text-[10.5px] tracking-[0.18em] text-ink-400 uppercase transition-colors hover:text-signal-400"
-      >
-        <Icon
-          name="arrow"
-          className="h-3.5 w-3.5 rotate-180 transition-transform duration-300 group-hover:-translate-x-1"
-          strokeWidth={2}
-        />
-        Visão geral
-      </button>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <button
+          onClick={onBack}
+          className="group inline-flex items-center gap-2 font-mono text-[10.5px] tracking-[0.18em] text-ink-400 uppercase transition-colors hover:text-signal-400 cursor-pointer"
+        >
+          <Icon
+            name="arrow"
+            className="h-3.5 w-3.5 rotate-180 transition-transform duration-300 group-hover:-translate-x-1"
+            strokeWidth={2}
+          />
+          Visão geral
+        </button>
+
+        {/* Botão de Salvar no Projeto no Topo */}
+        {allowSave && (
+          <button
+            type="button"
+            onClick={handleOpenSaveToProject}
+            className="flex items-center gap-2 rounded-lg border border-signal-400/40 bg-signal-400/10 px-3.5 py-1.5 font-mono text-[10.5px] font-bold tracking-[0.1em] text-signal-400 uppercase transition-all duration-200 hover:bg-signal-400 hover:text-ink-950 hover:shadow-[0_0_20px_rgba(242,179,61,0.25)] cursor-pointer"
+            title="Salvar o resultado desta ferramenta nos Itens Salvos de um projeto"
+          >
+            <Icon name="bookmark" className="h-3.5 w-3.5" />
+            <span>Salvar no Projeto</span>
+          </button>
+        )}
+      </div>
 
       <div className="mb-8 flex flex-col gap-6 border-b border-ink-800 pb-7 md:flex-row md:items-start md:justify-between">
         <div className="max-w-2xl">
@@ -71,6 +124,25 @@ export function ToolShell({
           </div>
         )}
       </div>
+
+      {allowSave && (
+        <SaveToProjectModal
+          isOpen={openSaveModal}
+          onClose={() => setOpenSaveModal(false)}
+          item={currentSaveItem}
+          onGoToProject={(projectId) => {
+            try {
+              const url = new URL(window.location.href);
+              url.searchParams.set("view", "projetos");
+              if (projectId) {
+                url.searchParams.set("project", projectId);
+              }
+              window.history.pushState({ view: "projetos", project: projectId }, "", url.toString());
+            } catch {}
+            onGo?.("projetos");
+          }}
+        />
+      )}
 
       <div className={cn("grid gap-6", aside && "xl:grid-cols-[minmax(0,1fr)_23rem]")}>
         <div className="min-w-0">{children}</div>

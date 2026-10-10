@@ -5,6 +5,9 @@ import { Card, CopyButton, ToolShell } from "../components/ToolShell";
 import { QUALITY_CHECKS, SCRIPT_BLOCKS, VOICE_PATTERNS } from "../data";
 import { useAutosave } from "./useAutosave";
 import { useExampleMode } from "../auth";
+import { useToolRestore } from "../utils/toolStateRestore";
+import { type Calib } from "../calibration";
+import { CalibrationNotice } from "../components/CalibrationNotice";
 
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
 
@@ -206,22 +209,84 @@ function Teleprompter({ text }: { text: string }) {
 
 /* -------------------------------------------------------------- tool */
 
-export function Roteiro({ onBack, onGo }: { onBack: () => void; onGo: (id: string) => void }) {
+export function Roteiro({
+  onBack,
+  onGo,
+  calib,
+  profileName,
+  profileColor,
+}: {
+  onBack: () => void;
+  onGo: (id: string) => void;
+  calib?: Calib;
+  profileName?: string;
+  profileColor?: string;
+}) {
   const examples = useExampleMode();
   const [tab, setTab] = useState<"voz" | "roteiro" | "prompter">("voz");
   const [sample, setSample] = useState(
-    examples ? "Eu perdi dois anos aportando R$100 por mês em fundo imobiliário. O resultado? Menos que a poupança. Você não precisa repetir esse erro. Olha o extrato aqui na tela: R$2.400 aportados, R$2.311 de saldo. Eu errei, e a culpa foi minha." : ""
+    examples
+      ? "Eu perdi dois anos aportando R$100 por mês em fundo imobiliário. O resultado? Menos que a poupança. Você não precisa repetir esse erro. Olha o extrato aqui na tela: R$2.400 aportados, R$2.311 de saldo. Eu errei, e a culpa foi minha."
+      : calib?.tops && calib.tops.length > 0
+      ? `Exemplo de gravação sobre: ${calib.tops[0]}.`
+      : ""
   );
-  const [provoca, setProvoca] = useState(examples ? "Provoca com humor, mostra o próprio erro antes de cobrar alguém" : "");
+  const [provoca, setProvoca] = useState(examples ? "Provoca com humor, mostra o próprio erro antes de cobrar alguém" : calib?.prova || "");
   const [cta, setCta] = useState(examples ? "Se esse número te assustou, comenta 100 que eu mostro o próximo passo" : "");
   const [takeName, setTakeName] = useState(examples ? "Take 01 — FIIs R$100" : "");
 
-  const [blocks, setBlocks] = useState<Record<string, string>>(examples ? {
-    hook: "Dois anos. R$100 por mês. E o meu saldo era menor que a poupança. Olha esse extrato.",
-    contexto: "Eu comecei a aportar em FIIs em 2023 porque todo mundo falava de renda mensal. Só que ninguém mostrava o rendimento real.",
-    dev: "Primeiro erro: escolhi fundo pelo dividend yield. Segundo erro: ignorei a vacância. Terceiro erro: aportei todo mês sem olhar o preço da cota. Aqui na tela está a planilha com os três anos.\nQuando eu troquei por um mix de tesouro direto com um FII de tijolo bom, o resultado mudou. Não ficou rico, ficou honesto.",
-    cta: "Se você aporta R$100 por mês, faz essa conta antes do próximo aporte. E comenta 100 que eu trago o passo a passo da migração.",
-  } : {});
+  useEffect(() => {
+    if (calib) {
+      if (!sample && calib.tops && calib.tops.length > 0) {
+        setSample(`Exemplo de gravação sobre: ${calib.tops[0]}.`);
+      }
+      if (!provoca && calib.prova) {
+        setProvoca(calib.prova);
+      }
+    }
+  }, [calib]);
+
+  const [blocks, setBlocks] = useState<Record<string, string>>(() => {
+    if (examples) {
+      return {
+        hook: "Dois anos. R$100 por mês. E o meu saldo era menor que a poupança. Olha esse extrato.",
+        contexto: "Eu comecei a aportar em FIIs em 2023 porque todo mundo falava de renda mensal. Só que ninguém mostrava o rendimento real.",
+        dev: "Primeiro erro: escolhi fundo pelo dividend yield. Segundo erro: ignorei a vacância. Terceiro erro: aportei todo mês sem olhar o preço da cota. Aqui na tela está a planilha com os três anos.\nQuando eu troquei por um mix de tesouro direto com um FII de tijolo bom, o resultado mudou. Não ficou rico, ficou honesto.",
+        cta: "Se você aporta R$100 por mês, faz essa conta antes do próximo aporte. E comenta 100 que eu trago o passo a passo da migração.",
+      };
+    }
+    return {
+      hook: "",
+      contexto: "",
+      dev: "",
+      cta: "",
+    };
+  });
+
+  useToolRestore("roteiro", (payload) => {
+    if (payload.metadata?.blocks) {
+      setBlocks(payload.metadata.blocks);
+      if (payload.metadata.sample) setSample(payload.metadata.sample);
+      if (payload.metadata.provoca) setProvoca(payload.metadata.provoca);
+      if (payload.metadata.cta) setCta(payload.metadata.cta);
+      if (payload.metadata.takeName) setTakeName(payload.metadata.takeName);
+      if (payload.metadata.tab) setTab(payload.metadata.tab);
+    } else if (payload.content) {
+      const hookM = payload.content.match(/hook:\s*([\s\S]*?)[\r\n]+contexto:/i);
+      const ctxM = payload.content.match(/contexto:\s*([\s\S]*?)[\r\n]+desenvolvimento:/i);
+      const devM = payload.content.match(/desenvolvimento:\s*([\s\S]*?)[\r\n]+cta:/i);
+      const ctaM = payload.content.match(/cta:\s*([\s\S]*?)(?:[\r\n]+STATS|$)/i);
+      if (hookM || ctxM || devM || ctaM) {
+        setBlocks({
+          hook: hookM ? hookM[1].trim() : "",
+          contexto: ctxM ? ctxM[1].trim() : "",
+          dev: devM ? devM[1].trim() : "",
+          cta: ctaM ? ctaM[1].trim() : "",
+        });
+        setTab("roteiro");
+      }
+    }
+  });
 
   const voice = useMemo(() => analyzeVoice(sample, provoca, cta), [sample, provoca, cta]);
 
@@ -271,16 +336,18 @@ export function Roteiro({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
 
   const checkScore = checks.filter((c) => c.ok).length;
 
+  const friendlySummary = `Roteiro pronto com ${words} palavras (~${duration.toFixed(1)} min de fala) · Checklist de qualidade: ${checkScore} de 4 aprovados`;
+
   useAutosave(
     () => ({
       tool: "roteiro",
       toolName: "Roteiro & Gravação",
-      title: blocks.hook.trim() || sample.trim() ? `Roteiro — ${(blocks.hook.trim() || sample.trim()).slice(0, 72)}` : "",
-      summary: `${words} palavras · ~${duration.toFixed(1)} min · checklist ${checkScore}/4 · voz calibrada ${voice.match}/6`,
+      title: (blocks.hook || "").trim() || sample.trim() ? `Roteiro — ${((blocks.hook || "").trim() || sample.trim()).slice(0, 72)}` : "",
+      summary: friendlySummary,
       tag: `${checkScore}/4`,
-      content: `ROTEIRO MONTADO\nhook: ${blocks.hook}\n\ncontexto: ${blocks.contexto}\n\ndesenvolvimento: ${blocks.dev}\n\ncta: ${blocks.cta}\n\nSTATS\n${words} palavras · ~${duration.toFixed(1)} min · checklist ${checkScore}/4 · padrão de voz ${voice.match}/6\n\nCHECKLIST\n${checks.map((c) => `${c.ok ? "[x]" : "[ ]"} ${c.q} — ${c.ev}`).join("\n")}`,
+      content: `ROTEIRO MONTADO\nhook: ${blocks.hook || ""}\n\ncontexto: ${blocks.contexto || ""}\n\ndesenvolvimento: ${blocks.dev || ""}\n\ncta: ${blocks.cta || ""}\n\nSTATS\n${words} palavras · ~${duration.toFixed(1)} min · checklist ${checkScore}/4 · padrão de voz ${voice.match}/6\n\nCHECKLIST\n${checks.map((c) => `${c.ok ? "[x]" : "[ ]"} ${c.q} — ${c.ev}`).join("\n")}`,
     }),
-    [full, words, duration, checkScore, voice.match],
+    [full, words, duration, checkScore, voice.match, friendlySummary],
     30
   );
 
@@ -297,6 +364,28 @@ export function Roteiro({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
         { k: "Checklist", v: `${checkScore}/4` },
       ]}
       onBack={onBack}
+      onGo={onGo}
+      saveItem={
+        blocks.hook?.trim() || sample.trim()
+          ? {
+              type: "roteiro",
+              group: "Criação",
+              toolName: "Roteiro & Gravação",
+              title: blocks.hook?.trim() ? `Roteiro — ${blocks.hook.trim().slice(0, 60)}` : "Roteiro de Gravação",
+              summary: friendlySummary,
+              tag: `${checkScore}/4`,
+              content: `ROTEIRO MONTADO\nhook: ${blocks.hook || ""}\n\ncontexto: ${blocks.contexto || ""}\n\ndesenvolvimento: ${blocks.dev || ""}\n\ncta: ${blocks.cta || ""}\n\nSTATS\n${words} palavras · ~${duration.toFixed(1)} min · checklist ${checkScore}/4 · padrão de voz ${voice.match}/6\n\nCHECKLIST\n${checks.map((c) => `${c.ok ? "[x]" : "[ ]"} ${c.q} — ${c.ev}`).join("\n")}`,
+              metadata: {
+                sample,
+                provoca,
+                cta,
+                takeName,
+                blocks,
+                tab,
+              },
+            }
+          : null
+      }
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
           <Card title="Padrão detectado" note={`${voice.match}/6`} accent="sky">
@@ -354,6 +443,15 @@ export function Roteiro({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
         </div>
       }
     >
+      <CalibrationNotice
+        calib={calib}
+        profileName={profileName}
+        profileColor={profileColor}
+        toolName="Roteiro & Gravação"
+        onGo={onGo}
+        onGoCalib={() => onGo("calibracao")}
+      />
+
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <Segmented
           value={tab}
@@ -421,39 +519,43 @@ export function Roteiro({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
 
       {tab === "roteiro" && (
         <div className="space-y-4">
-          {SCRIPT_BLOCKS.map((b, i) => (
-            <Card
-              key={b.id}
-              title={`${i + 1}. ${b.label}`}
-              note={`${b.note} · alvo ${b.target}`}
-              accent={(["mint", "sky", "signal", "oxide"] as const)[i]}
-            >
-              <Textarea
-                rows={b.id === "dev" ? 7 : 4}
-                value={blocks[b.id]}
-                onChange={(e) => setBlocks((prev) => ({ ...prev, [b.id]: e.target.value }))}
-                placeholder={`Escreva o bloco: ${b.label}`}
-              />
-              <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[10px] tracking-[0.12em] text-ink-400 uppercase">
-                <span>{blocks[b.id].trim() ? blocks[b.id].trim().split(/\s+/).length : 0} palavras</span>
-                <span className="h-3 w-px bg-ink-700" />
-                <span>
-                  ~{(blocks[b.id].trim().split(/\s+/).filter(Boolean).length / 145).toFixed(1)} min
-                </span>
-                {EMOJI.test(blocks[b.id]) || /[—–()]/.test(blocks[b.id]) ? (
-                  <span className="ml-auto flex items-center gap-1 text-oxide-400">
-                    <Icon name="close" className="h-3 w-3" strokeWidth={2.4} /> trava de leitura
-                  </span>
-                ) : (
-                  blocks[b.id].trim() && (
+          {SCRIPT_BLOCKS.map((b, i) => {
+            const val = blocks[b.id] || "";
+            const wordList = val.trim() ? val.trim().split(/\s+/).filter(Boolean) : [];
+            const blockWords = wordList.length;
+            const blockMins = (blockWords / 145).toFixed(1);
+            const hasIssue = EMOJI.test(val) || /[—–()]/.test(val);
+
+            return (
+              <Card
+                key={b.id}
+                title={`${i + 1}. ${b.label}`}
+                note={`${b.note} · alvo ${b.target}`}
+                accent={(["mint", "sky", "signal", "oxide"] as const)[i]}
+              >
+                <Textarea
+                  rows={b.id === "dev" ? 7 : 4}
+                  value={val}
+                  onChange={(e) => setBlocks((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                  placeholder={`Escreva o bloco: ${b.label}`}
+                />
+                <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[10px] tracking-[0.12em] text-ink-400 uppercase">
+                  <span>{blockWords} palavras</span>
+                  <span className="h-3 w-px bg-ink-700" />
+                  <span>~{blockMins} min</span>
+                  {hasIssue ? (
+                    <span className="ml-auto flex items-center gap-1 text-oxide-400">
+                      <Icon name="close" className="h-3 w-3" strokeWidth={2.4} /> trava de leitura
+                    </span>
+                  ) : val.trim() ? (
                     <span className="ml-auto flex items-center gap-1 text-mint-400">
                       <Icon name="check" className="h-3 w-3" strokeWidth={2.4} /> legível em voz alta
                     </span>
-                  )
-                )}
-              </div>
-            </Card>
-          ))}
+                  ) : null}
+                </div>
+              </Card>
+            );
+          })}
 
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-ink-700/70 bg-ink-900/50 p-4">
             <div className="mr-auto">

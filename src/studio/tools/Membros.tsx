@@ -1,16 +1,31 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { cn } from "../utils/cn";
 import { Button, Icon, Input, Label, Meter, Select, Textarea } from "../components/ui";
 import { Card, CopyButton, ToolShell } from "../components/ToolShell";
 import { MEMBERSHIP_SECTIONS } from "../data";
 import { useAutosave } from "./useAutosave";
 import { useExampleMode } from "../auth";
+import { useToolRestore } from "../utils/toolStateRestore";
+import { type Calib } from "../calibration";
+import { CalibrationNotice } from "../components/CalibrationNotice";
 
 const num = (s?: string) => parseFloat((s || "").replace(/\./g, "").replace(",", ".")) || 0;
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
-export function Membros({ onBack, onGo }: { onBack: () => void; onGo: (id: string) => void }) {
+export function Membros({
+  onBack,
+  onGo,
+  calib,
+  profileName,
+  profileColor,
+}: {
+  onBack: () => void;
+  onGo: (id: string) => void;
+  calib?: Calib;
+  profileName?: string;
+  profileColor?: string;
+}) {
   const examples = useExampleMode();
   const [answers, setAnswers] = useState<Record<string, string>>(examples ? {
     "Quanto quer ganhar/mês com membros?": "12000",
@@ -27,7 +42,13 @@ export function Membros({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
     "3 vídeos top + 3 flops": "",
     "Assunto que o público ama mas não performa?": "Análise de carteira ao vivo",
     "Já vende algo?": "Uma planilha por R$47",
-  } : {});
+  } : calib?.niche ? { "Nicho (1 frase)": calib.niche } : {});
+
+  useEffect(() => {
+    if (calib?.niche) {
+      setAnswers((prev) => prev["Nicho (1 frase)"] ? prev : { ...prev, "Nicho (1 frase)": calib.niche });
+    }
+  }, [calib]);
   const [preco, setPreco] = useState(examples ? "49" : "");
   const [conversao, setConversao] = useState(examples ? "1.2" : "");
   const [promessa, setPromessa] = useState(examples ?
@@ -39,6 +60,23 @@ export function Membros({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
     "Planilha de aporte automático",
   ] : []);
   const [novoMod, setNovoMod] = useState("");
+
+  useToolRestore("membros", (payload) => {
+    if (payload.metadata?.answers !== undefined) {
+      setAnswers(payload.metadata.answers);
+      if (payload.metadata.preco) setPreco(payload.metadata.preco);
+      if (payload.metadata.conversao) setConversao(payload.metadata.conversao);
+      if (payload.metadata.promessa) setPromessa(payload.metadata.promessa);
+      if (payload.metadata.mods) setMods(payload.metadata.mods);
+    } else if (payload.content) {
+      const matchPromessa = payload.content.match(/Promessa:\s*(.*)/);
+      const matchPreco = payload.content.match(/Preço:\s*R\$\s*([\d.,]+)/);
+      const matchConv = payload.content.match(/conversão\s*([\d.,]+)%/);
+      if (matchPromessa) setPromessa(matchPromessa[1].trim());
+      if (matchPreco) setPreco(matchPreco[1].trim());
+      if (matchConv) setConversao(matchConv[1].trim());
+    }
+  });
 
   const set = (k: string, v: string) => setAnswers((p) => ({ ...p, [k]: v }));
 
@@ -61,16 +99,18 @@ export function Membros({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
   const filled = Object.values(answers).filter((v) => v.trim()).length;
   const total = MEMBERSHIP_SECTIONS.reduce((s, x) => s + x.questions.length, 0);
 
+  const friendlySummary = `Projeção de ${calc.possiveis} membros (${brl(calc.receita)}/mês) · Modelo avaliado como ${calc.viavel ? "viável para o canal" : "meta alta para o tamanho da base atual"}`;
+
   useAutosave(
     () => ({
       tool: "membros",
       toolName: "Área de Membros",
       title: filled || promessa.trim() ? `Membros — meta ${brl(calc.meta)}/mês` : "",
-      summary: `${calc.possiveis} possíveis · receita ${brl(calc.receita)} · ${calc.viavel ? "viável" : "acima da base"}`,
+      summary: friendlySummary,
       tag: calc.viavel ? "viável" : "ajustar",
       content: `ÁREA DE MEMBROS\n\nPromessa: ${promessa}\nPreço: ${brl(calc.p)}/mês · conversão ${conversao}%\nBase real: ${calc.base.toLocaleString("pt-BR")} · membros possíveis: ${calc.possiveis}\nReceita projetada: ${brl(calc.receita)} ↗ meta precisa de ${calc.necessarios}\n\nMÓDULOS\n${mods.map((m, i) => `${i + 1}. ${m}`).join("\n")}\n\nQUESTIONÁRIO (${filled}/${total})\n${Object.entries(answers).filter(([, v]) => v.trim()).map(([k, v]) => `${k} → ${v}`).join("\n")}`,
     }),
-    [calc, mods, promessa, filled],
+    [calc, mods, promessa, filled, friendlySummary],
     20,
     4500
   );
@@ -88,6 +128,27 @@ export function Membros({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
         { k: "Viável", v: calc.viavel ? "Sim" : "Não" },
       ]}
       onBack={onBack}
+      onGo={onGo}
+      saveItem={
+        filled > 0 || promessa.trim()
+          ? {
+              type: "membros",
+              group: "Estratégia",
+              toolName: "Área de Membros",
+              title: promessa.trim() ? `Membros — ${promessa.slice(0, 50)}` : "Área de Membros & Assinatura",
+              summary: friendlySummary,
+              tag: calc.viavel ? "viável" : "ajustar",
+              content: `ÁREA DE MEMBROS\n\nPromessa: ${promessa}\nPreço: ${brl(calc.p)}/mês · conversão ${conversao}%\nBase real: ${calc.base.toLocaleString("pt-BR")} · membros possíveis: ${calc.possiveis}\nReceita projetada: ${brl(calc.receita)} ↗ meta precisa de ${calc.necessarios}\n\nMÓDULOS\n${mods.map((m, i) => `${i + 1}. ${m}`).join("\n")}\n\nQUESTIONÁRIO (${filled}/${total})\n${Object.entries(answers).filter(([, v]) => v.trim()).map(([k, v]) => `${k} → ${v}`).join("\n")}`,
+              metadata: {
+                answers,
+                preco,
+                conversao,
+                promessa,
+                mods,
+              },
+            }
+          : null
+      }
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
           <Card title="Matemática da meta" note="ao vivo" accent="plum">
@@ -151,6 +212,15 @@ export function Membros({ onBack, onGo }: { onBack: () => void; onGo: (id: strin
         </div>
       }
     >
+      <CalibrationNotice
+        calib={calib}
+        profileName={profileName}
+        profileColor={profileColor}
+        toolName="Área de Membros"
+        onGo={onGo}
+        onGoCalib={() => onGo("calibracao")}
+      />
+
       <div className="grid gap-6 lg:grid-cols-2">
         {MEMBERSHIP_SECTIONS.map((sec, si) => (
           <Card
