@@ -19,6 +19,7 @@ type Props = {
   authenticated: boolean;
   profileName?: string;
   profileColor?: string;
+  viewedProfileHandle?: string | null;
 };
 
 export function Sidebar({
@@ -34,6 +35,7 @@ export function Sidebar({
   authenticated,
   profileName,
   profileColor,
+  viewedProfileHandle,
 }: Props) {
   const auth = useAuth();
 
@@ -85,7 +87,7 @@ export function Sidebar({
 
         <div className="mt-0.5 space-y-0.5">
           <NavItem
-            active={active === "login" || active === "perfil"}
+            active={active === "login" || (active === "perfil" && !viewedProfileHandle)}
             onClick={() => go(authenticated ? "perfil" : "login")}
             icon={authenticated ? "user" : "login"}
             label={authenticated ? "Meu Perfil" : "Entrar"}
