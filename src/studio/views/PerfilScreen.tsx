@@ -184,16 +184,20 @@ export default function PerfilScreen({
     if (!currentProfileId || !supabase) return;
     const localLiked = typeof localStorage !== 'undefined' && localStorage.getItem(`studioos.liked.${currentProfileId}`) === "true";
 
-    supabase.rpc("get_profile_likes_info", { p_target_id: currentProfileId })
-      .then(({ data, error }: { data: any; error: any }) => {
-        if (!error && data) {
-          setLikesCount(Number(data.likes_count) || 0);
-          setHasLiked(Boolean(data.liked) || localLiked);
-        } else if (isViewingOther && targetProfile?.stats?.likes_count !== undefined) {
-          setLikesCount(Number(targetProfile.stats.likes_count) || 0);
-          setHasLiked(localLiked);
-        }
-      });
+    const fetchLikes = async () => {
+      let res = await supabase.rpc("studioos_get_profile_likes_info", { p_target_id: currentProfileId });
+      if (res.error) {
+        res = await supabase.rpc("get_profile_likes_info", { p_target_id: currentProfileId });
+      }
+      if (!res.error && res.data) {
+        setLikesCount(Number(res.data.likes_count) || 0);
+        setHasLiked(Boolean(res.data.liked) || localLiked);
+      } else if (isViewingOther && targetProfile?.stats?.likes_count !== undefined) {
+        setLikesCount(Number(targetProfile.stats.likes_count) || 0);
+        setHasLiked(localLiked);
+      }
+    };
+    fetchLikes();
   }, [currentProfileId, isViewingOther, targetProfile]);
 
   const handleToggleLike = async () => {
@@ -216,20 +220,31 @@ export default function PerfilScreen({
     try {
       const isRealUser = user && user.provider !== "demo";
       if (isRealUser) {
-        const { data, error } = await supabase.rpc("toggle_profile_like", {
+        let res = await supabase.rpc("studioos_toggle_profile_like", {
           p_target_id: currentProfileId,
         });
-        if (!error && data) {
-          setHasLiked(Boolean(data.liked));
-          setLikesCount(Number(data.likes_count) || 0);
+        if (res.error) {
+          res = await supabase.rpc("toggle_profile_like", {
+            p_target_id: currentProfileId,
+          });
+        }
+        if (!res.error && res.data) {
+          setHasLiked(Boolean(res.data.liked));
+          setLikesCount(Number(res.data.likes_count) || 0);
         }
       } else {
-        const { data, error } = await supabase.rpc("toggle_profile_like_guest", {
+        let res = await supabase.rpc("studioos_toggle_profile_like_guest", {
           p_target_id: currentProfileId,
           p_liked: nextLiked,
         });
-        if (!error && data) {
-          setLikesCount(Number(data.likes_count) || 0);
+        if (res.error) {
+          res = await supabase.rpc("toggle_profile_like_guest", {
+            p_target_id: currentProfileId,
+            p_liked: nextLiked,
+          });
+        }
+        if (!res.error && res.data) {
+          setLikesCount(Number(res.data.likes_count) || 0);
         }
       }
     } catch (err) {
