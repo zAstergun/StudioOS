@@ -331,9 +331,26 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
             if (item && item.id && !seenIds.has(item.id)) {
               seenIds.add(item.id);
               let score: number | undefined;
-              if (item.tag) {
-                const match = item.tag.match(/([\d.]+)\/10/);
-                if (match) score = parseFloat(match[1]);
+              if (typeof item.score === "number" && !isNaN(item.score)) {
+                score = item.score <= 10 ? item.score : (item.score <= 50 ? (item.score / 50) * 10 : (item.score / 100) * 10);
+              } else if (item.tag && typeof item.tag === "string") {
+                const match100 = item.tag.match(/([\d.]+)\s*\/\s*100/);
+                if (match100) {
+                  const raw = parseFloat(match100[1]);
+                  if (!isNaN(raw)) score = (raw / 100) * 10;
+                } else {
+                  const match50 = item.tag.match(/([\d.]+)\s*\/\s*50/);
+                  if (match50) {
+                    const raw = parseFloat(match50[1]);
+                    if (!isNaN(raw)) score = (raw / 50) * 10;
+                  } else {
+                    const match10 = item.tag.match(/([\d.]+)\s*\/\s*10(?!\d)/);
+                    if (match10) {
+                      const raw = parseFloat(match10[1]);
+                      if (!isNaN(raw)) score = Math.min(10, Math.max(0, raw));
+                    }
+                  }
+                }
               }
               historyEntries.push({
                 id: item.id,
@@ -495,14 +512,24 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
       streak = Number(userStats['streak']) || 1;
     }
 
-    // 9. Nota média
+    // 9. Nota média (escala de 0.0 a 5.0 estrelas)
     const scoredRuns = historyEntries.filter(e => typeof e.score === "number" && !isNaN(e.score));
     let avgRatingStr = "-";
     let avgRatingNum = 0;
     if (scoredRuns.length > 0) {
       const avg10 = scoredRuns.reduce((a, b) => a + (b.score || 0), 0) / scoredRuns.length;
-      avgRatingNum = Math.round((avg10 / 2) * 10) / 10;
+      avgRatingNum = Math.min(5, Math.max(0, Math.round((avg10 / 2) * 10) / 10));
       avgRatingStr = `${avgRatingNum.toFixed(1)}/5`;
+    } else if (userStats.avg_rating && typeof userStats.avg_rating === "string") {
+      const match = userStats.avg_rating.match(/([\d.]+)\/5/);
+      if (match) {
+        const val = parseFloat(match[1]);
+        if (!isNaN(val)) {
+          const corrected = val > 5 ? Math.min(5, Math.round((val / 10) * 10) / 10) : val;
+          avgRatingNum = corrected;
+          avgRatingStr = `${corrected.toFixed(1)}/5`;
+        }
+      }
     }
 
     // 10. Dia mais ativo
