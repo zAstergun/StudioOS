@@ -1178,39 +1178,46 @@ export default function PerfilScreen({
 
     if (isEditingProfile) {
       return (
-        <div className={`flex items-center justify-between px-4 py-3 border-b transition-all ${
+        <div className={`px-4 py-3 border-b transition-all ${
           isVisible 
             ? 'bg-[#2FD4A0]/10 border-[#2FD4A0]/30 text-[#2FD4A0]' 
             : 'bg-[#18181b]/95 border-[#232327] text-[#8c8c94]'
         }`}>
-          <div className="flex items-center gap-2.5">
-            <Icon name={isVisible ? "eye" : "eyeOff"} className="h-4 w-4 shrink-0" />
-            <div>
-              <div className="font-mono text-[11px] font-bold uppercase tracking-wider flex items-center gap-2">
-                <span>{isVisible ? "Visível no Perfil Público" : "Oculto no Perfil Público"}</span>
-                <span className="text-[9px] px-1.5 py-0.2 rounded border font-mono opacity-80 uppercase tracking-widest bg-black/40 border-current">
-                  {cardLabel}
+          <div className="flex flex-col gap-1.5">
+            {/* Linha superior: Status e Botão de Alternância */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Icon name={isVisible ? "eye" : "eyeOff"} className="h-4 w-4 shrink-0" />
+                <span className="font-mono text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                  {isVisible ? "Visível no Perfil Público" : "Oculto no Perfil Público"}
                 </span>
               </div>
-              <div className="text-[10.5px] text-bone-400 mt-0.5">
+              <button
+                type="button"
+                onClick={() => setDraftCardVisibility(prev => ({ ...prev, [cardKey]: !prev[cardKey] }))}
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
+                  isVisible
+                    ? 'bg-[#2FD4A0] text-[#0c0c0e] hover:bg-[#2FD4A0]/90 shadow-[0_0_12px_rgba(47,212,160,0.3)]'
+                    : 'bg-[#232327] text-white hover:bg-[#2d2d32]'
+                }`}
+              >
+                <Icon name={isVisible ? "check" : "close"} className="h-3 w-3 stroke-[3]" />
+                <span>{isVisible ? "Público" : "Oculto"}</span>
+              </button>
+            </div>
+
+            {/* Linha inferior: Identificador do Bloco e Descrição com espaço total */}
+            <div className="flex items-center gap-2 flex-wrap pl-6">
+              <span className="text-[9px] px-1.5 py-0.5 rounded border font-mono opacity-80 uppercase tracking-widest bg-black/40 border-current shrink-0 whitespace-nowrap">
+                {cardLabel}
+              </span>
+              <p className="text-[10.5px] text-bone-400 leading-normal">
                 {isVisible 
-                  ? "Quem acessar o seu link de perfil verá este bloco." 
+                  ? "Quem acessar o seu link verá este bloco." 
                   : "Apenas você vê este bloco. Visitantes não terão acesso."}
-              </div>
+              </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setDraftCardVisibility(prev => ({ ...prev, [cardKey]: !prev[cardKey] }))}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-              isVisible
-                ? 'bg-[#2FD4A0] text-[#0c0c0e] hover:bg-[#2FD4A0]/90 shadow-[0_0_12px_rgba(47,212,160,0.3)]'
-                : 'bg-[#232327] text-white hover:bg-[#2d2d32]'
-            }`}
-          >
-            <Icon name={isVisible ? "check" : "close"} className="h-3 w-3 stroke-[3]" />
-            {isVisible ? "Público" : "Oculto"}
-          </button>
         </div>
       );
     }
