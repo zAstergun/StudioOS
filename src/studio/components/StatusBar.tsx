@@ -17,11 +17,21 @@ function Clock() {
   );
 }
 
+function formatRemaining(expiresAt: string) {
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if (diff <= 0) return "expirada";
+  const h = Math.floor(diff / (1000 * 60 * 60));
+  const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  return `${h}h ${m}m restantes`;
+}
+
 export function StatusBar({
   onGo,
   calibrated,
   demo,
   userName,
+  isTemporary,
+  expiresAt,
   onSignOut,
   profileName,
   profileColor,
@@ -30,6 +40,8 @@ export function StatusBar({
   calibrated: boolean;
   demo?: boolean;
   userName?: string;
+  isTemporary?: boolean;
+  expiresAt?: string;
   onSignOut?: () => void;
   profileName?: string;
   profileColor?: string;
@@ -44,6 +56,15 @@ export function StatusBar({
       <span className="shrink-0 font-mono text-[10px] tracking-[0.18em] text-bone-400 uppercase">
         StudioOS <span className="text-ink-400">/</span> build 2.5.0
       </span>
+      {isTemporary && (
+        <span
+          className="flex shrink-0 items-center gap-1.5 rounded-full border border-signal-400/40 bg-signal-400/10 px-2.5 py-0.5 font-mono text-[9px] tracking-[0.1em] text-signal-300 uppercase shadow-[0_0_10px_rgba(247,183,51,0.15)]"
+          title="Conta temporária de teste. Todos os dados serão apagados automaticamente após 24h."
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-signal-400 animate-pulse" />
+          Conta teste {expiresAt ? `· ${formatRemaining(expiresAt)}` : "(24h)"}
+        </span>
+      )}
       <button
         onClick={() => onGo("historico")}
         className="group hidden shrink-0 items-center gap-1.5 rounded-full border border-mint-400/30 bg-mint-400/10 px-2.5 py-0.5 font-mono text-[9px] tracking-[0.12em] text-mint-300 uppercase transition-colors hover:border-mint-400/60 hover:bg-mint-400/20 md:flex"

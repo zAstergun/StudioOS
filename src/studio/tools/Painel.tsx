@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "../utils/cn";
 import { Button, Icon, Input, Label, Meter, Select, Textarea } from "../components/ui";
 import { Card, ToolShell } from "../components/ToolShell";
@@ -986,9 +987,21 @@ function ModelCombobox({
   onChange: (value: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const listboxRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [opensUp, setOpensUp] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [mounted, setMounted] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; bottom: number }>({
+    top: 0,
+    left: 0,
+    width: 0,
+    bottom: 0,
+  });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -997,9 +1010,22 @@ function ModelCombobox({
       const input = containerRef.current?.querySelector("input");
       if (!input) return;
       const rect = input.getBoundingClientRect();
-      const desiredHeight = Math.min(220, options.length * 36 + 38);
-      const spaceBelow = window.innerHeight - rect.bottom;
-      setOpensUp(spaceBelow < desiredHeight && rect.top > spaceBelow);
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        setOpen(false);
+        return;
+      }
+      const desiredHeight = Math.min(230, options.length * 36 + 42);
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      const spaceAbove = rect.top - 8;
+      const shouldOpenUp = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
+
+      setOpensUp(shouldOpenUp);
+      setCoords({
+        top: rect.bottom + 6,
+        bottom: window.innerHeight - rect.top + 6,
+        left: rect.left,
+        width: rect.width,
+      });
     };
 
     updatePosition();
@@ -1011,6 +1037,27 @@ function ModelCombobox({
     };
   }, [open, options.length]);
 
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node | null;
+      if (
+        containerRef.current?.contains(target) ||
+        listboxRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setOpen(false);
+      setActiveIndex(-1);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [open]);
+
   const choose = (model: string) => {
     onChange(model);
     setOpen(false);
@@ -1018,13 +1065,7 @@ function ModelCombobox({
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="relative"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
-      }}
-    >
+    <div ref={containerRef} className="relative">
       <Input
         role="combobox"
         aria-autocomplete="list"
@@ -1059,21 +1100,31 @@ function ModelCombobox({
         className="font-mono text-[12.5px]"
       />
 
-      {open && (
+      {open && mounted && typeof document !== "undefined" && createPortal(
         <div
+          ref={listboxRef}
           id="studioos-model-options"
           role="listbox"
-          className={cn(
-            "absolute inset-x-0 z-40 overflow-hidden rounded-md border border-ink-600 bg-ink-900 shadow-[0_18px_44px_-18px_rgba(0,0,0,0.95)]",
-            opensUp ? "bottom-full mb-1.5" : "top-full mt-1.5"
-          )}
+          style={{
+            position: "fixed",
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            ...(opensUp
+              ? { bottom: `${coords.bottom}px` }
+              : { top: `${coords.top}px` }),
+            maxHeight: opensUp
+              ? `${Math.min(230, Math.max(100, window.innerHeight - coords.bottom - 12))}px`
+              : `${Math.min(230, Math.max(100, window.innerHeight - coords.top - 12))}px`,
+            zIndex: 9999,
+          }}
+          className="overflow-hidden rounded-md border border-ink-600 bg-ink-900 shadow-[0_18px_44px_-18px_rgba(0,0,0,0.95)] animate-in fade-in-0 zoom-in-95 duration-100"
         >
           {options.length ? (
             <>
-              <div className="border-b border-ink-700 px-3 py-2 font-mono text-[9px] tracking-[0.16em] text-ink-400 uppercase">
+              <div className="border-b border-ink-700 px-3 py-2 font-mono text-[9px] tracking-[0.16em] text-ink-400 uppercase select-none">
                 Modelos sugeridos · {options.length}
               </div>
-              <div className="max-h-52 overflow-y-auto p-1">
+              <div className="max-h-52 overflow-y-auto p-1 font-mono text-[12px]">
                 {options.map((option, index) => (
                   <button
                     id={`studioos-model-option-${index}`}
@@ -1085,14 +1136,18 @@ function ModelCombobox({
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => choose(option)}
                     className={cn(
-                      "flex w-full items-center justify-between rounded px-3 py-2 text-left font-mono text-[12px] transition-colors",
+                      "flex w-full items-center justify-between rounded px-3 py-2 text-left font-mono text-[12px] transition-colors select-none",
                       activeIndex === index || option === value
-                        ? "bg-ink-700 text-signal-300"
+                        ? "bg-ink-700 text-signal-300 font-semibold"
                         : "text-bone-200 hover:bg-ink-800"
                     )}
                   >
                     <span>{option}</span>
-                    {option === value && <span className="text-[9px] uppercase tracking-wider">selecionado</span>}
+                    {option === value && (
+                      <span className="text-[9px] uppercase tracking-wider text-signal-400 font-bold shrink-0 ml-2">
+                        selecionado
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -1100,7 +1155,8 @@ function ModelCombobox({
           ) : (
             <p className="px-3 py-2.5 text-[11px] text-ink-400">Digite o ID do modelo do seu provedor.</p>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

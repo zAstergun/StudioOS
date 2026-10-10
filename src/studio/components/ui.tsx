@@ -1,5 +1,7 @@
 import {
+  Children,
   forwardRef,
+  isValidElement,
   useEffect,
   useRef,
   useState,
@@ -8,6 +10,7 @@ import {
   type ReactNode,
   type TextareaHTMLAttributes,
 } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "../utils/cn";
 import { accentSoft, type Accent } from "../data";
 
@@ -57,6 +60,8 @@ const P: Record<string, ReactNode> = {
   download: <><path d="M12 3.5v11" /><path d="m7.5 10 4.5 4.5L16.5 10" /><path d="M4 17.5V19a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-1.5" /></>,
   undo: <><path d="M8.5 5.5 4 10l4.5 4.5" /><path d="M4 10h9.5a6.5 6.5 0 0 1 0 13h-2" /></>,
   user: <><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></>,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
+  email: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
   google: <path fill="currentColor" stroke="none" d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" />,
   discord: <path fill="currentColor" stroke="none" d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />,
   youtube: <path fill="currentColor" stroke="none" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />,
@@ -286,15 +291,375 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 );
 Textarea.displayName = "Textarea";
 
+export interface SelectOptionItem {
+  value: string;
+  label: ReactNode;
+  disabled?: boolean;
+}
+
+function extractSelectOptions(children: ReactNode): SelectOptionItem[] {
+  const options: SelectOptionItem[] = [];
+
+  const traverse = (child: ReactNode) => {
+    if (child === null || child === undefined || typeof child === "boolean") return;
+    if (Array.isArray(child)) {
+      child.forEach(traverse);
+      return;
+    }
+    if (isValidElement(child)) {
+      if (child.type === "option") {
+        const p = child.props as {
+          value?: string | number;
+          children?: ReactNode;
+          disabled?: boolean;
+        };
+        const val = p.value !== undefined ? String(p.value) : String(p.children ?? "");
+        options.push({
+          value: val,
+          label: p.children ?? val,
+          disabled: Boolean(p.disabled),
+        });
+      } else if (child.props && (child.props as any).children) {
+        traverse((child.props as any).children);
+      }
+    }
+  };
+
+  Children.forEach(children, traverse);
+  return options;
+}
+
+export interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "size"> {
+  headerTitle?: string;
+  placeholder?: string;
+}
+
 export function Select({
   className,
   children,
-  ...p }: React.SelectHTMLAttributes<HTMLSelectElement>
-) {
+  headerTitle,
+  placeholder,
+  value,
+  defaultValue,
+  onChange,
+  disabled,
+  name,
+  id,
+  ...p
+}: SelectProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const listboxRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [opensUp, setOpensUp] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [mounted, setMounted] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; bottom: number }>({
+    top: 0,
+    left: 0,
+    width: 0,
+    bottom: 0,
+  });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const options = extractSelectOptions(children);
+
+  const isControlled = value !== undefined;
+  const [internalValue, setInternalValue] = useState<string>(() => {
+    if (defaultValue !== undefined) return String(defaultValue);
+    if (options.length > 0) return options[0].value;
+    return "";
+  });
+
+  useEffect(() => {
+    if (!isControlled && defaultValue !== undefined) {
+      setInternalValue(String(defaultValue));
+    }
+  }, [defaultValue, isControlled]);
+
+  const currentValue = isControlled ? String(value) : internalValue;
+
+  useEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        setOpen(false);
+        return;
+      }
+      const desiredHeight = Math.min(240, options.length * 36 + 42);
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      const spaceAbove = rect.top - 8;
+      const shouldOpenUp = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
+
+      setOpensUp(shouldOpenUp);
+      setCoords({
+        top: rect.bottom + 6,
+        bottom: window.innerHeight - rect.top + 6,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, options.length]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node | null;
+      if (
+        containerRef.current?.contains(target) ||
+        listboxRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setOpen(false);
+      setActiveIndex(-1);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (open && activeIndex >= 0 && listRef.current) {
+      const activeEl = listRef.current.children[activeIndex] as HTMLElement | undefined;
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }, [activeIndex, open]);
+
+  const selectOption = (optVal: string) => {
+    if (!isControlled) {
+      setInternalValue(optVal);
+    }
+    if (onChange) {
+      const syntheticEvent = {
+        target: { value: optVal, name: name || "", id: id || "" },
+        currentTarget: { value: optVal, name: name || "", id: id || "" },
+        persist: () => {},
+        preventDefault: () => {},
+        stopPropagation: () => {},
+      } as unknown as React.ChangeEvent<HTMLSelectElement>;
+      onChange(syntheticEvent);
+    }
+    setOpen(false);
+    setActiveIndex(-1);
+    triggerRef.current?.focus();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (disabled) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!open) {
+        setOpen(true);
+        const currIdx = options.findIndex((o) => o.value === currentValue);
+        setActiveIndex(currIdx >= 0 ? currIdx : 0);
+      } else {
+        setActiveIndex((prev) => {
+          let next = (prev + 1) % options.length;
+          while (options[next]?.disabled && next !== prev) {
+            next = (next + 1) % options.length;
+          }
+          return next;
+        });
+      }
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!open) {
+        setOpen(true);
+        const currIdx = options.findIndex((o) => o.value === currentValue);
+        setActiveIndex(currIdx >= 0 ? currIdx : 0);
+      } else {
+        setActiveIndex((prev) => {
+          let next = prev <= 0 ? options.length - 1 : prev - 1;
+          while (options[next]?.disabled && next !== prev) {
+            next = next <= 0 ? options.length - 1 : next - 1;
+          }
+          return next;
+        });
+      }
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (!open) {
+        setOpen(true);
+        const currIdx = options.findIndex((o) => o.value === currentValue);
+        setActiveIndex(currIdx >= 0 ? currIdx : 0);
+      } else if (activeIndex >= 0 && options[activeIndex] && !options[activeIndex].disabled) {
+        selectOption(options[activeIndex].value);
+      }
+    } else if (e.key === "Escape") {
+      if (open) {
+        e.preventDefault();
+        setOpen(false);
+        setActiveIndex(-1);
+      }
+    } else if (e.key === "Tab") {
+      if (open) {
+        setOpen(false);
+        setActiveIndex(-1);
+      }
+    }
+  };
+
+  const selectedOption = options.find((o) => o.value === currentValue);
+  const computedHeaderTitle =
+    headerTitle ||
+    (p["aria-label"] ? String(p["aria-label"]) : "") ||
+    (p.title ? String(p.title) : "") ||
+    "Opções disponíveis";
+
+  const widthClass = className
+    ? className
+        .split(" ")
+        .filter((c) => c.startsWith("w-") || c.startsWith("min-w") || c.startsWith("max-w"))
+        .join(" ")
+    : "";
+
   return (
-    <select {...p} className={cn(fieldBase, "appearance-none pr-9", className)}>
-      {children}
-    </select>
+    <div
+      ref={containerRef}
+      className={cn("relative", widthClass || "w-full")}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setOpen(false);
+        }
+      }}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        role="combobox"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-disabled={disabled}
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((prev) => !prev)}
+        onKeyDown={handleKeyDown}
+        className={cn(
+          fieldBase,
+          "flex w-full items-center justify-between gap-2 text-left font-mono text-[12.5px] select-none cursor-pointer transition-all duration-150",
+          open && "border-signal-400/80 bg-ink-950 ring-2 ring-signal-400/15",
+          disabled && "opacity-50 cursor-not-allowed",
+          className
+        )}
+      >
+        <span className="truncate">
+          {selectedOption ? selectedOption.label : (placeholder || "Selecione...")}
+        </span>
+        <svg
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-ink-400 transition-transform duration-200",
+            open && "rotate-180 text-signal-400"
+          )}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            fillRule="evenodd"
+            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+
+      {/* Hidden native select for form accessibility */}
+      <select
+        name={name}
+        id={id}
+        value={currentValue}
+        onChange={onChange}
+        disabled={disabled}
+        tabIndex={-1}
+        aria-hidden="true"
+        className="sr-only"
+        {...p}
+      >
+        {children}
+      </select>
+
+      {open && mounted && typeof document !== "undefined" && createPortal(
+        <div
+          ref={listboxRef}
+          role="listbox"
+          style={{
+            position: "fixed",
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            ...(opensUp
+              ? { bottom: `${coords.bottom}px` }
+              : { top: `${coords.top}px` }),
+            maxHeight: opensUp
+              ? `${Math.min(240, Math.max(100, window.innerHeight - coords.bottom - 12))}px`
+              : `${Math.min(240, Math.max(100, window.innerHeight - coords.top - 12))}px`,
+            zIndex: 9999,
+          }}
+          className="overflow-hidden rounded-md border border-ink-600 bg-ink-900 shadow-[0_18px_44px_-18px_rgba(0,0,0,0.95)] animate-in fade-in-0 zoom-in-95 duration-100"
+        >
+          <div className="border-b border-ink-700/80 px-3 py-2 font-mono text-[9px] tracking-[0.16em] text-ink-400 uppercase select-none flex items-center justify-between">
+            <span>
+              {computedHeaderTitle} · {options.length}
+            </span>
+          </div>
+          <div ref={listRef} className="max-h-56 overflow-y-auto p-1 font-mono text-[12px]">
+            {options.map((opt, index) => {
+              const isSelected = opt.value === currentValue;
+              const isActive = activeIndex === index;
+              return (
+                <button
+                  key={opt.value + "-" + index}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  disabled={opt.disabled}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => !opt.disabled && setActiveIndex(index)}
+                  onClick={() => {
+                    if (!opt.disabled) selectOption(opt.value);
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded px-3 py-2 text-left font-mono text-[12px] transition-colors select-none",
+                    opt.disabled && "opacity-40 cursor-not-allowed hover:bg-transparent",
+                    !opt.disabled && isSelected && "bg-ink-700 text-signal-300 font-semibold",
+                    !opt.disabled && !isSelected && isActive && "bg-ink-800 text-bone-100",
+                    !opt.disabled && !isSelected && !isActive && "text-bone-200 hover:bg-ink-800 hover:text-bone-100"
+                  )}
+                >
+                  <span className="truncate">{opt.label}</span>
+                  {isSelected && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-signal-400 font-mono shrink-0 ml-2">
+                      SELECIONADO
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
   );
 }
 
@@ -455,3 +820,5 @@ export function useCountUp(target: number, duration = 1400, start = true) {
   }, [target, duration, start]);
   return v;
 }
+
+export { VipBadge } from "./VipBadge";

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Icon, Panel, Reveal, Button } from "../components/ui";
+import { Icon, Panel, Reveal, Button, VipBadge } from "../components/ui";
 import { cn } from "../utils/cn";
 
 import { type Project, computeProjectStatus } from "./ProjetosScreen";
@@ -186,7 +186,7 @@ export function ProjetoDetailScreen({
       const { data } = await supabase.from('studioos_project_notes').select('*').eq('project_id', project.id).order('created_at', { ascending: false });
       if (data && data.length > 0) {
         const authorIds = Array.from(new Set(data.map(d => d.author_id)));
-        const { data: profiles } = await supabase.from('profiles').select('id, full_name, channel, avatar_url').in('id', authorIds);
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name, channel, avatar_url, is_vip').in('id', authorIds);
         
         const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
         setNotes(data.map(d => ({ ...d, profile: profileMap.get(d.author_id) })));
@@ -301,7 +301,7 @@ export function ProjetoDetailScreen({
       return;
     }
     if (data) {
-      const { data: profile } = await supabase.from('profiles').select('id, full_name, channel, avatar_url').eq('id', user.id).single();
+      const { data: profile } = await supabase.from('profiles').select('id, full_name, channel, avatar_url, is_vip').eq('id', user.id).single();
       setNotes(prev => [{ ...data, profile }, ...prev]);
     }
     setNewNoteContent("");
@@ -1033,13 +1033,18 @@ export function ProjetoDetailScreen({
                           <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-bone-300 relative z-0">{note.content}</p>
                           <div className="mt-4 flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              {(note.profile?.avatar_url || (note.author_id === user?.id ? user?.avatarUrl : null)) ? (
-                                <img src={note.profile?.avatar_url || user?.avatarUrl} alt={note.profile?.full_name || 'Usuário'} className="h-5 w-5 rounded-full object-cover" />
-                              ) : (
-                                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-signal-400 text-[9px] font-bold text-ink-950 uppercase">
-                                  {note.profile?.full_name?.charAt(0) || note.profile?.channel?.charAt(0) || user?.name?.charAt(0) || '?'}
-                                </div>
-                              )}
+                              <div className="relative shrink-0">
+                                {(note.profile?.avatar_url || (note.author_id === user?.id ? user?.avatarUrl : null)) ? (
+                                  <img src={note.profile?.avatar_url || user?.avatarUrl} alt={note.profile?.full_name || 'Usuário'} className="h-5 w-5 rounded-full object-cover" />
+                                ) : (
+                                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-signal-400 text-[9px] font-bold text-ink-950 uppercase">
+                                    {note.profile?.full_name?.charAt(0) || note.profile?.channel?.charAt(0) || user?.name?.charAt(0) || '?'}
+                                  </div>
+                                )}
+                                {(note.profile?.is_vip || (note.author_id === user?.id && user?.is_vip)) && (
+                                  <VipBadge size="xs" />
+                                )}
+                              </div>
                               <span className="font-mono text-[9px] text-bone-400">
                                 {note.profile?.channel?.startsWith('@') ? note.profile.channel : `@${note.profile?.channel || 'usuario'}`}
                               </span>

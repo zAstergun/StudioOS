@@ -347,7 +347,9 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
   const [name, setName] = useState("");
   const [channel, setChannel] = useState("");
   const [terms, setTerms] = useState(false);
+  const [signupMethod, setSignupMethod] = useState<"email" | "username">("email");
   const [loading, setLoading] = useState(false);
+  const [testLoading, setTestLoading] = useState(false);
   const [oauth, setOauth] = useState<"google" | "discord" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -367,8 +369,21 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
   };
 
   const pw = strength(password);
-  const emailErr = touched && mode !== "login" && !EMAIL_RE.test(email.trim()) ? "Informe um e-mail válido." : 
-                   touched && mode === "login" && !email.trim() ? "Informe seu e-mail ou nome de usuário." : undefined;
+  const channelErr =
+    touched && mode === "signup" && signupMethod === "username" && (!channel.trim() || channel.trim().replace(/^@/, '').length < 3)
+      ? "Informe um nome de usuário com pelo menos 3 caracteres."
+      : undefined;
+
+  const emailErr =
+    mode === "magic"
+      ? undefined
+      : mode === "signup" && signupMethod === "username"
+      ? (touched && email.trim() && !EMAIL_RE.test(email.trim()) ? "Informe um e-mail válido ou deixe em branco." : undefined)
+      : touched && mode !== "login" && !EMAIL_RE.test(email.trim())
+      ? "Informe um e-mail válido."
+      : touched && mode === "login" && !email.trim()
+      ? "Informe seu e-mail ou nome de usuário."
+      : undefined;
   
   const passErr =
     touched && (mode === "signup" || mode === "recover") && password.length < 8
@@ -393,7 +408,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
         setMode("sent");
       } else if (r.message) {
         setInfo(r.message);
-        if (mode === "forgot" || mode === "magic") setMode("sent");
+        if (mode === "forgot") setMode("sent");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Algo deu errado.");
@@ -412,14 +427,23 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
       
       run(() => auth.signIn(em, password));
     } else if (mode === "signup") {
-      if (!EMAIL_RE.test(em) || password.length < 8 || confirm !== password || name.trim().length < 2 || !terms) return;
-      run(() => auth.signUp({ email: em, password, name: name.trim(), channel: channel.trim() || undefined }));
+      if (signupMethod === "email") {
+        if (!EMAIL_RE.test(em) || password.length < 8 || confirm !== password || name.trim().length < 2 || !terms) return;
+      } else {
+        const cleanChan = channel.replace(/^@/, "").trim();
+        if (cleanChan.length < 3 || (em && !EMAIL_RE.test(em)) || password.length < 8 || confirm !== password || name.trim().length < 2 || !terms) return;
+      }
+      run(() => auth.signUp({ 
+        email: em || undefined, 
+        password, 
+        name: name.trim(), 
+        channel: channel.trim() || undefined 
+      }));
     } else if (mode === "forgot") {
       if (!EMAIL_RE.test(em)) return;
       run(() => auth.resetPassword(em));
     } else if (mode === "magic") {
-      if (!EMAIL_RE.test(em)) return;
-      run(() => auth.sendMagicLink(em));
+      run(() => auth.signInWithTestAccount());
     } else if (mode === "recover") {
       if (password.length < 8 || confirm !== password) return;
       run(() => auth.updatePassword(password));
@@ -428,9 +452,9 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
 
   const titles: Record<Mode, { k: string; t: string; d: string }> = {
     login: { k: "01 · acesso", t: "Entrar no estúdio", d: "Use o e-mail/usuário e a senha da sua conta." },
-    signup: { k: "02 · nova conta", t: "Criar conta", d: "Leva menos de um minuto. Sem cartão." },
+    signup: { k: "02 · nova conta", t: "Criar conta", d: "Escolha como prefere se cadastrar: você pode se registrar com seu e-mail ou com seu nome de usuário (@)." },
     forgot: { k: "03 · recuperação", t: "Esqueci a senha", d: "Enviaremos um link para você definir uma nova senha." },
-    magic: { k: "04 · link mágico", t: "Entrar sem senha", d: "Receba um link de acesso de uso único no seu e-mail." },
+    magic: { k: "04 · conta teste", t: "Entre com uma conta teste", d: "Acesso instantâneo de 24 horas sem precisar de e-mail ou cadastro." },
     sent: { k: "05 · verifique o e-mail", t: "Confira sua caixa", d: "" },
     recover: { k: "06 · nova senha", t: "Definir nova senha", d: "Escolha uma senha forte para a sua conta." },
   };
@@ -503,7 +527,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                 </h2>
                 {head.d && <p className="mt-2 text-[14px] leading-relaxed text-bone-400">{head.d}</p>}
 
-                {accessRequired && mode !== "sent" && (
+                {accessRequired && mode !== "sent" && mode !== "forgot" && (
                   <div className="mt-5">
                     <Notice tone="info">
                       Entre ou crie uma conta para acessar seu histórico, a lixeira e os dados salvos.
@@ -548,40 +572,180 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                     {info && <Notice tone="ok">{info}</Notice>}
 
                     {mode === "signup" && (
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label="Seu nome" error={nameErr}>
+                      <div className="space-y-4">
+                        {/* Seletor explícito de método de cadastro */}
+                        <div className="rounded-lg border border-ink-700 bg-ink-950/70 p-1.5">
+                          <div className="mb-1.5 px-1.5 pt-0.5 flex items-center justify-between">
+                            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-bone-300">
+                              Como prefere se cadastrar?
+                            </span>
+                            <span className="font-mono text-[9px] text-signal-400 uppercase tracking-wider">
+                              Escolha uma opção
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSignupMethod("email");
+                                setError(null);
+                              }}
+                              className={cn(
+                                "flex items-center justify-center gap-1.5 rounded py-2 font-mono text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer",
+                                signupMethod === "email"
+                                  ? "bg-signal-400 text-ink-950 shadow-sm"
+                                  : "text-bone-400 hover:bg-ink-800 hover:text-bone-100"
+                              )}
+                            >
+                              <Icon name="mail" className="h-3.5 w-3.5" />
+                              Com E-mail
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSignupMethod("username");
+                                setError(null);
+                              }}
+                              className={cn(
+                                "flex items-center justify-center gap-1.5 rounded py-2 font-mono text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer",
+                                signupMethod === "username"
+                                  ? "bg-signal-400 text-ink-950 shadow-sm"
+                                  : "text-bone-400 hover:bg-ink-800 hover:text-bone-100"
+                              )}
+                            >
+                              <Icon name="user" className="h-3.5 w-3.5" />
+                              Com @Usuário
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Callout de explicação da escolha */}
+                        <div className="rounded-lg border border-signal-400/25 bg-signal-400/[0.06] p-3 text-[12px] leading-relaxed text-bone-200">
+                          {signupMethod === "email" ? (
+                            <p>
+                              ✉️ <strong>Cadastro por E-mail:</strong> você se registra com seu e-mail para confirmação e recuperação de senha. O <strong>@usuario</strong> é opcional no momento e poderá ser definido agora ou depois no seu perfil.
+                            </p>
+                          ) : (
+                            <p>
+                              👤 <strong>Cadastro por @Usuário:</strong> você cria sua conta usando seu nome de usuário e senha diretamente. O <strong>e-mail</strong> é opcional. <em>Nota: caso se cadastre apenas com @usuario, a alteração dele no futuro exigirá a confirmação de um e-mail.</em>
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Campos de Nome e Usuário */}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <Field label="Seu nome" error={nameErr}>
+                            <input
+                              value={name}
+                              onChange={(e) => setName(e.target.value)}
+                              autoComplete="name"
+                              placeholder="Ana Souza"
+                              className={inputCls(!!nameErr)}
+                            />
+                          </Field>
+                          <Field
+                            label={signupMethod === "username" ? "Usuário (@)" : "Usuário"}
+                            hint={
+                              <span className={cn("text-[10px] font-mono", signupMethod === "username" ? "text-signal-400 font-bold" : "text-ink-400")}>
+                                {signupMethod === "username" ? "obrigatório · @login" : "opcional · @login"}
+                              </span>
+                            }
+                            error={channelErr}
+                          >
+                            <input
+                              value={channel}
+                              onChange={(e) => setChannel(e.target.value)}
+                              placeholder="@usuario"
+                              className={inputCls(!!channelErr)}
+                            />
+                          </Field>
+                        </div>
+
+                        {/* Campo de E-mail para cadastro */}
+                        <Field
+                          label={signupMethod === "email" ? "E-mail" : "E-mail (opcional)"}
+                          hint={
+                            <span className={cn("text-[10px] font-mono", signupMethod === "email" ? "text-signal-400 font-bold" : "text-ink-400")}>
+                              {signupMethod === "email" ? "obrigatório" : "opcional · recuperação"}
+                            </span>
+                          }
+                          error={emailErr}
+                        >
                           <input
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            autoComplete="name"
-                            placeholder="Ana Souza"
-                            className={inputCls(!!nameErr)}
-                          />
-                        </Field>
-                        <Field label="Usuário" hint={<span className="text-[10.5px] text-ink-400">opcional</span>}>
-                          <input
-                            value={channel}
-                            onChange={(e) => setChannel(e.target.value)}
-                            placeholder="@usuario"
-                            className={inputCls()}
+                            type="email"
+                            inputMode="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            autoComplete="email"
+                            placeholder={signupMethod === "username" ? "voce@email.com (opcional)" : "voce@email.com"}
+                            className={inputCls(!!emailErr)}
                           />
                         </Field>
                       </div>
                     )}
 
-                    {mode !== "recover" && (
-                      <Field label={mode === "login" ? "E-mail ou Nome de Usuário (@)" : "E-mail"} error={emailErr}>
+                    {mode === "login" && (
+                      <Field label="E-mail ou Nome de Usuário (@)" error={emailErr}>
                         <input
-                          type={mode === "login" ? "text" : "email"}
-                          inputMode={mode === "login" ? "text" : "email"}
+                          type="text"
+                          inputMode="text"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           autoComplete="username"
-                          placeholder={mode === "login" ? "voce@email.com ou @usuario" : "voce@email.com"}
+                          placeholder="voce@email.com ou @usuario"
                           autoFocus
                           className={inputCls(!!emailErr)}
                         />
                       </Field>
+                    )}
+
+                    {mode === "forgot" && (
+                      <div className="space-y-4">
+                        <Field label="E-mail da sua conta" error={emailErr} hint="Informe o e-mail cadastrado para enviarmos as instruções de redefinição">
+                          <input
+                            type="email"
+                            inputMode="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            autoComplete="email"
+                            placeholder="voce@email.com"
+                            autoFocus
+                            className={inputCls(!!emailErr)}
+                          />
+                        </Field>
+
+                        {/* Callout de suporte caso a conta não tenha e-mail cadastrado */}
+                        <div className="rounded-lg border border-ink-700 bg-ink-950/70 p-3.5 text-[12.5px] leading-relaxed text-bone-300">
+                          <div className="flex items-start gap-2.5">
+                            <Icon name="mail" className="h-4 w-4 shrink-0 text-signal-400 mt-0.5" />
+                            <div className="space-y-1">
+                              <p className="font-semibold text-bone-100">Não cadastrou e-mail na sua conta?</p>
+                              <p className="text-ink-400 text-[11.5px] leading-relaxed">
+                                Se você criou sua conta apenas com nome de usuário (@) e não vinculou um e-mail, envie uma mensagem para{" "}
+                                <a
+                                  href="mailto:help@asterdev.me?subject=Recupera%C3%A7%C3%A3o%20de%20Conta%20sem%20E-mail%20-%20StudioOS"
+                                  className="font-mono text-signal-400 underline decoration-signal-400/40 underline-offset-2 hover:text-signal-300 hover:decoration-signal-400"
+                                >
+                                  help@asterdev.me
+                                </a>{" "}
+                                com as informações da sua conta (seu @ de usuário, nome e detalhes de comprovação) para nossa equipe te ajudar a recuperar o acesso.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {mode === "magic" && (
+                      <div className="rounded-lg border border-signal-400/30 bg-signal-400/[0.06] p-4 text-[13px] leading-relaxed text-bone-200">
+                        <div className="flex items-center gap-2 mb-1.5 text-signal-300 font-semibold">
+                          <Icon name="flask" className="h-4 w-4" />
+                          <span>Conta temporária (válida por 24 horas)</span>
+                        </div>
+                        <p className="text-bone-400 text-[12.5px]">
+                          Uma conta de teste será gerada automaticamente na hora. Você terá acesso completo a todos os recursos do StudioOS. Após 24h, todos os dados dessa conta são apagados sozinhos pelo sistema.
+                        </p>
+                      </div>
                     )}
 
                     {(mode === "login" || mode === "signup" || mode === "recover") && (
@@ -684,11 +848,11 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                     )}
 
                     <div className="pt-1">
-                      <Submit loading={loading} icon={mode === "forgot" || mode === "magic" ? "spark" : "arrow"}>
+                      <Submit loading={loading} icon={mode === "forgot" ? "send" : mode === "magic" ? "flask" : "arrow"}>
                         {mode === "login" && "Entrar"}
                         {mode === "signup" && "Criar minha conta"}
                         {mode === "forgot" && "Enviar link de redefinição"}
-                        {mode === "magic" && "Enviar link de acesso"}
+                        {mode === "magic" && "Criar conta teste e entrar agora (24h)"}
                         {mode === "recover" && "Salvar nova senha"}
                       </Submit>
                     </div>
@@ -706,7 +870,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                           <OAuthButton
                             provider="google"
                             compact
-                            disabled={loading}
+                            disabled={loading || testLoading}
                             pending={oauth === "google"}
                             onClick={() => {
                               setOauth("google");
@@ -716,7 +880,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                           <OAuthButton
                             provider="discord"
                             compact
-                            disabled={loading}
+                            disabled={loading || testLoading}
                             pending={oauth === "discord"}
                             onClick={() => {
                               setOauth("discord");
@@ -725,14 +889,34 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                           />
                         </div>
                         {mode === "login" && (
-                          <button
-                            type="button"
-                            onClick={() => go("magic")}
-                            className="flex w-full items-center justify-center gap-2 py-1 text-[12.5px] text-bone-400 transition-colors hover:text-signal-300"
-                          >
-                            <Icon name="spark" className="h-3.5 w-3.5" />
-                            Entrar com link mágico, sem senha
-                          </button>
+                          <div className="pt-2 text-center">
+                            <button
+                              type="button"
+                              disabled={loading || testLoading}
+                              onClick={async () => {
+                                setTestLoading(true);
+                                await run(() => auth.signInWithTestAccount());
+                                setTestLoading(false);
+                              }}
+                              className="group flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-ink-600 bg-ink-950/60 py-2.5 px-3 text-[13px] font-medium text-bone-300 transition-all hover:border-signal-400/60 hover:bg-signal-400/10 hover:text-signal-300 active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
+                            >
+                              {testLoading ? (
+                                <>
+                                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-signal-400/30 border-t-signal-400" />
+                                  <span>Criando conta de teste…</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Icon name="flask" className="h-3.5 w-3.5 text-signal-400 transition-transform duration-300 group-hover:scale-110" />
+                                  <span>Entre com uma conta teste</span>
+                                  <span className="rounded bg-signal-400/15 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider text-signal-300 uppercase">24h</span>
+                                </>
+                              )}
+                            </button>
+                            <p className="mt-1.5 text-[11px] text-ink-500">
+                              Acesso instantâneo sem cadastro. Seus dados se apagam sozinhos após 24h.
+                            </p>
+                          </div>
                         )}
                       </>
                     )}

@@ -256,7 +256,7 @@ Espelhe a estrutura, não o conteúdo. A receita funcionou porque um dia pareceu
           <Textarea rows={12} value={original} onChange={(e) => setOriginal(e.target.value)} placeholder="Cole o post que performou, inteiro, com as quebras de linha" />
           <div className="mt-3">
             <Label>Formato do post</Label>
-            <Select value={format} onChange={(e) => setFormat(e.target.value)}>
+            <Select value={format} onChange={(e) => setFormat(e.target.value)} headerTitle="Formatos do post">
               <option value="texto">Texto longo (LinkedIn / Facebook)</option>
               <option value="carrossel">Carrossel</option>
               <option value="thread">Thread (X)</option>

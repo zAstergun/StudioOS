@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Icon, Panel, Reveal, Button, Input } from "../components/ui";
+import { Icon, Panel, Reveal, Button, Input, VipBadge } from "../components/ui";
 import { useAuth, supabase } from "../auth";
 import { cn } from "../utils/cn";
 
@@ -16,6 +16,7 @@ export interface CreatorRankItem {
   total_runs: number;
   streak: number;
   created_at?: string;
+  is_vip?: boolean;
 }
 
 type SortTab = "global" | "likes" | "projects" | "ideas";
@@ -88,8 +89,16 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
     }
 
     try {
-      // 1. Tenta chamar a RPC oficial studioos_get_creators_ranking
-      const { data, error } = await supabase.rpc("studioos_get_creators_ranking");
+      // 1. Tenta chamar a RPC oficial studioos_get_creators_ranking_v2 com suporte a is_vip
+      let { data, error } = await supabase.rpc("studioos_get_creators_ranking_v2");
+      if (error) {
+        const fallbackRpc = await supabase.rpc("studioos_get_creators_ranking");
+        if (!fallbackRpc.error) {
+          data = fallbackRpc.data;
+          error = null;
+        }
+      }
+
       if (!error && Array.isArray(data) && data.length > 0) {
         const parsed: CreatorRankItem[] = data.map((d: any) => ({
           id: d.id,
@@ -104,13 +113,14 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
           total_runs: Number(d.total_runs) || 0,
           streak: Number(d.streak) || 0,
           created_at: d.created_at,
+          is_vip: Boolean(d.is_vip),
         }));
         setCreators(parsed);
       } else {
         // 2. Fallback direto consultando profiles
         const { data: profs, error: profsErr } = await supabase
           .from("profiles")
-          .select("id, full_name, channel, avatar_url, bio, stats, created_at")
+          .select("id, full_name, channel, avatar_url, bio, stats, created_at, is_vip")
           .order("created_at", { ascending: false });
 
         if (!profsErr && profs && profs.length > 0) {
@@ -129,6 +139,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
               total_runs: Number(stats.total_runs) || 0,
               streak: Number(stats.streak) || 0,
               created_at: p.created_at,
+              is_vip: Boolean(p.is_vip),
             };
           });
           setCreators(mapped);
@@ -168,6 +179,11 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
     if (!user || user.provider === "demo") {
       alert("Apenas criadores autenticados com conta podem curtir perfis no StudioOS.");
       onGo("login");
+      return;
+    }
+
+    if (user.is_temporary) {
+      alert("Contas de teste não podem curtir perfis. Crie uma conta definitiva para interagir.");
       return;
     }
 
@@ -520,6 +536,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                             {creator.full_name.charAt(0).toUpperCase()}
                           </div>
                         )}
+                        {creator.is_vip && <VipBadge size="xs" />}
                         {isGold && (
                           <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-amber-400 text-ink-950 shadow-md">
                             <Icon name="star" className="h-3 w-3" />
@@ -590,7 +607,15 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                               : "border-ink-800 bg-ink-900/60 text-bone-400 hover:border-signal-500/40 hover:text-signal-400",
                             isSelf && "cursor-not-allowed opacity-50"
                           )}
-                          title={isSelf ? "Você não pode curtir seu próprio perfil" : hasLiked ? "Descurtir perfil" : "Curtir este criador"}
+                          title={
+                            isSelf
+                              ? "Você não pode curtir seu próprio perfil"
+                              : user?.is_temporary
+                              ? "Contas de teste não podem curtir perfis"
+                              : hasLiked
+                              ? "Descurtir perfil"
+                              : "Curtir este criador"
+                          }
                         >
                           <Icon
                             name="heart"
@@ -709,6 +734,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                             {creator.full_name.charAt(0).toUpperCase()}
                           </div>
                         )}
+                        {creator.is_vip && <VipBadge size="xs" />}
                       </button>
 
                       {/* Nome e handle */}
@@ -801,7 +827,15 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                               : "border-ink-800 bg-ink-900/80 text-bone-400 hover:border-signal-500/40 hover:text-signal-400",
                             isSelf && "cursor-not-allowed opacity-50"
                           )}
-                          title={isSelf ? "Seu perfil" : hasLiked ? "Descurtir" : "Curtir"}
+                          title={
+                            isSelf
+                              ? "Seu perfil"
+                              : user?.is_temporary
+                              ? "Contas de teste não podem curtir perfis"
+                              : hasLiked
+                              ? "Descurtir"
+                              : "Curtir"
+                          }
                         >
                           <Icon
                             name="heart"

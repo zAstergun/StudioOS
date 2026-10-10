@@ -545,6 +545,8 @@ export default function App() {
               calibrated={progress >= 100}
               demo={!auth.user}
               userName={auth.user?.name}
+              isTemporary={auth.user?.is_temporary}
+              expiresAt={auth.user?.expires_at}
               onSignOut={auth.signOut}
               profileName={activeProfile.name}
               profileColor={activeProfile.color}

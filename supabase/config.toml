@@ -258,12 +258,11 @@ content_path = "./supabase/templates/reset-password.html"
 subject = "Aster Account • Confirmação de alteração de e-mail"
 content_path = "./supabase/templates/change-email.html"
 
+[auth.email.notification.email_changed]
+enabled = true
+subject = "Aster Account • Seu e-mail de acesso foi alterado"
+content_path = "./supabase/templates/email-changed-notification.html"
 
-# Uncomment to customize notification email template
-# [auth.email.notification.password_changed]
-# enabled = true
-# subject = "Your password has been changed"
-# content_path = "./supabase/templates/password_changed_notification.html"
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.

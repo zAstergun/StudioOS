@@ -526,10 +526,11 @@ create or replace function public.studioos_toggle_profile_like(p_target_id uuid)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, auth
 as $$
 declare
   v_uid uuid;
+  v_is_temp boolean;
   v_exists boolean;
   v_new_count bigint;
   v_liked boolean;
@@ -537,6 +538,16 @@ begin
   v_uid := auth.uid();
   if v_uid is null then
     raise exception 'Usuário não autenticado';
+  end if;
+
+  -- Bloquear contas de teste temporárias de curtir perfis
+  select coalesce((raw_user_meta_data->>'is_temporary')::boolean, false)
+  into v_is_temp
+  from auth.users
+  where id = v_uid;
+
+  if v_is_temp then
+    raise exception 'Contas de teste não podem curtir perfis. Crie uma conta definitiva para interagir.';
   end if;
   
   if v_uid = p_target_id then
@@ -724,3 +735,67 @@ grant select, insert, update, delete on table public.studioos_profile_comments t
 
 
 
+
+-- Regra de negócio: Usuário só pode alterar o @usuario se o e-mail estiver confirmado
+create or replace function public.check_channel_update_email_verified()
+returns trigger as $$
+declare
+  v_confirmed_at timestamptz;
+begin
+  if old.channel is not null and new.channel is distinct from old.channel then
+    select email_confirmed_at into v_confirmed_at from auth.users where id = new.id;
+    if v_confirmed_at is null then
+      raise exception 'Você só pode alterar seu nome de usuário após confirmar o seu e-mail.';
+    end if;
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists trg_check_channel_update_email_verified on public.profiles;
+create trigger trg_check_channel_update_email_verified
+before update of channel on public.profiles
+for each row
+execute function public.check_channel_update_email_verified();
+
+-- Bloqueio de comentários em perfis para contas de teste temporárias
+create or replace function public.check_comment_not_test_account()
+returns trigger as $$
+declare
+  v_is_temp boolean;
+begin
+  select coalesce((raw_user_meta_data->>'is_temporary')::boolean, false)
+  into v_is_temp
+  from auth.users
+  where id = new.author_id;
+
+  if v_is_temp then
+    raise exception 'Contas de teste não podem comentar em perfis. Crie uma conta definitiva para interagir.';
+  end if;
+
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public, auth;
+
+drop trigger if exists trg_check_comment_not_test_account on public.studioos_profile_comments;
+create trigger trg_check_comment_not_test_account
+before insert on public.studioos_profile_comments
+for each row
+execute function public.check_comment_not_test_account();
+
+-- Limpeza automtica de contas temporrias de teste aps 24h
+create or replace function public.cleanup_expired_test_accounts()
+returns integer as $$
+declare
+  v_count integer := 0;
+begin
+  with deleted as (
+    delete from auth.users
+    where (raw_user_meta_data->>'is_temporary')::boolean = true
+      and (raw_user_meta_data->>'expires_at')::timestamptz < now()
+    returning id
+  )
+  select count(*) into v_count from deleted;
+  return v_count;
+end;
+$$ language plpgsql security definer set search_path = public, auth;

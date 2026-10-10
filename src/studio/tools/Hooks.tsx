@@ -290,7 +290,7 @@ export function Hooks({
           </div>
           <div>
             <Label>Destino</Label>
-            <Select value={format} onChange={(e) => setFormat(e.target.value)} className="min-w-[10rem]">
+            <Select value={format} onChange={(e) => setFormat(e.target.value)} headerTitle="Destinos sugeridos" className="min-w-[10rem]">
               <option value="shorts">Shorts / Reels / TikTok</option>
               <option value="long">Abertura de vídeo longo</option>
               <option value="post">Primeira linha de post</option>

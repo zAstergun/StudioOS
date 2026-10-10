@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import Cropper from "react-easy-crop";
 import { Panel, Reveal, Icon, Button, Input, Label, Select } from "../components/ui";
+import { VipBadge } from "../components/VipBadge";
 import { useAuth, supabase } from "../auth";
 import { computeProjectStatus } from "./ProjetosScreen";
 import { cn } from "../utils/cn";
@@ -219,6 +220,11 @@ export default function PerfilScreen({
       return;
     }
 
+    if (user.is_temporary) {
+      alert("Contas de teste não podem curtir perfis. Crie uma conta definitiva para interagir.");
+      return;
+    }
+
     // 2. Não pode curtir o próprio perfil
     if (user.id === currentProfileId) {
       alert("Você não pode curtir seu próprio perfil.");
@@ -278,15 +284,24 @@ export default function PerfilScreen({
     setCommentsLoading(true);
     setCommentError(null);
     try {
-      const { data, error } = await supabase.rpc("studioos_get_profile_comments", {
+      let { data, error } = await supabase.rpc("studioos_get_profile_comments_v2", {
         p_profile_id: currentProfileId,
       });
+      if (error) {
+        const fallback = await supabase.rpc("studioos_get_profile_comments", {
+          p_profile_id: currentProfileId,
+        });
+        if (!fallback.error) {
+          data = fallback.data;
+          error = null;
+        }
+      }
       if (!error && Array.isArray(data)) {
         setComments(data);
       } else {
         const { data: raw, error: rawErr } = await supabase
           .from("studioos_profile_comments")
-          .select("id, profile_id, author_id, content, created_at, profiles:author_id(full_name, channel, avatar_url)")
+          .select("id, profile_id, author_id, content, created_at, profiles:author_id(full_name, channel, avatar_url, is_vip)")
           .eq("profile_id", currentProfileId)
           .order("created_at", { ascending: false });
         if (!rawErr && raw) {
@@ -299,6 +314,7 @@ export default function PerfilScreen({
             author_name: r.profiles?.full_name || "Criador",
             author_channel: r.profiles?.channel || "usuario",
             author_avatar: r.profiles?.avatar_url || null,
+            author_is_vip: Boolean(r.profiles?.is_vip),
           })));
         }
       }
@@ -343,6 +359,10 @@ export default function PerfilScreen({
     if (!user || user.provider === "demo") {
       alert("Apenas usuários autenticados com conta podem comentar nos perfis do StudioOS.");
       onGo?.("login");
+      return;
+    }
+    if (user.is_temporary) {
+      alert("Contas de teste não podem comentar em perfis. Crie uma conta definitiva para interagir.");
       return;
     }
     if (!currentProfileId || !supabase) return;
@@ -1355,6 +1375,12 @@ export default function PerfilScreen({
 
   const saveProfileChanges = async () => {
     const cleanHandle = draftChannel.trim().replace(/^@/, '').toLowerCase();
+    const currentClean = (channel || "").trim().replace(/^@/, '').toLowerCase();
+
+    if (currentClean && cleanHandle !== currentClean && !user?.email_confirmed_at) {
+      alert("Você só pode alterar seu nome de usuário (@) após verificar o seu e-mail. Verifique a caixa de entrada da sua conta para liberar a alteração.");
+      return;
+    }
     
     if (cleanHandle && !/^[a-z0-9_.-]+$/.test(cleanHandle)) {
       alert("O nome de usuário (@) só pode conter letras minúsculas, números, sublinhados (_), hífens (-) e pontos (.).");
@@ -1431,11 +1457,37 @@ export default function PerfilScreen({
     setPassSaving(false);
   };
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      const isGif = file.type === "image/gif" || file.name.toLowerCase().endsWith(".gif");
+
+      if (isGif && !user?.is_vip) {
+        alert("Apenas membros VIP podem usar GIFs na foto de perfil. Torne-se VIP na Aster Account para desbloquear avatares animados!");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+
+      if (isGif && user?.is_vip) {
+        // GIF animado: canvas crop destruiria os quadros de animação do GIF. Enviamos o GIF original preservando a animação completa!
+        setUploadingAvatar(true);
+        try {
+          const res = await updateAvatar(file);
+          if (!res.ok) {
+            alert(res.error);
+          }
+        } catch (err: any) {
+          alert("Erro ao enviar GIF: " + (err?.message || "falha no upload"));
+        } finally {
+          setUploadingAvatar(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+        return;
+      }
+
       const reader = new FileReader();
       reader.addEventListener('load', () => setCropImage(reader.result?.toString() || null));
-      reader.readAsDataURL(e.target.files[0]);
+      reader.readAsDataURL(file);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -1717,6 +1769,9 @@ export default function PerfilScreen({
               </div>
             )}
           </div>
+          {(isViewingOther ? Boolean(targetProfile?.is_vip) : Boolean(user?.is_vip)) && (
+            <VipBadge size="lg" className="top-0 right-0 sm:top-1 sm:right-1" />
+          )}
           {!isPublicView && (
             <>
               <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
@@ -1790,7 +1845,13 @@ export default function PerfilScreen({
                         type="button"
                         onClick={handleToggleLike}
                         disabled={likingLoading}
-                        title={hasLiked ? "Descurtir perfil" : "Curtir este perfil"}
+                        title={
+                          user?.is_temporary
+                            ? "Contas de teste não podem curtir perfis"
+                            : hasLiked
+                            ? "Descurtir perfil"
+                            : "Curtir este perfil"
+                        }
                         className={`col-span-2 sm:col-span-1 flex items-center justify-center gap-2 rounded-lg border px-4 py-2 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
                           hasLiked
                             ? "border-red-500/70 bg-red-500/15 text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.25)] hover:bg-red-500/20"
@@ -1807,22 +1868,6 @@ export default function PerfilScreen({
                         }`}>
                           {likesCount}
                         </span>
-                      </button>
-
-                      {/* Botão Copiar Link */}
-                      <button
-                        type="button"
-                        onClick={handleCopyProfileLink}
-                        aria-label="Copiar link do perfil"
-                        title={copiedLink ? "Link copiado para a área de transferência!" : "Copiar link do perfil para compartilhar"}
-                        className={`flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
-                          copiedLink
-                            ? "border-[#2FD4A0]/60 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_15px_rgba(47,212,160,0.25)]"
-                            : "border-ink-700 bg-ink-900/50 text-bone-300 hover:border-signal-400/60 hover:text-bone-50 hover:bg-ink-800/60"
-                        }`}
-                      >
-                        <Icon name={copiedLink ? "check" : "copy"} className="h-3.5 w-3.5" />
-                        <span>{copiedLink ? "Copiado!" : "Copiar link"}</span>
                       </button>
                     </>
                   ) : isViewingOwnPublicPreview ? (
@@ -2008,21 +2053,35 @@ export default function PerfilScreen({
                   <label className="text-[10px] font-mono uppercase tracking-widest text-ink-400 block mb-1.5">
                     Nome de Usuário (@ único)
                   </label>
-                  <div className="flex items-center rounded-lg border border-[#232327] bg-[#101012] px-3 py-2 focus-within:border-signal-400 focus-within:shadow-[0_0_12px_rgba(242,179,61,0.2)] transition-all">
+                  <div className={`flex items-center rounded-lg border bg-[#101012] px-3 py-2 transition-all ${
+                    Boolean(channel && !user?.email_confirmed_at)
+                      ? "border-amber-500/30 opacity-75 cursor-not-allowed"
+                      : "border-[#232327] focus-within:border-signal-400 focus-within:shadow-[0_0_12px_rgba(242,179,61,0.2)]"
+                  }`}>
                     <span className="font-mono text-sm font-bold text-signal-400 select-none mr-1">@</span>
                     <input 
                       ref={channelInputRef}
                       type="text"
+                      disabled={Boolean(channel && !user?.email_confirmed_at)}
                       value={draftChannel}
                       onChange={e => setDraftChannel(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
                       placeholder="usuario"
                       maxLength={30}
-                      className="bg-transparent font-mono text-sm text-signal-400 focus:outline-none placeholder:text-signal-400/35 w-full"
+                      className={`bg-transparent font-mono text-sm text-signal-400 focus:outline-none placeholder:text-signal-400/35 w-full ${
+                        Boolean(channel && !user?.email_confirmed_at) ? "cursor-not-allowed" : ""
+                      }`}
                     />
                   </div>
-                  <span className="text-[10px] text-ink-400 font-mono mt-1 block">
-                    {draftChannel ? `Link público: /perfil/${draftChannel}` : "Padrão visual: @usuario (salve para criar seu link real)"}
-                  </span>
+                  {Boolean(channel && !user?.email_confirmed_at) ? (
+                    <span className="text-[11px] text-amber-400/90 font-mono mt-1.5 flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded">
+                      <span>🔒</span>
+                      <span>Confirme seu e-mail na sua caixa de entrada para poder alterar seu @usuario.</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-ink-400 font-mono mt-1 block">
+                      {draftChannel ? `Link público: /perfil/${draftChannel}` : "Padrão visual: @usuario (salve para criar seu link real)"}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -2432,11 +2491,34 @@ export default function PerfilScreen({
 
               <div className="p-5 space-y-5">
                 {/* Formulário para novo comentário */}
-                {user && user.provider !== "demo" ? (
+                {user?.is_temporary ? (
+                  <div className="flex flex-col gap-3 rounded-lg border border-signal-400/30 bg-signal-400/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-signal-400/10 text-signal-400">
+                        <Icon name="spark" className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-bone-200">
+                          Conta teste em modo demonstração
+                        </p>
+                        <p className="text-[11px] text-[#8c8c94]">
+                          Contas de teste de 24h não podem comentar ou curtir perfis. Crie uma conta definitiva para interagir no mural.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => onGo?.("login")}
+                      className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-signal-400/40 bg-signal-400/10 px-3.5 py-1.5 font-mono text-[11px] font-bold text-signal-400 hover:bg-signal-400 hover:text-ink-950 transition-all cursor-pointer"
+                    >
+                      <span>Criar conta definitiva</span>
+                      <Icon name="arrow" className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : user && user.provider !== "demo" ? (
                   <form onSubmit={handlePostComment} className="space-y-3">
                     <div className="flex gap-3">
                       {/* Avatar do autor logado */}
-                      <div className="shrink-0">
+                      <div className="shrink-0 relative">
                         {user.avatarUrl ? (
                           <img
                             src={user.avatarUrl}
@@ -2448,6 +2530,7 @@ export default function PerfilScreen({
                             {(user.name || "U").charAt(0).toUpperCase()}
                           </div>
                         )}
+                        {user.is_vip && <VipBadge size="xs" />}
                       </div>
 
                       {/* Campo de texto */}
@@ -2557,7 +2640,7 @@ export default function PerfilScreen({
                           {/* Avatar do autor */}
                           <button
                             onClick={() => onGo?.("perfil", c.author_channel)}
-                            className="shrink-0 focus:outline-none"
+                            className="relative shrink-0 focus:outline-none"
                           >
                             {c.author_avatar ? (
                               <img
@@ -2570,6 +2653,7 @@ export default function PerfilScreen({
                                 {(c.author_name || "U").charAt(0).toUpperCase()}
                               </div>
                             )}
+                            {c.author_is_vip && <VipBadge size="xs" />}
                           </button>
 
                           {/* Conteúdo */}
@@ -3177,8 +3261,8 @@ export default function PerfilScreen({
             </div>
           </Panel>
 
-          <Panel className="p-0 self-start w-full overflow-hidden border-[#232327] bg-[#0c0c0e]">
-            <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
+          <Panel className="p-0 self-start w-full border-[#232327] bg-[#0c0c0e]">
+            <div className="flex items-center gap-3 rounded-t-lg border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
               <span className="h-3.5 w-1 rounded-full bg-[#8c8c94]" />
               <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Sistema</h3>
             </div>
@@ -3186,7 +3270,7 @@ export default function PerfilScreen({
               <div className="grid gap-5">
                 <div>
                   <Label>Idioma da Interface</Label>
-                  <Select defaultValue="pt" className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full">
+                  <Select defaultValue="pt" headerTitle="Idiomas da interface" className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full">
                     <option value="pt">Português (BR)</option>
                     <option value="en" disabled>English (US) - Em breve</option>
                     <option value="es" disabled>Español - Em breve</option>
@@ -3449,17 +3533,20 @@ export default function PerfilScreen({
               <div className="mb-5 rounded-xl border border-[#232327] bg-[#101012] p-4 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    {commentToDelete.author_avatar ? (
-                      <img
-                        src={commentToDelete.author_avatar}
-                        alt={commentToDelete.author_name}
-                        className="h-6 w-6 rounded-full object-cover ring-1 ring-ink-700"
-                      />
-                    ) : (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-ink-800 font-display text-[11px] font-bold text-bone-200 ring-1 ring-ink-700">
-                        {(commentToDelete.author_name || "U").charAt(0).toUpperCase()}
-                      </div>
-                    )}
+                    <div className="relative shrink-0">
+                      {commentToDelete.author_avatar ? (
+                        <img
+                          src={commentToDelete.author_avatar}
+                          alt={commentToDelete.author_name}
+                          className="h-6 w-6 rounded-full object-cover ring-1 ring-ink-700"
+                        />
+                      ) : (
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-ink-800 font-display text-[11px] font-bold text-bone-200 ring-1 ring-ink-700">
+                          {(commentToDelete.author_name || "U").charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      {commentToDelete.author_is_vip && <VipBadge size="xs" />}
+                    </div>
                     <span className="text-xs font-bold text-bone-100 truncate">
                       {commentToDelete.author_name}
                     </span>
