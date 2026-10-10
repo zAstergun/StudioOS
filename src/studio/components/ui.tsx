@@ -1,4 +1,5 @@
 import {
+  forwardRef,
   useEffect,
   useRef,
   useState,
@@ -263,13 +264,19 @@ export function Label({
 const fieldBase =
   "w-full rounded-md border border-ink-600/80 bg-ink-950/70 px-3 py-2.5 text-[14px] text-bone-100 placeholder:text-ink-400 outline-none transition-all duration-200 focus:border-signal-400/70 focus:bg-ink-950 focus:ring-2 focus:ring-signal-400/15";
 
-export function Input({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...p} className={cn(fieldBase, className)} />;
-}
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  ({ className, ...p }, ref) => {
+    return <input ref={ref} {...p} className={cn(fieldBase, className)} />;
+  }
+);
+Input.displayName = "Input";
 
-export function Textarea({ className, ...p }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...p} className={cn(fieldBase, "resize-y leading-relaxed", className)} />;
-}
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  ({ className, ...p }, ref) => {
+    return <textarea ref={ref} {...p} className={cn(fieldBase, "resize-y leading-relaxed", className)} />;
+  }
+);
+Textarea.displayName = "Textarea";
 
 export function Select({
   className,

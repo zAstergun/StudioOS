@@ -124,12 +124,14 @@ export default function PerfilScreen({
     setTargetLoading(true);
     setTargetNotFound(false);
 
-    supabase
-      .from("profiles")
-      .select("*")
-      .ilike("channel", cleanViewedHandle)
-      .maybeSingle()
-      .then(async ({ data: prof, error: profErr }: { data: any; error: any }) => {
+    const fetchTargetProfile = async () => {
+      try {
+        const { data: prof, error: profErr } = await supabase
+          .from("profiles")
+          .select("*")
+          .ilike("channel", cleanViewedHandle)
+          .maybeSingle();
+
         if (profErr || !prof) {
           setTargetNotFound(true);
           setTargetLoading(false);
@@ -137,7 +139,7 @@ export default function PerfilScreen({
         }
         setTargetProfile(prof);
 
-        const { data: projs } = await supabase!
+        const { data: projs } = await supabase
           .from("studioos_projects")
           .select("id, name, status, progress, color, external_link, studioos_tasks(status)")
           .eq("owner_id", prof.id)
@@ -171,11 +173,13 @@ export default function PerfilScreen({
           setTargetProjects(mapped);
         }
         setTargetLoading(false);
-      })
-      .catch(() => {
+      } catch {
         setTargetNotFound(true);
         setTargetLoading(false);
-      });
+      }
+    };
+
+    fetchTargetProfile();
   }, [cleanViewedHandle, isViewingOther]);
 
   // Sincroniza informações de curtidas do perfil ativo
@@ -183,12 +187,13 @@ export default function PerfilScreen({
 
   useEffect(() => {
     if (!currentProfileId || !supabase) return;
+    const client = supabase;
     const localLiked = typeof localStorage !== 'undefined' && localStorage.getItem(`studioos.liked.${currentProfileId}`) === "true";
 
     const fetchLikes = async () => {
-      let res = await supabase.rpc("studioos_get_profile_likes_info", { p_target_id: currentProfileId });
+      let res = await client.rpc("studioos_get_profile_likes_info", { p_target_id: currentProfileId });
       if (res.error) {
-        res = await supabase.rpc("get_profile_likes_info", { p_target_id: currentProfileId });
+        res = await client.rpc("get_profile_likes_info", { p_target_id: currentProfileId });
       }
       if (!res.error && res.data) {
         setLikesCount(Number(res.data.likes_count) || 0);
@@ -837,7 +842,7 @@ export default function PerfilScreen({
     }
   }, [user, accountMetrics, isViewingOther, likesCount]);
 
-  const [sessions] = useState([
+  const [sessions, setSessions] = useState([
     { id: 1, name: "Chrome no Windows", location: "São Paulo, BR • Sessão Ativa", current: true, time: "Atual" },
   ]);
   
@@ -1821,7 +1826,7 @@ export default function PerfilScreen({
                 {/* Gráfico de Barras */}
                 <div className="px-4 pb-5 pt-4">
                   <div className="flex h-[104px] items-end gap-[3px]">
-                    {metrics.days56.map((count, i) => {
+                    {metrics.days56.map((count: number, i: number) => {
                       const hasRun = count > 0;
                       const intensity = metrics.maxDayActions > 0 ? count / metrics.maxDayActions : 0;
                       const color = hasRun 
@@ -1974,7 +1979,7 @@ export default function PerfilScreen({
                   </div>
                   <div className="space-y-2.5">
                     {metrics.toolsList.length > 0 ? (
-                      metrics.toolsList.map((t, i) => {
+                      metrics.toolsList.map((t: any, i: number) => {
                         const share = Math.round((t.runs / metrics.maxToolRuns) * 100);
                         const color = i === 0 ? "#F2604C" : i === 1 ? "#F2B33D" : "#2FD4A0";
                         return (
