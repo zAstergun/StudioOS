@@ -42,8 +42,34 @@ const getCroppedImg = async (imageSrc: string, pixelCrop: any): Promise<File | n
   });
 };
 
-export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) {
+export default function PerfilScreen({
+  onGo,
+  viewedHandle,
+  onClearViewedHandle,
+}: {
+  onGo?: (id: string, extra?: string) => void;
+  viewedHandle?: string | null;
+  onClearViewedHandle?: () => void;
+}) {
   const { user, updateProfile, updateEmail, updateAvatar, deleteAccount, updatePassword, linkIdentity, unlinkIdentity, getIdentities } = useAuth();
+  
+  const cleanViewedHandle = viewedHandle ? viewedHandle.trim().replace(/^@/, '').toLowerCase() : null;
+  const myChannelClean = (user?.channel || "").trim().replace(/^@/, '').toLowerCase();
+  const isViewingOther = Boolean(cleanViewedHandle && cleanViewedHandle !== myChannelClean);
+  const isViewingOwnPublicPreview = Boolean(cleanViewedHandle && cleanViewedHandle === myChannelClean);
+  const isPublicView = isViewingOther || isViewingOwnPublicPreview;
+
+  // Estados para visualização de outro perfil
+  const [targetProfile, setTargetProfile] = useState<any>(null);
+  const [targetProjects, setTargetProjects] = useState<any[]>([]);
+  const [targetLoading, setTargetLoading] = useState(false);
+  const [targetNotFound, setTargetNotFound] = useState(false);
+
+  // Estados de curtidas
+  const [likesCount, setLikesCount] = useState<number>(0);
+  const [hasLiked, setHasLiked] = useState<boolean>(false);
+  const [likingLoading, setLikingLoading] = useState(false);
+
   const [tab, setTab] = useState<"geral" | "seguranca" | "preferencias" | "atividade">("geral");
   const [name, setName] = useState(user?.name || "");
   const [channel, setChannel] = useState(user?.channel || "");
@@ -85,6 +111,133 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   const [draftDiscord, setDraftDiscord] = useState(discord);
   const [draftCardVisibility, setDraftCardVisibility] = useState({ ...cardVisibility });
   const [copiedLink, setCopiedLink] = useState(false);
+
+  // Busca perfil de outro criador quando necessário
+  useEffect(() => {
+    if (!isViewingOther || !cleanViewedHandle || !supabase) {
+      setTargetProfile(null);
+      setTargetProjects([]);
+      setTargetNotFound(false);
+      return;
+    }
+    setTargetLoading(true);
+    setTargetNotFound(false);
+
+    supabase
+      .from("profiles")
+      .select("*")
+      .ilike("channel", cleanViewedHandle)
+      .maybeSingle()
+      .then(async ({ data: prof, error: profErr }: { data: any; error: any }) => {
+        if (profErr || !prof) {
+          setTargetNotFound(true);
+          setTargetLoading(false);
+          return;
+        }
+        setTargetProfile(prof);
+
+        const { data: projs } = await supabase!
+          .from("studioos_projects")
+          .select("id, name, status, progress, color, external_link, studioos_tasks(status)")
+          .eq("owner_id", prof.id)
+          .order("created_at", { ascending: false });
+
+        if (projs) {
+          const statusMap: Record<string, string> = {
+            active: "Em andamento",
+            planning: "Planejamento",
+            completed: "Concluído",
+            archived: "Arquivado",
+            trashed: "Lixeira"
+          };
+          const mapped = projs
+            .filter((p: any) => p.status === "active" || p.status === "planning" || p.status === "Em andamento")
+            .map((p: any) => {
+              const tasks = p.studioos_tasks || [];
+              const totalTasks = tasks.length;
+              const doneTasks = tasks.filter((t: any) => t.status === "done").length;
+              const calculatedProgress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : (p.progress || 0);
+              return {
+                id: p.id,
+                name: p.name,
+                status: statusMap[p.status] || p.status,
+                statusCode: p.status,
+                progress: calculatedProgress,
+                color: p.color || "#6E93F5",
+                external_link: p.external_link
+              };
+            });
+          setTargetProjects(mapped);
+        }
+        setTargetLoading(false);
+      })
+      .catch(() => {
+        setTargetNotFound(true);
+        setTargetLoading(false);
+      });
+  }, [cleanViewedHandle, isViewingOther]);
+
+  // Sincroniza informações de curtidas do perfil ativo
+  const currentProfileId = isViewingOther ? targetProfile?.id : user?.id;
+
+  useEffect(() => {
+    if (!currentProfileId || !supabase) return;
+    const localLiked = typeof localStorage !== 'undefined' && localStorage.getItem(`studioos.liked.${currentProfileId}`) === "true";
+
+    supabase.rpc("get_profile_likes_info", { p_target_id: currentProfileId })
+      .then(({ data, error }: { data: any; error: any }) => {
+        if (!error && data) {
+          setLikesCount(Number(data.likes_count) || 0);
+          setHasLiked(Boolean(data.liked) || localLiked);
+        } else if (isViewingOther && targetProfile?.stats?.likes_count !== undefined) {
+          setLikesCount(Number(targetProfile.stats.likes_count) || 0);
+          setHasLiked(localLiked);
+        }
+      });
+  }, [currentProfileId, isViewingOther, targetProfile]);
+
+  const handleToggleLike = async () => {
+    if (!currentProfileId || !supabase || likingLoading) return;
+    if (user && user.id === currentProfileId) {
+      alert("Você não pode curtir seu próprio perfil.");
+      return;
+    }
+
+    setLikingLoading(true);
+    const nextLiked = !hasLiked;
+    const nextCount = Math.max(0, likesCount + (nextLiked ? 1 : -1));
+
+    setHasLiked(nextLiked);
+    setLikesCount(nextCount);
+    try {
+      localStorage.setItem(`studioos.liked.${currentProfileId}`, nextLiked ? "true" : "false");
+    } catch {}
+
+    try {
+      const isRealUser = user && user.provider !== "demo";
+      if (isRealUser) {
+        const { data, error } = await supabase.rpc("toggle_profile_like", {
+          p_target_id: currentProfileId,
+        });
+        if (!error && data) {
+          setHasLiked(Boolean(data.liked));
+          setLikesCount(Number(data.likes_count) || 0);
+        }
+      } else {
+        const { data, error } = await supabase.rpc("toggle_profile_like_guest", {
+          p_target_id: currentProfileId,
+          p_liked: nextLiked,
+        });
+        if (!error && data) {
+          setLikesCount(Number(data.likes_count) || 0);
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao curtir perfil:", err);
+    } finally {
+      setLikingLoading(false);
+    }
+  };
 
   const nameInputRef = useRef<HTMLInputElement>(null);
   const channelInputRef = useRef<HTMLInputElement>(null);
@@ -570,9 +723,86 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
     };
   }, [ongoingProjects, userStats, historyTick]);
 
+  const effectiveMetrics = useMemo(() => {
+    if (isViewingOther && targetProfile) {
+      const stats = targetProfile.stats || {};
+      const projs = targetProjects;
+      const projectsCount = projs.length || Number(stats.projetos) || 0;
+      const ideasCount = Number(stats.ideias_ranqueadas) || 0;
+      const streak = Number(stats.streak) || 1;
+      const studioMinutes = Number(stats.studio_minutes) || (projectsCount * 25 + ideasCount * 5);
+      const studioHoursFormatted = `${Math.floor(studioMinutes / 60)}h`;
+      const studioMinutesRemaining = studioMinutes % 60;
+      const studioMinutesSuffix = ` ${studioMinutesRemaining}m`;
+      const dowCounts = Array.isArray(stats.dow_totals) && stats.dow_totals.length === 7 ? stats.dow_totals : [0,0,0,0,0,0,0];
+      const maxDow = Math.max(...dowCounts, 0);
+      const days56 = Array.isArray(stats.days_56) && stats.days_56.length === 56 ? stats.days_56 : Array(56).fill(0);
+      const maxDayActions = Math.max(...days56, 0);
+      const activeDaysCount = days56.filter((c: number) => c > 0).length;
+      const total56Actions = days56.reduce((a: number, b: number) => a + b, 0);
+      const peakMinutes = maxDayActions * 15;
+      const avgMinutesPerActiveDay = activeDaysCount > 0 ? Math.round((total56Actions * 15) / activeDaysCount) : 0;
+      const toolsList = Array.isArray(stats.tool_breakdown) ? stats.tool_breakdown : [];
+      const maxToolRuns = toolsList.length > 0 ? Math.max(...toolsList.map((t: any) => t.runs || 0), 1) : 1;
+      
+      let avgRatingStr = stats.avg_rating || "3.6/5";
+      let avgRatingNum = 3.6;
+      if (typeof avgRatingStr === "string") {
+        const m = avgRatingStr.match(/([\d.]+)\/5/);
+        if (m) {
+          const val = parseFloat(m[1]);
+          if (!isNaN(val)) {
+            avgRatingNum = val > 5 ? Math.min(5, Math.round((val / 10) * 10) / 10) : val;
+            avgRatingStr = `${avgRatingNum.toFixed(1)}/5`;
+          }
+        }
+      }
+
+      return {
+        ideasCount,
+        projectsCount,
+        totalRuns: Number(stats.total_runs) || 0,
+        toolsList,
+        maxToolRuns,
+        dowCounts,
+        maxDow,
+        days56,
+        maxDayActions,
+        activeDaysCount,
+        peakMinutes,
+        avgMinutesPerActiveDay,
+        startDateStr: accountMetrics.startDateStr,
+        endDateStr: accountMetrics.endDateStr,
+        studioMinutes,
+        studioHoursFormatted,
+        studioMinutesSuffix,
+        streak,
+        avgRatingStr,
+        avgRatingNum,
+        bestDowName: stats.best_dow || "domingo",
+        hasActivity: projectsCount > 0 || ideasCount > 0
+      };
+    }
+    return accountMetrics;
+  }, [isViewingOther, targetProfile, targetProjects, accountMetrics]);
+
+  const metrics = effectiveMetrics;
+
+  const displayedCardVis = isViewingOther 
+    ? (targetProfile?.card_visibility || { stats: true, projects: true, video: true, achievements: true }) 
+    : cardVisibility;
+  const displayedName = isViewingOther ? (targetProfile?.full_name || `@${cleanViewedHandle}`) : (name || "Usuário");
+  const displayedChannel = isViewingOther ? `@${cleanViewedHandle}` : (channel ? (channel.startsWith('@') ? channel : `@${channel}`) : "@usuario");
+  const displayedAvatar = isViewingOther ? targetProfile?.avatar_url : user?.avatarUrl;
+  const displayedBio = isViewingOther ? (targetProfile?.bio || DEFAULT_BIO) : (bio || DEFAULT_BIO);
+  const displayedLinks = isViewingOther ? (targetProfile?.links || {}) : {
+    website, youtube, instagram, tiktok, discord
+  };
+  const effectiveOngoingProjects = isViewingOther ? targetProjects : ongoingProjects;
+
   // Sincroniza estatísticas reais no Supabase
   useEffect(() => {
-    if (user && supabase && accountMetrics) {
+    if (user && supabase && accountMetrics && !isViewingOther) {
       const payload = {
         total_runs: accountMetrics.totalRuns,
         ideias_ranqueadas: accountMetrics.ideasCount,
@@ -587,7 +817,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
       };
       supabase.from('profiles').update({ stats: payload }).eq('id', user.id).then();
     }
-  }, [user, accountMetrics]);
+  }, [user, accountMetrics, isViewingOther]);
 
   const [sessions] = useState([
     { id: 1, name: "Chrome no Windows", location: "São Paulo, BR • Sessão Ativa", current: true, time: "Atual" },
@@ -691,16 +921,31 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
       return;
     }
     const cleanHandle = channel.replace(/^@/, '');
-    window.open(`/perfil/${cleanHandle}`, '_blank', 'noopener,noreferrer');
+    if (onGo) {
+      onGo("perfil", cleanHandle);
+    } else {
+      window.location.assign(`/perfil/${cleanHandle}`);
+    }
+  };
+
+  const handleBackToMyProfile = () => {
+    if (onClearViewedHandle) {
+      onClearViewedHandle();
+    } else if (onGo) {
+      onGo("perfil");
+    } else {
+      window.location.assign("/?view=perfil");
+    }
   };
 
   const handleCopyProfileLink = async () => {
-    if (!channel) {
+    const handleToCopy = isViewingOther ? cleanViewedHandle : (channel ? channel.replace(/^@/, '') : "");
+    if (!handleToCopy) {
       alert("Você ainda está com o @usuario padrão visual. Defina seu @ de usuário e salve seu perfil para ativar e copiar seu link!");
       startEditingProfile("channel");
       return;
     }
-    const cleanHandle = channel.replace(/^@/, '');
+    const cleanHandle = handleToCopy.replace(/^@/, '');
     const profileUrl = `${window.location.origin}/perfil/${cleanHandle}`;
     try {
       if (navigator.clipboard && window.isSecureContext) {
@@ -877,11 +1122,13 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
     }
   };
 
-  const tabs = [
-    { id: "geral", label: "Geral", icon: "user" },
-    { id: "seguranca", label: "Segurança", icon: "lock" },
-    { id: "preferencias", label: "Preferências", icon: "dial" },
-  ] as const;
+  const tabs = isPublicView
+    ? ([{ id: "geral", label: "Geral", icon: "user" }] as const)
+    : ([
+        { id: "geral", label: "Geral", icon: "user" },
+        { id: "seguranca", label: "Segurança", icon: "lock" },
+        { id: "preferencias", label: "Preferências", icon: "dial" },
+      ] as const);
 
   const scrollTo = (id: string, targetTab: "geral" | "seguranca" | "preferencias" | "atividade") => {
     if (tab !== targetTab) {
@@ -908,6 +1155,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
   const remainingItems = 5 - completedCount;
 
   const renderCardVisibilityBanner = (cardKey: "stats" | "projects" | "video" | "achievements", cardLabel: string) => {
+    if (isViewingOther) return null;
     const isVisible = isEditingProfile ? draftCardVisibility[cardKey] : cardVisibility[cardKey];
 
     if (isEditingProfile) {
@@ -961,19 +1209,21 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
     return null;
   };
 
+  const activeStatsObj = isViewingOther ? (targetProfile?.stats || {}) : userStats;
+
   const achievements = [
-    { id: "seq21", icon: "spark", label: "Sequência de 21 dias", desc: "Acessou o painel por 21 dias seguidos.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: accountMetrics.streak >= 21 },
-    { id: "ideias200", icon: "target", label: "200 ideias ranqueadas", desc: "Mais de 200 ideias processadas no painel.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: accountMetrics.ideasCount >= 200 },
-    { id: "top4", icon: "star", label: "Top 4% do canal", desc: "Seu desempenho superou 96% dos criadores.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(userStats['top4']) === 1 },
-    { id: "verified", icon: "check", label: "Conta verificada", desc: "Identidade confirmada com sucesso.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: !!user?.email_confirmed_at || Number(userStats['verified']) === 1 },
-    { id: "onboarding", icon: "layers", label: "Primeiros Passos", desc: "Completou todas as tarefas de onboarding.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: completedCount === onboardingItems.length },
-    { id: "viral", icon: "bolt", label: "Post Viral", desc: "Atingiu 100k visualizações em um único post.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: Number(userStats['viral']) === 1 },
-    { id: "thumb", icon: "frame", label: "Mestre das Thumbnails", desc: "Aprovou 50 thumbnails no painel.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(userStats['thumb_approved']) >= 50 },
-    { id: "roteiro", icon: "book", label: "Roteirista Nato", desc: "Criou seu primeiro roteiro completo.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: accountMetrics.toolsList.some(t => t.id.includes("roteiro")) || Number(userStats['producoes']) >= 1 },
-    { id: "strategy", icon: "brain", label: "Mente Brilhante", desc: "Definiu o planejamento do trimestre.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: Number(userStats['strategy_defined']) === 1 },
-    { id: "collec", icon: "stack", label: "Colecionador", desc: "Salvou 500 referências no banco de ideias.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: accountMetrics.ideasCount >= 500 },
-    { id: "eng", icon: "eye", label: "Atenção Total", desc: "Manteve 60% de retenção no YouTube.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(userStats['high_retention']) === 1 },
-    { id: "vet", icon: "clock", label: "Veterano", desc: "Completou 1 ano de estúdio.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: Number(userStats['veteran']) === 1 },
+    { id: "seq21", icon: "spark", label: "Sequência de 21 dias", desc: "Acessou o painel por 21 dias seguidos.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: metrics.streak >= 21 },
+    { id: "ideias200", icon: "target", label: "200 ideias ranqueadas", desc: "Mais de 200 ideias processadas no painel.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: metrics.ideasCount >= 200 },
+    { id: "top4", icon: "star", label: "Top 4% do canal", desc: "Seu desempenho superou 96% dos criadores.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(activeStatsObj['top4']) === 1 },
+    { id: "verified", icon: "check", label: "Conta verificada", desc: "Identidade confirmada com sucesso.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: isViewingOther ? Number(activeStatsObj['verified']) === 1 : (!!user?.email_confirmed_at || Number(activeStatsObj['verified']) === 1) },
+    { id: "onboarding", icon: "layers", label: "Primeiros Passos", desc: "Completou todas as tarefas de onboarding.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: !isViewingOther && completedCount === onboardingItems.length },
+    { id: "viral", icon: "bolt", label: "Post Viral", desc: "Atingiu 100k visualizações em um único post.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: Number(activeStatsObj['viral']) === 1 },
+    { id: "thumb", icon: "frame", label: "Mestre das Thumbnails", desc: "Aprovou 50 thumbnails no painel.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(activeStatsObj['thumb_approved']) >= 50 },
+    { id: "roteiro", icon: "book", label: "Roteirista Nato", desc: "Criou seu primeiro roteiro completo.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: metrics.toolsList.some((t: any) => t.id && t.id.includes("roteiro")) || Number(activeStatsObj['producoes']) >= 1 },
+    { id: "strategy", icon: "brain", label: "Mente Brilhante", desc: "Definiu o planejamento do trimestre.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: Number(activeStatsObj['strategy_defined']) === 1 },
+    { id: "collec", icon: "stack", label: "Colecionador", desc: "Salvou 500 referências no banco de ideias.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: metrics.ideasCount >= 500 },
+    { id: "eng", icon: "eye", label: "Atenção Total", desc: "Manteve 60% de retenção no YouTube.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(activeStatsObj['high_retention']) === 1 },
+    { id: "vet", icon: "clock", label: "Veterano", desc: "Completou 1 ano de estúdio.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: Number(activeStatsObj['veteran']) === 1 },
   ];
   
   const unlockedCount = achievements.filter(a => a.unlocked).length;
@@ -991,18 +1241,70 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
     }
   }, [completedCount, hideOnboarding, user, onboardingItems.length]);
 
+  if (isViewingOther && targetLoading) {
+    return (
+      <div className="mx-auto w-full pt-4 max-w-6xl space-y-6 animate-pulse">
+        <div className="h-40 rounded-2xl bg-[#0c0c0e] border border-[#232327]" />
+        <div className="h-96 rounded-2xl bg-[#0c0c0e] border border-[#232327]" />
+      </div>
+    );
+  }
+
+  if (isViewingOther && targetNotFound) {
+    return (
+      <div className="mx-auto w-full pt-8 max-w-2xl text-center">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-[#232327] bg-[#0c0c0e] text-bone-400">
+          <Icon name="search" className="h-8 w-8 text-signal-400" />
+        </div>
+        <h2 className="font-display text-xl font-bold text-bone-50">Criador não encontrado</h2>
+        <p className="mt-2 text-sm text-bone-400">
+          Não encontramos nenhum criador cadastrado com o @{cleanViewedHandle}.
+        </p>
+        <button
+          type="button"
+          onClick={handleBackToMyProfile}
+          className="mt-6 inline-flex items-center gap-2 rounded-lg bg-signal-400 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-ink-950 hover:bg-signal-300 cursor-pointer"
+        >
+          <Icon name="arrow-left" className="h-3.5 w-3.5" /> Voltar ao meu perfil
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full pt-4">
+      {/* BANNER DE VISUALIZAÇÃO PÚBLICA / OUTRO PERFIL */}
+      {isPublicView && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-signal-400/30 bg-signal-400/10 px-4 py-3 text-signal-400 backdrop-blur-sm shadow-[0_0_20px_rgba(242,179,61,0.08)]">
+          <div className="flex items-center gap-2.5 text-xs font-medium">
+            <span className="h-2 w-2 rounded-full bg-signal-400 animate-pulse" />
+            <span>
+              {isViewingOther 
+                ? `Visualizando perfil público de @${cleanViewedHandle}` 
+                : "Modo de visualização pública do seu próprio perfil"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleBackToMyProfile}
+            className="flex items-center gap-1.5 rounded-lg border border-signal-400/40 bg-ink-950/80 px-3 py-1.5 text-xs font-semibold text-signal-400 hover:bg-signal-400 hover:text-ink-950 transition-all cursor-pointer shadow-sm"
+          >
+            <Icon name="arrow-left" className="h-3.5 w-3.5" />
+            <span>Voltar ao meu perfil</span>
+          </button>
+        </div>
+      )}
+
       {/* HEADER */}
       <Reveal className="mb-10 flex flex-col md:flex-row md:items-start gap-6 sm:gap-8">
         {/* Avatar */}
         <div className="relative group shrink-0 self-start">
           <div className="relative h-24 w-24 overflow-hidden rounded-full border-2 border-signal-400 bg-ink-900 shadow-[0_12px_30px_rgba(0,0,0,0.5)] sm:h-28 sm:w-28 md:h-[120px] md:w-[120px]">
             <Icon name="user" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-10 w-10 text-ink-500" />
-            {user?.avatarUrl ? (
-              <img src={user.avatarUrl} alt="Avatar" className="absolute inset-0 h-full w-full object-cover" />
+            {displayedAvatar ? (
+              <img src={displayedAvatar} alt="Avatar" className="absolute inset-0 h-full w-full object-cover" />
             ) : (
-              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(name || "User")}&background=random`} alt="Avatar" className="absolute inset-0 h-full w-full object-cover" />
+              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayedName || "User")}&background=random`} alt="Avatar" className="absolute inset-0 h-full w-full object-cover" />
             )}
             {uploadingAvatar && (
               <div className="absolute inset-0 bg-ink-950/50 flex items-center justify-center">
@@ -1010,10 +1312,14 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
               </div>
             )}
           </div>
-          <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
-          <button onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar} className="absolute -bottom-1 -right-1 rounded-full border border-ink-600 bg-ink-800 p-2 text-bone-300 transition-colors hover:bg-signal-400 hover:text-ink-950 disabled:opacity-50 cursor-pointer shadow-lg" aria-label="Alterar foto">
-            <Icon name="frame" className="h-3.5 w-3.5" />
-          </button>
+          {!isPublicView && (
+            <>
+              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
+              <button onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar} className="absolute -bottom-1 -right-1 rounded-full border border-ink-600 bg-ink-800 p-2 text-bone-300 transition-colors hover:bg-signal-400 hover:text-ink-950 disabled:opacity-50 cursor-pointer shadow-lg" aria-label="Alterar foto">
+                <Icon name="frame" className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
         </div>
 
         {/* Informações */}
@@ -1026,14 +1332,18 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 <div className="flex flex-col gap-1.5">
                   <div className="flex flex-wrap items-center gap-2.5">
                     <div 
-                      onClick={() => startEditingProfile("name")} 
-                      className="group/name relative flex items-center gap-2 cursor-pointer select-none rounded-lg py-0.5 px-1.5 -ml-1.5 transition-all hover:bg-white/[0.04]"
-                      title="Clique para editar seu nome de exibição"
+                      onClick={() => !isPublicView && startEditingProfile("name")} 
+                      className={`group/name relative flex items-center gap-2 select-none rounded-lg py-0.5 px-1.5 -ml-1.5 transition-all ${
+                        !isPublicView ? "cursor-pointer hover:bg-white/[0.04]" : ""
+                      }`}
+                      title={!isPublicView ? "Clique para editar seu nome de exibição" : undefined}
                     >
                       <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-bone-50">
-                        {name || "Usuário"}
+                        {displayedName}
                       </h1>
-                      <Icon name="type" className="h-3.5 w-3.5 opacity-0 group-hover/name:opacity-60 text-signal-400 transition-opacity" />
+                      {!isPublicView && (
+                        <Icon name="type" className="h-3.5 w-3.5 opacity-0 group-hover/name:opacity-60 text-signal-400 transition-opacity" />
+                      )}
                     </div>
 
                     <span className="flex items-center gap-1 rounded-full border border-signal-400/35 bg-signal-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.11em] text-signal-400 shrink-0">
@@ -1043,19 +1353,23 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
 
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <div 
-                      onClick={() => startEditingProfile("channel")} 
-                      className="group/channel relative flex items-center gap-1.5 cursor-pointer select-none rounded-lg py-0.5 px-2 -ml-2 transition-all hover:bg-signal-400/10 border border-transparent hover:border-signal-400/30"
-                      title="Clique para editar seu nome de usuário (@)"
+                      onClick={() => !isPublicView && startEditingProfile("channel")} 
+                      className={`group/channel relative flex items-center gap-1.5 select-none rounded-lg py-0.5 px-2 -ml-2 transition-all ${
+                        !isPublicView ? "cursor-pointer hover:bg-signal-400/10 border border-transparent hover:border-signal-400/30" : ""
+                      }`}
+                      title={!isPublicView ? "Clique para editar seu nome de usuário (@)" : undefined}
                     >
                       <span className="font-mono text-[13px] text-signal-400 font-medium">
-                        {channel ? (channel.startsWith('@') ? channel : `@${channel}`) : "@usuario"}
+                        {displayedChannel}
                       </span>
-                      {!channel && (
+                      {!channel && !isViewingOther && (
                         <span className="text-[9px] font-mono uppercase tracking-wider text-ink-400 bg-ink-800/80 px-1.5 py-0.5 rounded border border-ink-700">
                           padrão
                         </span>
                       )}
-                      <Icon name="type" className="h-3 w-3 opacity-0 group-hover/channel:opacity-80 text-signal-400 transition-opacity" />
+                      {!isPublicView && (
+                        <Icon name="type" className="h-3 w-3 opacity-0 group-hover/channel:opacity-80 text-signal-400 transition-opacity" />
+                      )}
                     </div>
 
                     <span className="flex items-center gap-1.5 text-[11px] font-mono tracking-widest uppercase text-ink-400">
@@ -1066,55 +1380,130 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
 
                 {/* Botões de Ação */}
                 <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 shrink-0 w-full xl:w-auto">
-                  <Button 
-                    variant="solid" 
-                    onClick={() => startEditingProfile()} 
-                    className="col-span-2 sm:col-span-1 justify-center text-[11px] font-semibold uppercase tracking-[0.12em] px-3.5 py-2 sm:px-4 sm:py-2.5 shadow-[0_0_20px_rgba(242,179,61,0.25)] hover:shadow-[0_0_25px_rgba(242,179,61,0.4)]"
-                  >
-                    <Icon name="type" className="h-3.5 w-3.5" /> Editar perfil
-                  </Button>
-                  <button 
-                    type="button"
-                    onClick={handleOpenPublicProfile}
-                    className={`flex items-center justify-center gap-2 rounded-lg border border-ink-700 bg-ink-900/50 px-3.5 py-2 sm:px-4 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-bone-300 transition-colors cursor-pointer ${channel ? 'hover:border-signal-400/60 hover:text-bone-50 hover:bg-ink-800/60' : 'opacity-60 hover:border-signal-400/50 hover:text-signal-400'}`}
-                  >
-                    <Icon name="eye" className="h-3.5 w-3.5" /> Ver público
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCopyProfileLink}
-                    aria-label="Copiar link do perfil"
-                    title={copiedLink ? "Link copiado para a área de transferência!" : "Copiar link do perfil para compartilhar"}
-                    className={`flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
-                      copiedLink
-                        ? "border-[#2FD4A0]/60 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_15px_rgba(47,212,160,0.25)]"
-                        : "border-ink-700 bg-ink-900/50 text-bone-300 hover:border-signal-400/60 hover:text-bone-50 hover:bg-ink-800/60"
-                    }`}
-                  >
-                    <Icon name={copiedLink ? "check" : "copy"} className="h-3.5 w-3.5" />
-                    <span>{copiedLink ? "Copiado!" : "Copiar link"}</span>
-                  </button>
+                  {isViewingOther ? (
+                    <>
+                      {/* Botão de Curtir Perfil */}
+                      <button
+                        type="button"
+                        onClick={handleToggleLike}
+                        disabled={likingLoading}
+                        title={hasLiked ? "Descurtir perfil" : "Curtir este perfil"}
+                        className={`col-span-2 sm:col-span-1 flex items-center justify-center gap-2 rounded-lg border px-4 py-2 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
+                          hasLiked
+                            ? "border-red-500/70 bg-red-500/15 text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.25)] hover:bg-red-500/20"
+                            : "border-ink-700 bg-ink-900/60 text-bone-300 hover:border-red-500/50 hover:text-red-400 hover:bg-ink-800/80"
+                        }`}
+                      >
+                        <Icon 
+                          name="heart" 
+                          className={`h-4 w-4 transition-transform group-hover:scale-110 ${hasLiked ? "text-red-500 fill-red-500" : "text-bone-400"}`} 
+                        />
+                        <span>{hasLiked ? "Curtido" : "Curtir perfil"}</span>
+                        <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-mono tabular-nums ${
+                          hasLiked ? "bg-red-500/25 text-red-200" : "bg-ink-800 text-bone-400 border border-ink-700"
+                        }`}>
+                          {likesCount}
+                        </span>
+                      </button>
+
+                      {/* Botão Copiar Link */}
+                      <button
+                        type="button"
+                        onClick={handleCopyProfileLink}
+                        aria-label="Copiar link do perfil"
+                        title={copiedLink ? "Link copiado para a área de transferência!" : "Copiar link do perfil para compartilhar"}
+                        className={`flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
+                          copiedLink
+                            ? "border-[#2FD4A0]/60 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_15px_rgba(47,212,160,0.25)]"
+                            : "border-ink-700 bg-ink-900/50 text-bone-300 hover:border-signal-400/60 hover:text-bone-50 hover:bg-ink-800/60"
+                        }`}
+                      >
+                        <Icon name={copiedLink ? "check" : "copy"} className="h-3.5 w-3.5" />
+                        <span>{copiedLink ? "Copiado!" : "Copiar link"}</span>
+                      </button>
+                    </>
+                  ) : isViewingOwnPublicPreview ? (
+                    <>
+                      <Button
+                        variant="solid"
+                        onClick={handleBackToMyProfile}
+                        className="col-span-2 sm:col-span-1 justify-center text-[11px] font-semibold uppercase tracking-[0.12em] px-3.5 py-2 sm:px-4 sm:py-2.5 shadow-[0_0_20px_rgba(242,179,61,0.25)] hover:shadow-[0_0_25px_rgba(242,179,61,0.4)]"
+                      >
+                        <Icon name="arrow-left" className="h-3.5 w-3.5" /> Voltar ao Meu Perfil
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={handleCopyProfileLink}
+                        aria-label="Copiar link do perfil"
+                        title={copiedLink ? "Link copiado para a área de transferência!" : "Copiar link do perfil para compartilhar"}
+                        className={`flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
+                          copiedLink
+                            ? "border-[#2FD4A0]/60 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_15px_rgba(47,212,160,0.25)]"
+                            : "border-ink-700 bg-ink-900/50 text-bone-300 hover:border-signal-400/60 hover:text-bone-50 hover:bg-ink-800/60"
+                        }`}
+                      >
+                        <Icon name={copiedLink ? "check" : "copy"} className="h-3.5 w-3.5" />
+                        <span>{copiedLink ? "Copiado!" : "Copiar link"}</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Button 
+                        variant="solid" 
+                        onClick={() => startEditingProfile()} 
+                        className="col-span-2 sm:col-span-1 justify-center text-[11px] font-semibold uppercase tracking-[0.12em] px-3.5 py-2 sm:px-4 sm:py-2.5 shadow-[0_0_20px_rgba(242,179,61,0.25)] hover:shadow-[0_0_25px_rgba(242,179,61,0.4)]"
+                      >
+                        <Icon name="type" className="h-3.5 w-3.5" /> Editar perfil
+                      </Button>
+                      <button 
+                        type="button"
+                        onClick={handleOpenPublicProfile}
+                        className={`flex items-center justify-center gap-2 rounded-lg border border-ink-700 bg-ink-900/50 px-3.5 py-2 sm:px-4 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-bone-300 transition-colors cursor-pointer ${channel ? 'hover:border-signal-400/60 hover:text-bone-50 hover:bg-ink-800/60' : 'opacity-60 hover:border-signal-400/50 hover:text-signal-400'}`}
+                      >
+                        <Icon name="eye" className="h-3.5 w-3.5" /> Ver público
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCopyProfileLink}
+                        aria-label="Copiar link do perfil"
+                        title={copiedLink ? "Link copiado para a área de transferência!" : "Copiar link do perfil para compartilhar"}
+                        className={`flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
+                          copiedLink
+                            ? "border-[#2FD4A0]/60 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_15px_rgba(47,212,160,0.25)]"
+                            : "border-ink-700 bg-ink-900/50 text-bone-300 hover:border-signal-400/60 hover:text-bone-50 hover:bg-ink-800/60"
+                        }`}
+                      >
+                        <Icon name={copiedLink ? "check" : "copy"} className="h-3.5 w-3.5" />
+                        <span>{copiedLink ? "Copiado!" : "Copiar link"}</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
               {/* Bio */}
               <div 
-                onClick={() => startEditingProfile("bio")} 
-                className="group/bio mt-1.5 max-w-3xl cursor-pointer rounded-lg p-2 -ml-2 transition-all hover:bg-white/[0.03] border border-transparent hover:border-ink-800"
-                title="Clique para editar a bio"
+                onClick={() => !isPublicView && startEditingProfile("bio")} 
+                className={`group/bio mt-1.5 max-w-3xl rounded-lg p-2 -ml-2 transition-all border border-transparent ${
+                  !isPublicView ? "cursor-pointer hover:bg-white/[0.03] hover:border-ink-800" : ""
+                }`}
+                title={!isPublicView ? "Clique para editar a bio" : undefined}
               >
                 <p className="text-[13.5px] leading-relaxed text-bone-400 group-hover/bio:text-bone-200 transition-colors flex items-start gap-2">
-                  <span className="flex-1">{bio || DEFAULT_BIO}</span>
-                  <Icon name="type" className="h-3.5 w-3.5 shrink-0 opacity-0 group-hover/bio:opacity-60 text-signal-400 transition-opacity mt-0.5" />
+                  <span className="flex-1">{displayedBio}</span>
+                  {!isPublicView && (
+                    <Icon name="type" className="h-3.5 w-3.5 shrink-0 opacity-0 group-hover/bio:opacity-60 text-signal-400 transition-opacity mt-0.5" />
+                  )}
                 </p>
               </div>
 
-              {/* Estatísticas (agora com largura total desobstruída) */}
+              {/* Estatísticas (agora com largura total desobstruída e contagem de curtidas) */}
               <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-2.5">
                 {[
-                  [accountMetrics.projectsCount.toString(), accountMetrics.projectsCount === 1 ? "projeto" : "projetos"],
-                  [accountMetrics.ideasCount.toString(), "ideias ranqueadas"],
-                  [accountMetrics.avgRatingStr, "nota média"],
+                  [metrics.projectsCount.toString(), metrics.projectsCount === 1 ? "projeto" : "projetos"],
+                  [metrics.ideasCount.toString(), "ideias ranqueadas"],
+                  [metrics.avgRatingStr, "nota média"],
+                  [likesCount.toString(), likesCount === 1 ? "curtida" : "curtidas"],
                 ].map(([v, l]) => (
                   <div key={l} className="flex items-baseline gap-2">
                     <span className="font-display text-[16px] font-bold text-bone-50 tabular-nums">{v}</span>
@@ -1123,41 +1512,41 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 ))}
               </div>
 
-              {/* Links do Perfil (agora com largura total desobstruída) */}
-              {(website || instagram || tiktok || youtube || discord) ? (
+              {/* Links do Perfil */}
+              {(displayedLinks.website || displayedLinks.instagram || displayedLinks.tiktok || displayedLinks.youtube || displayedLinks.discord) ? (
                 <div className="mt-4 flex flex-wrap items-center gap-2.5">
-                  {website && (
-                    <a href={website.startsWith('http') ? website : `https://${website}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#F2B33D]/50 hover:bg-[#F2B33D]/5 hover:text-[#F2B33D] hover:shadow-[0_0_12px_rgba(242,179,61,0.15)]">
+                  {displayedLinks.website && (
+                    <a href={displayedLinks.website.startsWith('http') ? displayedLinks.website : `https://${displayedLinks.website}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#F2B33D]/50 hover:bg-[#F2B33D]/5 hover:text-[#F2B33D] hover:shadow-[0_0_12px_rgba(242,179,61,0.15)]">
                       <Icon name="globe" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#F2B33D]" />
-                      {website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                      {displayedLinks.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
                     </a>
                   )}
-                  {youtube && (
-                    <a href={youtube.startsWith('http') ? youtube : `https://${youtube}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#FF0000]/50 hover:bg-[#FF0000]/5 hover:text-[#FF0000] hover:shadow-[0_0_12px_rgba(255,0,0,0.15)]">
+                  {displayedLinks.youtube && (
+                    <a href={displayedLinks.youtube.startsWith('http') ? displayedLinks.youtube : `https://${displayedLinks.youtube}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#FF0000]/50 hover:bg-[#FF0000]/5 hover:text-[#FF0000] hover:shadow-[0_0_12px_rgba(255,0,0,0.15)]">
                       <Icon name="youtube" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#FF0000]" />
                       YouTube
                     </a>
                   )}
-                  {instagram && (
-                    <a href={instagram.startsWith('http') ? instagram : `https://${instagram}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#E1306C]/50 hover:bg-[#E1306C]/5 hover:text-[#E1306C] hover:shadow-[0_0_12px_rgba(225,48,108,0.15)]">
+                  {displayedLinks.instagram && (
+                    <a href={displayedLinks.instagram.startsWith('http') ? displayedLinks.instagram : `https://${displayedLinks.instagram}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#E1306C]/50 hover:bg-[#E1306C]/5 hover:text-[#E1306C] hover:shadow-[0_0_12px_rgba(225,48,108,0.15)]">
                       <Icon name="instagram" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#E1306C]" />
                       Instagram
                     </a>
                   )}
-                  {tiktok && (
-                    <a href={tiktok.startsWith('http') ? tiktok : `https://${tiktok}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#00f2fe]/50 hover:bg-[#00f2fe]/5 hover:text-[#00f2fe] hover:shadow-[0_0_12px_rgba(0,242,254,0.15)]">
+                  {displayedLinks.tiktok && (
+                    <a href={displayedLinks.tiktok.startsWith('http') ? displayedLinks.tiktok : `https://${displayedLinks.tiktok}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#00f2fe]/50 hover:bg-[#00f2fe]/5 hover:text-[#00f2fe] hover:shadow-[0_0_12px_rgba(0,242,254,0.15)]">
                       <Icon name="tiktok" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#00f2fe]" />
                       TikTok
                     </a>
                   )}
-                  {discord && (
-                    <a href={discord.startsWith('http') ? discord : `https://${discord}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#5865F2]/50 hover:bg-[#5865F2]/5 hover:text-[#5865F2] hover:shadow-[0_0_12px_rgba(88,101,242,0.15)]">
+                  {displayedLinks.discord && (
+                    <a href={displayedLinks.discord.startsWith('http') ? displayedLinks.discord : `https://${displayedLinks.discord}`} target="_blank" rel="noreferrer" className="group flex items-center gap-2 rounded-full border border-[#232327] bg-[#101012] px-3.5 py-1.5 text-[12px] font-medium text-[#a8a8b0] transition-all hover:border-[#5865F2]/50 hover:bg-[#5865F2]/5 hover:text-[#5865F2] hover:shadow-[0_0_12px_rgba(88,101,242,0.15)]">
                       <Icon name="discord" className="h-3.5 w-3.5 text-[#8c8c94] transition-colors group-hover:text-[#5865F2]" />
                       Discord
                     </a>
                   )}
                 </div>
-              ) : (
+              ) : !isPublicView ? (
                 <div className="mt-4">
                   <button 
                     onClick={() => startEditingProfile()} 
@@ -1166,7 +1555,7 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                     <Icon name="plus" className="h-3 w-3" /> Adicionar links ao perfil
                   </button>
                 </div>
-              )}
+              ) : null}
             </>
           ) : (
             /* EDIÇÃO ATIVA DO PERFIL */
@@ -1384,284 +1773,291 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
         <Reveal className="grid gap-6 lg:grid-cols-[1fr_320px]">
           {/* Coluna Esquerda: Estatísticas de Uso */}
           <div className="flex flex-col gap-6">
-            <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
-              {renderCardVisibilityBanner("stats", "Monitor de uso")}
-              
-              {/* Header: Monitor de uso */}
-              <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3">
-                <span className="flex gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-[#F2604C]" />
-                  <span className="h-2 w-2 rounded-full bg-[#F2B33D]" />
-                  <span className="h-2 w-2 rounded-full bg-[#2FD4A0]" />
-                </span>
-                <span className="flex-1 text-center font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">
-                  Monitor de uso · 12 semanas
-                </span>
-                <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-[#2FD4A0]">
-                  <Icon name="wave" className="h-3 w-3" strokeWidth={2.4} /> Ao vivo
-                </span>
-              </div>
-              
-              {/* Gráfico de Barras */}
-              <div className="px-4 pb-5 pt-4">
-                <div className="flex h-[104px] items-end gap-[3px]">
-                  {accountMetrics.days56.map((count, i) => {
-                    const hasRun = count > 0;
-                    const intensity = accountMetrics.maxDayActions > 0 ? count / accountMetrics.maxDayActions : 0;
-                    const color = hasRun 
-                      ? (intensity > 0.7 ? "#F2604C" : intensity > 0.35 ? "#F2B33D" : "#2FD4A0") 
-                      : "#1c1c20";
-                    const h = hasRun ? Math.max(18, Math.round(intensity * 100)) : 6;
-                    
-                    return (
-                      <div 
-                        key={i} 
-                        title={`Dia ${i + 1}: ${count} ${count === 1 ? 'ação' : 'ações'}`}
-                        className="flex-1 rounded-full hover:opacity-100 transition-all duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
-                        style={{ 
-                          height: mounted ? `${h}%` : '4%', 
-                          background: color,
-                          opacity: mounted ? (hasRun ? 0.95 : 0.4) : 0,
-                          transitionDelay: `${i * 10}ms`
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-                <div className="mt-2.5 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">
-                  <span>{accountMetrics.startDateStr}</span>
-                  <span>
-                    {accountMetrics.hasActivity
-                      ? `pico ${accountMetrics.peakMinutes} min · média ${accountMetrics.avgMinutesPerActiveDay} min/dia ativo`
-                      : "sem atividade recente registrada"}
+            {(!isViewingOther || displayedCardVis.stats !== false) && (
+              <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
+                {renderCardVisibilityBanner("stats", "Monitor de uso")}
+                
+                {/* Header: Monitor de uso */}
+                <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3">
+                  <span className="flex gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-[#F2604C]" />
+                    <span className="h-2 w-2 rounded-full bg-[#F2B33D]" />
+                    <span className="h-2 w-2 rounded-full bg-[#2FD4A0]" />
                   </span>
-                  <span>{accountMetrics.endDateStr}</span>
-                </div>
-              </div>
-
-              {/* Carga por dia da semana */}
-              <div className="mx-4 rounded-xl border border-[#232327] bg-[#0d0d0f] p-3.5">
-                <div className="mb-3 text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">Carga por dia da semana</div>
-                <div className="space-y-[7px]">
-                  {["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((label, i) => {
-                    const count = accountMetrics.dowCounts[i];
-                    const filled = accountMetrics.maxDow > 0 && count > 0 
-                      ? Math.max(1, Math.round((count / accountMetrics.maxDow) * 18)) 
-                      : 0;
-                    const mins = count * 15;
-                    const timeLabel = count === 0 
-                      ? "0m" 
-                      : (mins >= 60 
-                          ? `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, "0")}` 
-                          : `${mins}m`);
-                    return (
-                      <div key={label} className="flex items-center gap-3">
-                        <span className="w-7 font-mono text-[10px] uppercase tracking-widest text-[#8c8c94]">{label}</span>
-                        <div className="flex flex-1 gap-[3px]">
-                          {Array.from({ length: 18 }).map((_, c) => {
-                            const on = c < filled;
-                            const t = c / 18;
-                            const color = on ? (t > 0.65 ? "#F2604C" : t > 0.45 ? "#F2B33D" : "#2FD4A0") : "#1c1c20";
-                            return (
-                              <span
-                                key={c}
-                                className="h-[9px] flex-1 rounded-[2px] transition-all duration-500 ease-out"
-                                style={{ 
-                                  background: color, 
-                                  opacity: mounted ? (on ? 0.92 : 0.4) : 0,
-                                  transform: mounted ? "scaleY(1)" : "scaleY(0)",
-                                  transitionDelay: `${i * 40 + c * 20}ms`
-                                }}
-                              />
-                            );
-                          })}
-                        </div>
-                        <span className="w-14 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">
-                          {timeLabel}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 2x2 Grid */}
-              <div className="mt-4 grid grid-cols-1 gap-px border-t border-[#232327] bg-[#232327] sm:grid-cols-2">
-                {[
-                  { 
-                    label: "USO DE FERRAMENTAS", 
-                    value: accountMetrics.totalRuns.toString(), 
-                    vcolor: "#2FD4A0", 
-                    delta: accountMetrics.totalRuns > 0 ? `+${accountMetrics.totalRuns}` : "-", 
-                    dtone: "#2FD4A0", 
-                    hint: accountMetrics.totalRuns === 1 ? "1 EXECUÇÃO REGISTRADA" : `${accountMetrics.totalRuns} EXECUÇÕES REGISTRADAS` 
-                  },
-                  { 
-                    label: "HORAS EM ESTÚDIO", 
-                    value: accountMetrics.studioHoursFormatted, 
-                    suffix: accountMetrics.studioMinutesSuffix, 
-                    vcolor: "#2FD4A0", 
-                    delta: accountMetrics.studioMinutes > 0 ? `${Math.round((accountMetrics.studioMinutes / (40 * 60)) * 100)}%` : "-", 
-                    dtone: "#2FD4A0", 
-                    hint: "META MENSAL: 40H" 
-                  },
-                  { 
-                    label: "IDEIAS RANQUEADAS", 
-                    value: accountMetrics.ideasCount.toString(), 
-                    vcolor: "#F2604C", 
-                    delta: accountMetrics.ideasCount > 0 ? `+${accountMetrics.ideasCount}` : "-", 
-                    dtone: "#F2604C", 
-                    hint: "BANCO DE IDEIAS DO ESTÚDIO" 
-                  },
-                  { 
-                    label: "SEQUÊNCIA ATUAL", 
-                    value: accountMetrics.streak.toString(), 
-                    suffix: accountMetrics.streak === 1 ? " dia" : " dias", 
-                    vcolor: "#F2B33D", 
-                    delta: `+${accountMetrics.streak}`, 
-                    dtone: "#F2B33D", 
-                    hint: `RECORDE: ${accountMetrics.streak} ${accountMetrics.streak === 1 ? 'DIA' : 'DIAS'}` 
-                  }
-                ].map((m, i) => (
-                  <div 
-                    key={m.label} 
-                    className="bg-[#101012] px-4 py-4 transition-all duration-700 ease-out"
-                    style={{
-                      opacity: mounted ? 1 : 0,
-                      transform: mounted ? "translateY(0)" : "translateY(12px)",
-                      transitionDelay: `${300 + i * 100}ms`
-                    }}
-                  >
-                    <div className="text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">{m.label}</div>
-                    <div className="mt-2.5 flex items-end justify-between gap-2">
-                      <div className="font-display text-[30px] font-medium leading-none tabular-nums" style={{ color: m.vcolor }}>
-                        {m.value}<span className="text-[17px] opacity-90">{m.suffix || ""}</span>
-                      </div>
-                      <span className="rounded-md px-1.5 py-0.5 font-mono text-[11px] tabular-nums" style={{ color: m.dtone, background: `${m.dtone}1a` }}>
-                        {m.delta}
-                      </span>
-                    </div>
-                    <div className="mt-2 truncate text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">{m.hint}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Ferramentas */}
-              <div className="border-t border-[#232327] bg-[#0c0c0e] px-4 py-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <Icon name="dial" className="h-3 w-3 text-[#F2B33D]" />
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">Ferramentas mais usadas</span>
-                  <span className="h-px flex-1 bg-[#232327]" />
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2] tabular-nums">
-                    {accountMetrics.totalRuns} {accountMetrics.totalRuns === 1 ? "EXECUÇÃO" : "EXECUÇÕES"}
+                  <span className="flex-1 text-center font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">
+                    Monitor de uso · 12 semanas
+                  </span>
+                  <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-[#2FD4A0]">
+                    <Icon name="wave" className="h-3 w-3" strokeWidth={2.4} /> Ao vivo
                   </span>
                 </div>
-                <div className="space-y-2.5">
-                  {accountMetrics.toolsList.length > 0 ? (
-                    accountMetrics.toolsList.map((t, i) => {
-                      const share = Math.round((t.runs / accountMetrics.maxToolRuns) * 100);
-                      const color = i === 0 ? "#F2604C" : i === 1 ? "#F2B33D" : "#2FD4A0";
+                
+                {/* Gráfico de Barras */}
+                <div className="px-4 pb-5 pt-4">
+                  <div className="flex h-[104px] items-end gap-[3px]">
+                    {metrics.days56.map((count, i) => {
+                      const hasRun = count > 0;
+                      const intensity = metrics.maxDayActions > 0 ? count / metrics.maxDayActions : 0;
+                      const color = hasRun 
+                        ? (intensity > 0.7 ? "#F2604C" : intensity > 0.35 ? "#F2B33D" : "#2FD4A0") 
+                        : "#1c1c20";
+                      const h = hasRun ? Math.max(18, Math.round(intensity * 100)) : 6;
+                      
                       return (
-                        <div key={t.id} className="flex items-center gap-3">
-                          <span className="w-5 font-mono text-[11px] text-[#7f7f88] tabular-nums">{String(i + 1).padStart(2, '0')}</span>
-                          <span className="w-[150px] shrink-0 truncate text-[12.5px] text-[#d3d3d8]">{t.name}</span>
-                          <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#1c1c20]">
-                            <div 
-                              className="h-full rounded-full transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]" 
-                              style={{ width: mounted ? `${Math.max(share, 8)}%` : '0%', background: color, transitionDelay: `${i * 120 + 400}ms` }} 
-                            />
+                        <div 
+                          key={i} 
+                          title={`Dia ${i + 1}: ${count} ${count === 1 ? 'ação' : 'ações'}`}
+                          className="flex-1 rounded-full hover:opacity-100 transition-all duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+                          style={{ 
+                            height: mounted ? `${h}%` : '4%', 
+                            background: color,
+                            opacity: mounted ? (hasRun ? 0.95 : 0.4) : 0,
+                            transitionDelay: `${i * 10}ms`
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2.5 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">
+                    <span>{metrics.startDateStr}</span>
+                    <span>
+                      {metrics.hasActivity
+                        ? `pico ${metrics.peakMinutes} min · média ${metrics.avgMinutesPerActiveDay} min/dia ativo`
+                        : "sem atividade recente registrada"}
+                    </span>
+                    <span>{metrics.endDateStr}</span>
+                  </div>
+                </div>
+
+                {/* Carga por dia da semana */}
+                <div className="mx-4 rounded-xl border border-[#232327] bg-[#0d0d0f] p-3.5">
+                  <div className="mb-3 text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">Carga por dia da semana</div>
+                  <div className="space-y-[7px]">
+                    {["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((label, i) => {
+                      const count = metrics.dowCounts[i];
+                      const filled = metrics.maxDow > 0 && count > 0 
+                        ? Math.max(1, Math.round((count / metrics.maxDow) * 18)) 
+                        : 0;
+                      const mins = count * 15;
+                      const timeLabel = count === 0 
+                        ? "0m" 
+                        : (mins >= 60 
+                            ? `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, "0")}` 
+                            : `${mins}m`);
+                      return (
+                        <div key={label} className="flex items-center gap-3">
+                          <span className="w-7 font-mono text-[10px] uppercase tracking-widest text-[#8c8c94]">{label}</span>
+                          <div className="flex flex-1 gap-[3px]">
+                            {Array.from({ length: 18 }).map((_, c) => {
+                              const on = c < filled;
+                              const t = c / 18;
+                              const color = on ? (t > 0.65 ? "#F2604C" : t > 0.45 ? "#F2B33D" : "#2FD4A0") : "#1c1c20";
+                              return (
+                                <span
+                                  key={c}
+                                  className="h-[9px] flex-1 rounded-[2px] transition-all duration-500 ease-out"
+                                  style={{ 
+                                    background: color, 
+                                    opacity: mounted ? (on ? 0.92 : 0.4) : 0,
+                                    transform: mounted ? "scaleY(1)" : "scaleY(0)",
+                                    transitionDelay: `${i * 40 + c * 20}ms`
+                                  }}
+                                />
+                              );
+                            })}
                           </div>
-                          <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}×</span>
+                          <span className="w-14 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">
+                            {timeLabel}
+                          </span>
                         </div>
                       );
-                    })
-                  ) : (
-                    <div className="text-[12px] text-[#8c8c94] py-1 font-mono">
-                      Nenhuma ferramenta utilizada ainda. Experimente o Rank de Ideia ou Gerador de Hooks para registrar suas métricas.
-                    </div>
-                  )}
+                    })}
+                  </div>
                 </div>
-              </div>
-              
-              <div className="border-t border-[#232327] bg-[#0c0c0e] px-4 py-3">
-                <p className="text-[12px] leading-relaxed text-[#8c8c94]">
-                  {accountMetrics.hasActivity ? (
-                    <>
-                      Seu histórico está sincronizado em tempo real. Seu dia com maior atividade tem sido <strong className="text-bone-200 capitalize">{accountMetrics.bestDowName}</strong>, totalizando <strong className="text-bone-200">{accountMetrics.studioHoursFormatted}{accountMetrics.studioMinutesSuffix}</strong> dedicados à criação.
-                    </>
-                  ) : (
-                    <>
-                      Seu monitor de estúdio é sincronizado em tempo real com o uso da sua conta. Conforme você executar ferramentas e planejar projetos, suas métricas aparecerão aqui automaticamente.
-                    </>
-                  )}
-                </p>
-              </div>
 
-            </Panel>
+                {/* 2x2 Grid */}
+                <div className="mt-4 grid grid-cols-1 gap-px border-t border-[#232327] bg-[#232327] sm:grid-cols-2">
+                  {[
+                    { 
+                      label: "USO DE FERRAMENTAS", 
+                      value: metrics.totalRuns.toString(), 
+                      vcolor: "#2FD4A0", 
+                      delta: metrics.totalRuns > 0 ? `+${metrics.totalRuns}` : "-", 
+                      dtone: "#2FD4A0", 
+                      hint: metrics.totalRuns === 1 ? "1 EXECUÇÃO REGISTRADA" : `${metrics.totalRuns} EXECUÇÕES REGISTRADAS` 
+                    },
+                    { 
+                      label: "HORAS EM ESTÚDIO", 
+                      value: metrics.studioHoursFormatted, 
+                      suffix: metrics.studioMinutesSuffix, 
+                      vcolor: "#2FD4A0", 
+                      delta: metrics.studioMinutes > 0 ? `${Math.round((metrics.studioMinutes / (40 * 60)) * 100)}%` : "-", 
+                      dtone: "#2FD4A0", 
+                      hint: "META MENSAL: 40H" 
+                    },
+                    { 
+                      label: "IDEIAS RANQUEADAS", 
+                      value: metrics.ideasCount.toString(), 
+                      vcolor: "#F2604C", 
+                      delta: metrics.ideasCount > 0 ? `+${metrics.ideasCount}` : "-", 
+                      dtone: "#F2604C", 
+                      hint: "BANCO DE IDEIAS DO ESTÚDIO" 
+                    },
+                    { 
+                      label: "SEQUÊNCIA ATUAL", 
+                      value: metrics.streak.toString(), 
+                      suffix: metrics.streak === 1 ? " dia" : " dias", 
+                      vcolor: "#F2B33D", 
+                      delta: `+${metrics.streak}`, 
+                      dtone: "#F2B33D", 
+                      hint: `RECORDE: ${metrics.streak} ${metrics.streak === 1 ? 'DIA' : 'DIAS'}` 
+                    }
+                  ].map((m, i) => (
+                    <div 
+                      key={m.label} 
+                      className="bg-[#101012] px-4 py-4 transition-all duration-700 ease-out"
+                      style={{
+                        opacity: mounted ? 1 : 0,
+                        transform: mounted ? "translateY(0)" : "translateY(12px)",
+                        transitionDelay: `${300 + i * 100}ms`
+                      }}
+                    >
+                      <div className="text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">{m.label}</div>
+                      <div className="mt-2.5 flex items-end justify-between gap-2">
+                        <div className="font-display text-[30px] font-medium leading-none tabular-nums" style={{ color: m.vcolor }}>
+                          {m.value}<span className="text-[17px] opacity-90">{m.suffix || ""}</span>
+                        </div>
+                        <span className="rounded-md px-1.5 py-0.5 font-mono text-[11px] tabular-nums" style={{ color: m.dtone, background: `${m.dtone}1a` }}>
+                          {m.delta}
+                        </span>
+                      </div>
+                      <div className="mt-2 truncate text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">{m.hint}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Ferramentas */}
+                <div className="border-t border-[#232327] bg-[#0c0c0e] px-4 py-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Icon name="dial" className="h-3 w-3 text-[#F2B33D]" />
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">Ferramentas mais usadas</span>
+                    <span className="h-px flex-1 bg-[#232327]" />
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2] tabular-nums">
+                      {metrics.totalRuns} {metrics.totalRuns === 1 ? "EXECUÇÃO" : "EXECUÇÕES"}
+                    </span>
+                  </div>
+                  <div className="space-y-2.5">
+                    {metrics.toolsList.length > 0 ? (
+                      metrics.toolsList.map((t, i) => {
+                        const share = Math.round((t.runs / metrics.maxToolRuns) * 100);
+                        const color = i === 0 ? "#F2604C" : i === 1 ? "#F2B33D" : "#2FD4A0";
+                        return (
+                          <div key={t.id} className="flex items-center gap-3">
+                            <span className="w-5 font-mono text-[11px] text-[#7f7f88] tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+                            <span className="w-[150px] shrink-0 truncate text-[12.5px] text-[#d3d3d8]">{t.name}</span>
+                            <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#1c1c20]">
+                              <div 
+                                className="h-full rounded-full transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]" 
+                                style={{ width: mounted ? `${Math.max(share, 8)}%` : '0%', background: color, transitionDelay: `${i * 120 + 400}ms` }} 
+                              />
+                            </div>
+                            <span className="w-12 text-right font-mono text-[11px] text-[#b6b6be] tabular-nums">{t.runs}×</span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="text-[12px] text-[#8c8c94] py-1 font-mono">
+                        Nenhuma ferramenta utilizada ainda.
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="border-t border-[#232327] bg-[#0c0c0e] px-4 py-3">
+                  <p className="text-[12px] leading-relaxed text-[#8c8c94]">
+                    {metrics.hasActivity ? (
+                      <>
+                        Histórico sincronizado em tempo real. Dia com maior atividade: <strong className="text-bone-200 capitalize">{metrics.bestDowName}</strong>, totalizando <strong className="text-bone-200">{metrics.studioHoursFormatted}{metrics.studioMinutesSuffix}</strong> dedicados à criação.
+                      </>
+                    ) : (
+                      <>
+                        O monitor de estúdio é sincronizado em tempo real com o uso da conta. Conforme ferramentas forem executadas e projetos planejados, as métricas aparecerão aqui automaticamente.
+                      </>
+                    )}
+                  </p>
+                </div>
+
+              </Panel>
+            )}
           </div>
 
           {/* Coluna Direita: Caderno & Conquistas */}
           <aside className="space-y-6">
             {/* Projetos em Andamento */}
-            <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
-              {renderCardVisibilityBanner("projects", "Projetos em Andamento")}
-              <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
-                <span className="h-3.5 w-1 rounded-full bg-[#2FD4A0]" />
-                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Projetos em Andamento</h3>
-                <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">{ongoingProjects.length}</span>
-              </div>
-              <div className="p-5 space-y-4">
-                {ongoingProjects.map((proj) => (
-                  <div key={proj.id} className="group">
-                    <div className="flex justify-between items-center mb-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-medium text-[#d3d3d8]">{proj.name}</span>
-                        {proj.external_link && (
-                          <a href={proj.external_link} target="_blank" rel="noopener noreferrer" className="text-[#8c8c94] hover:text-[#6E93F5] transition-colors" title="Acessar link">
-                            <Icon name="link" className="h-3 w-3" />
-                          </a>
-                        )}
+            {(!isViewingOther || displayedCardVis.projects !== false) && (
+              <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
+                {renderCardVisibilityBanner("projects", "Projetos em Andamento")}
+                <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
+                  <span className="h-3.5 w-1 rounded-full bg-[#2FD4A0]" />
+                  <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Projetos em Andamento</h3>
+                  <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">{effectiveOngoingProjects.length}</span>
+                </div>
+                <div className="p-5 space-y-4">
+                  {effectiveOngoingProjects.map((proj) => (
+                    <div key={proj.id} className="group">
+                      <div className="flex justify-between items-center mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-medium text-[#d3d3d8]">{proj.name}</span>
+                          {proj.external_link && (
+                            <a href={proj.external_link} target="_blank" rel="noopener noreferrer" className="text-[#8c8c94] hover:text-[#6E93F5] transition-colors" title="Acessar link">
+                              <Icon name="link" className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-mono font-bold text-bone-100 tabular-nums">{proj.progress}%</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-ink-900 border border-[#232327] text-[#8c8c94] uppercase tracking-wider">{proj.status}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-mono font-bold text-bone-100 tabular-nums">{proj.progress}%</span>
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-ink-900 border border-[#232327] text-[#8c8c94] uppercase tracking-wider">{proj.status}</span>
+                      <div className="h-1.5 w-full bg-[#1c1c20] rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: mounted ? `${Math.max(proj.progress, 4)}%` : '0%', backgroundColor: proj.color }} />
                       </div>
                     </div>
-                    <div className="h-1.5 w-full bg-[#1c1c20] rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-1000 ease-out" style={{ width: mounted ? `${Math.max(proj.progress, 4)}%` : '0%', backgroundColor: proj.color }} />
-                    </div>
-                  </div>
-                ))}
-                {ongoingProjects.length === 0 && (
-                  <div className="text-[12px] text-[#8c8c94] text-center py-2 font-mono">Nenhum projeto em andamento.</div>
-                )}
-              </div>
-            </Panel>
+                  ))}
+                  {effectiveOngoingProjects.length === 0 && (
+                    <div className="text-[12px] text-[#8c8c94] text-center py-2 font-mono">Nenhum projeto em andamento.</div>
+                  )}
+                </div>
+              </Panel>
+            )}
 
             {/* Card Coringa */}
-            <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
-              {renderCardVisibilityBanner("video", "Vídeo em Destaque")}
-              <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
-                <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
-                {isEditingJoker ? (
-                  <input
-                    type="text"
-                    value={jokerTitle}
-                    onChange={(e) => setJokerTitle(e.target.value)}
-                    className="flex-1 bg-transparent text-[15px] font-display font-bold text-white focus:outline-none"
-                    autoFocus
-                    onBlur={() => setIsEditingJoker(false)}
-                    onKeyDown={(e) => e.key === 'Enter' && setIsEditingJoker(false)}
-                  />
-                ) : (
-                  <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight cursor-pointer hover:text-[#6E93F5] transition-colors" onClick={() => setIsEditingJoker(true)}>
-                    {jokerTitle || "Clique para definir título"}
-                  </h3>
-                )}
-                <button onClick={() => setIsEditingJoker(!isEditingJoker)} className="text-[#8c8c94] hover:text-white transition-colors" title="Editar Título">
-                  <Icon name="type" className="h-3.5 w-3.5" />
-                </button>
-              </div>
+            {(!isViewingOther || displayedCardVis.video !== false) && (
+              <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
+                {renderCardVisibilityBanner("video", "Vídeo em Destaque")}
+                <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
+                  <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
+                  {isEditingJoker && !isViewingOther ? (
+                    <input
+                      type="text"
+                      value={jokerTitle}
+                      onChange={(e) => setJokerTitle(e.target.value)}
+                      className="flex-1 bg-transparent text-[15px] font-display font-bold text-white focus:outline-none"
+                      autoFocus
+                      onBlur={() => setIsEditingJoker(false)}
+                      onKeyDown={(e) => e.key === 'Enter' && setIsEditingJoker(false)}
+                    />
+                  ) : (
+                    <h3 className={`flex-1 font-display text-[15px] font-bold text-white tracking-tight ${!isViewingOther ? 'cursor-pointer hover:text-[#6E93F5] transition-colors' : ''}`} onClick={() => !isViewingOther && setIsEditingJoker(true)}>
+                      {(isViewingOther ? (targetProfile?.featured_video?.title || "Vídeo em Destaque") : (jokerTitle || "Clique para definir título"))}
+                    </h3>
+                  )}
+                  {!isViewingOther && (
+                    <button onClick={() => setIsEditingJoker(!isEditingJoker)} className="text-[#8c8c94] hover:text-white transition-colors" title="Editar Título">
+                      <Icon name="type" className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               <div className="p-5 space-y-4">
                 {videoProjects.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-10 px-4 text-center rounded-2xl border border-dashed border-[#232327] bg-[#0c0c0e]">
@@ -1853,8 +2249,9 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
                 )}
               </div>
             </Panel>
+            )}
 
-            {!hideOnboarding && (
+            {!hideOnboarding && !isPublicView && (
               <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
               <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                 <span className="h-3.5 w-1 rounded-full bg-[#F2B33D]" />
@@ -1911,35 +2308,37 @@ export default function PerfilScreen({ onGo }: { onGo?: (id: string) => void }) 
             </Panel>
             )}
 
-            <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
-              {renderCardVisibilityBanner("achievements", "Conquistas do Estúdio")}
-              <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
-                <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
-                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Conquistas do estúdio</h3>
-                <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">{unlockedCount} / {achievements.length}</span>
-              </div>
-              <div className="p-5">
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  {achievements.slice(0, 4).map((a) => (
-                    <div key={a.label} 
-                      className={`rounded-2xl border ${a.unlocked ? 'bg-gradient-to-br from-[#101012] to-[#0c0c0e]' : 'bg-[#0c0c0e] border-[#18181b] opacity-50'} p-4 flex flex-col items-start gap-3 transition-colors cursor-default relative overflow-hidden`}
-                      style={{ 
-                        borderColor: a.unlocked ? `${a.hex}40` : undefined,
-                        boxShadow: a.unlocked ? `inset 0 0 20px ${a.hex}05` : undefined
-                      }}
-                    >
-                      <div className={`rounded-md p-1.5 relative z-10 ${a.unlocked ? a.bg : 'bg-[#18181b]'}`}>
-                        <Icon name={a.icon} className={`h-3.5 w-3.5 ${a.unlocked ? a.tone : 'text-[#52525b]'}`} />
-                      </div>
-                      <span className={`text-[12px] font-medium tracking-tight leading-snug relative z-10 ${a.unlocked ? 'text-[#d3d3d8]' : 'text-[#8c8c94]'}`}>{a.label}</span>
-                    </div>
-                  ))}
+            {(!isViewingOther || displayedCardVis.achievements !== false) && (
+              <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
+                {renderCardVisibilityBanner("achievements", "Conquistas do Estúdio")}
+                <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
+                  <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
+                  <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Conquistas do estúdio</h3>
+                  <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">{unlockedCount} / {achievements.length}</span>
                 </div>
-                <Button onClick={() => setShowAchievModal(true)} variant="outline" className="w-full text-[#8c8c94] border-[#232327] bg-[#0c0c0e] hover:bg-[#101012] hover:text-[#d3d3d8]">
-                  Ver todas as {achievements.length} conquistas
-                </Button>
-              </div>
-            </Panel>
+                <div className="p-5">
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    {achievements.slice(0, 4).map((a) => (
+                      <div key={a.label} 
+                        className={`rounded-2xl border ${a.unlocked ? 'bg-gradient-to-br from-[#101012] to-[#0c0c0e]' : 'bg-[#0c0c0e] border-[#18181b] opacity-50'} p-4 flex flex-col items-start gap-3 transition-colors cursor-default relative overflow-hidden`}
+                        style={{ 
+                          borderColor: a.unlocked ? `${a.hex}40` : undefined,
+                          boxShadow: a.unlocked ? `inset 0 0 20px ${a.hex}05` : undefined
+                        }}
+                      >
+                        <div className={`rounded-md p-1.5 relative z-10 ${a.unlocked ? a.bg : 'bg-[#18181b]'}`}>
+                          <Icon name={a.icon} className={`h-3.5 w-3.5 ${a.unlocked ? a.tone : 'text-[#52525b]'}`} />
+                        </div>
+                        <span className={`text-[12px] font-medium tracking-tight leading-snug relative z-10 ${a.unlocked ? 'text-[#d3d3d8]' : 'text-[#8c8c94]'}`}>{a.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Button onClick={() => setShowAchievModal(true)} variant="outline" className="w-full text-[#8c8c94] border-[#232327] bg-[#0c0c0e] hover:bg-[#101012] hover:text-[#d3d3d8]">
+                    Ver todas as {achievements.length} conquistas
+                  </Button>
+                </div>
+              </Panel>
+            )}
           </aside>
         </Reveal>
       )}

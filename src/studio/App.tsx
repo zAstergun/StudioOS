@@ -217,9 +217,25 @@ const VALID_VIEWS = new Set([
   "membros",
 ]);
 
+function getInitialProfileHandle(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const u = params.get("u") || params.get("user") || params.get("handle");
+    if (u) return u.replace(/^@/, "");
+    const match = window.location.pathname.match(/\/perfil\/([^/?#]+)/);
+    if (match && match[1]) return decodeURIComponent(match[1]).replace(/^@/, "");
+  } catch {}
+  return null;
+}
+
 function getInitialView(): string {
   if (typeof window === "undefined") return "home";
   try {
+    const path = window.location.pathname;
+    if (path.startsWith("/perfil/") || getInitialProfileHandle()) {
+      return "perfil";
+    }
     const params = new URLSearchParams(window.location.search);
     const v = params.get("view");
     if (v && VALID_VIEWS.has(v)) {
@@ -236,6 +252,7 @@ function getInitialView(): string {
 export default function App() {
   const auth = useAuth();
   const [view, setView] = useState<string>(getInitialView);
+  const [viewedProfileHandle, setViewedProfileHandle] = useState<string | null>(getInitialProfileHandle);
   const [protectedViewAfterLogin, setProtectedViewAfterLogin] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
   const [calibStore, setCalibStore] = useState<{
@@ -344,13 +361,14 @@ export default function App() {
   useLayoutEffect(() => {
     if (auth.loading) return;
     const isRealUser = auth.user && auth.user.provider !== "demo";
-    if (!auth.user && (view === "historico" || view === "lixeira" || view === "perfil" || view === "salvos" || view === "projetos")) {
+    const isPublicProfile = view === "perfil" && Boolean(viewedProfileHandle);
+    if (!auth.user && (view === "historico" || view === "lixeira" || (view === "perfil" && !isPublicProfile) || view === "salvos" || view === "projetos")) {
       setProtectedViewAfterLogin(view);
       setView("login");
     } else if (!isRealUser && (view === "projetos" || view === "salvos")) {
       setView("home");
     }
-  }, [auth.loading, auth.user, view]);
+  }, [auth.loading, auth.user, view, viewedProfileHandle]);
 
   useEffect(() => {
     if (auth.loading || !supabase) return;
@@ -378,8 +396,19 @@ export default function App() {
     }
   }, [auth.loading, auth.user]);
 
-  const go = (id: string) => {
-    if (!auth.user && (id === "historico" || id === "lixeira" || id === "perfil" || id === "projetos" || id === "salvos")) {
+  const go = (id: string, extra?: string) => {
+    let nextHandle = viewedProfileHandle;
+    if (id === "perfil") {
+      nextHandle = extra ? extra.replace(/^@/, "") : null;
+      setViewedProfileHandle(nextHandle);
+    } else {
+      nextHandle = null;
+      setViewedProfileHandle(null);
+    }
+
+    const isPublicProfile = id === "perfil" && Boolean(nextHandle);
+
+    if (!auth.user && (id === "historico" || id === "lixeira" || (id === "perfil" && !isPublicProfile) || id === "projetos" || id === "salvos")) {
       setProtectedViewAfterLogin(id);
       setView("login");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -397,14 +426,22 @@ export default function App() {
       if (id === "home") {
         url.searchParams.delete("view");
         url.searchParams.delete("project");
+        url.searchParams.delete("u");
       } else {
         url.searchParams.set("view", id);
         if (id !== "projetos") {
           url.searchParams.delete("project");
         }
+        if (id === "perfil" && nextHandle) {
+          url.searchParams.set("u", nextHandle);
+        } else {
+          url.searchParams.delete("u");
+        }
       }
-      const newUrl = url.pathname + (url.search ? url.search : "") + url.hash;
-      window.history.pushState({ view: id }, "", newUrl);
+      const newUrl = (id === "perfil" && nextHandle)
+        ? `/perfil/${nextHandle}`
+        : (url.pathname.startsWith("/perfil/") ? "/" + (url.search ? url.search : "") : (url.pathname + (url.search ? url.search : "") + url.hash));
+      window.history.pushState({ view: id, u: nextHandle }, "", newUrl);
     } catch {}
   };
 
@@ -416,7 +453,7 @@ export default function App() {
       const currentParam = url.searchParams.get("view");
       const expectedParam = view === "home" ? null : view;
 
-      if (currentParam !== expectedParam) {
+      if (currentParam !== expectedParam && !url.pathname.startsWith("/perfil/")) {
         if (expectedParam) {
           url.searchParams.set("view", expectedParam);
         } else {
@@ -435,6 +472,12 @@ export default function App() {
   useEffect(() => {
     const handlePopState = () => {
       try {
+        const handle = getInitialProfileHandle();
+        if (window.location.pathname.startsWith("/perfil/") || handle) {
+          setView("perfil");
+          setViewedProfileHandle(handle);
+          return;
+        }
         const params = new URLSearchParams(window.location.search);
         const v = params.get("view") || "home";
         if (VALID_VIEWS.has(v)) {
@@ -442,6 +485,7 @@ export default function App() {
         } else {
           setView("home");
         }
+        setViewedProfileHandle(params.get("u") || null);
       } catch {}
     };
     window.addEventListener("popstate", handlePopState);
@@ -478,6 +522,7 @@ export default function App() {
       <div className="flex">
         <Sidebar
           active={view}
+          viewedProfileHandle={viewedProfileHandle}
           onNavigate={go}
           open={menu}
           onClose={() => setMenu(false)}
@@ -649,7 +694,16 @@ export default function App() {
                     profileColor={activeProfile.color}
                   />
                 )}
-                {view === "perfil" && <PerfilScreen onGo={go} />}
+                {view === "perfil" && (
+                  <PerfilScreen
+                    onGo={go}
+                    viewedHandle={viewedProfileHandle}
+                    onClearViewedHandle={() => {
+                      setViewedProfileHandle(null);
+                      go("perfil");
+                    }}
+                  />
+                )}
                 {view === "projetos" && <ProjetosScreen onGo={go} />}
                 {view === "salvos" && <SalvosScreen onGo={go} />}
                 {view === "wiki" && <Wiki onBack={back} onGo={go} />}
