@@ -1,6 +1,8 @@
 -- ==============================================================================
 -- StudioOS · Sistema de Curtidas de Perfis (Exclusivo StudioOS)
 -- Separado da conta Aster global, focado no ecossistema e estatísticas do estúdio
+-- Regra: Apenas usuários autenticados com conta podem curtir outros criadores.
+-- Contabilização: Atualiza atômica e permanentemente as curtidas recebidas.
 -- ==============================================================================
 
 create table if not exists public.studioos_profile_likes (
@@ -28,7 +30,7 @@ create policy "Usuários podem remover seu like em perfis do StudioOS"
   on public.studioos_profile_likes for delete
   using (auth.uid() = liker_user_id);
 
--- Função para consultar status de like e contagem no StudioOS
+-- Função para consultar status de like e contagem de curtidas recebidas no StudioOS
 create or replace function public.studioos_get_profile_likes_info(p_target_id uuid)
 returns jsonb
 language plpgsql
@@ -42,6 +44,7 @@ declare
 begin
   v_uid := auth.uid();
   
+  -- Contabiliza curtidas recebidas pelo perfil consultado
   select count(*) into v_count
   from public.studioos_profile_likes
   where target_user_id = p_target_id;
@@ -74,10 +77,12 @@ declare
   v_liked boolean;
 begin
   v_uid := auth.uid();
+  -- Regra estrita: apenas usuários autenticados com conta podem curtir
   if v_uid is null then
-    raise exception 'Usuário não autenticado';
+    raise exception 'Apenas usuários autenticados com conta podem curtir perfis no StudioOS';
   end if;
   
+  -- Não permite auto-curtida
   if v_uid = p_target_id then
     raise exception 'Você não pode curtir seu próprio perfil no StudioOS';
   end if;
@@ -98,14 +103,20 @@ begin
     v_liked := true;
   end if;
 
+  -- Contabiliza curtidas recebidas pelo criador alvo
   select count(*) into v_new_count
   from public.studioos_profile_likes
   where target_user_id = p_target_id;
 
+  -- Atualiza e persiste de forma atômica no perfil do criador alvo
   update public.profiles
   set stats = jsonb_set(
-    coalesce(stats, '{}'::jsonb),
-    '{likes_count}',
+    jsonb_set(
+      coalesce(stats, '{}'::jsonb),
+      '{likes_count}',
+      to_jsonb(v_new_count)
+    ),
+    '{curtidas_recebidas}',
     to_jsonb(v_new_count)
   )
   where id = p_target_id;
@@ -117,38 +128,15 @@ begin
 end;
 $$;
 
--- Função para alternar like de convidado/visitante no StudioOS
+-- Modo convidado bloqueado: apenas contas reais
 create or replace function public.studioos_toggle_profile_like_guest(p_target_id uuid, p_liked boolean)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  v_count bigint;
 begin
-  select count(*) into v_count
-  from public.studioos_profile_likes
-  where target_user_id = p_target_id;
-
-  if p_liked then
-    v_count := v_count + 1;
-  else
-    v_count := greatest(0, v_count - 1);
-  end if;
-
-  update public.profiles
-  set stats = jsonb_set(
-    coalesce(stats, '{}'::jsonb),
-    '{likes_count}',
-    to_jsonb(v_count)
-  )
-  where id = p_target_id;
-
-  return jsonb_build_object(
-    'liked', p_liked,
-    'likes_count', v_count
-  );
+  raise exception 'Apenas usuários autenticados com conta podem curtir perfis no StudioOS';
 end;
 $$;
 
@@ -162,9 +150,14 @@ returns jsonb language sql security definer as $$ select public.studioos_toggle_
 create or replace function public.toggle_profile_like_guest(p_target_id uuid, p_liked boolean)
 returns jsonb language sql security definer as $$ select public.studioos_toggle_profile_like_guest(p_target_id, p_liked); $$;
 
+-- Permissões: Somente authenticated pode curtir. Anon só pode visualizar contagem.
 grant execute on function public.studioos_get_profile_likes_info(uuid) to anon, authenticated;
-grant execute on function public.studioos_toggle_profile_like(uuid) to authenticated;
-grant execute on function public.studioos_toggle_profile_like_guest(uuid, boolean) to anon, authenticated;
 grant execute on function public.get_profile_likes_info(uuid) to anon, authenticated;
+
+revoke execute on function public.studioos_toggle_profile_like(uuid) from anon;
+revoke execute on function public.toggle_profile_like(uuid) from anon;
+revoke execute on function public.studioos_toggle_profile_like_guest(uuid, boolean) from anon, authenticated;
+revoke execute on function public.toggle_profile_like_guest(uuid, boolean) from anon, authenticated;
+
+grant execute on function public.studioos_toggle_profile_like(uuid) to authenticated;
 grant execute on function public.toggle_profile_like(uuid) to authenticated;
-grant execute on function public.toggle_profile_like_guest(uuid, boolean) to anon, authenticated;

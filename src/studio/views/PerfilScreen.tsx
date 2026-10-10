@@ -69,6 +69,7 @@ export default function PerfilScreen({
   const [likesCount, setLikesCount] = useState<number>(0);
   const [hasLiked, setHasLiked] = useState<boolean>(false);
   const [likingLoading, setLikingLoading] = useState(false);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
 
   const [tab, setTab] = useState<"geral" | "seguranca" | "preferencias" | "atividade">("geral");
   const [name, setName] = useState(user?.name || "");
@@ -202,7 +203,16 @@ export default function PerfilScreen({
 
   const handleToggleLike = async () => {
     if (!currentProfileId || !supabase || likingLoading) return;
-    if (user && user.id === currentProfileId) {
+    
+    // 1. Somente quem tem uma conta pode curtir o perfil de outra pessoa
+    const isRealUser = user && user.provider !== "demo";
+    if (!isRealUser) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
+    // 2. Não pode curtir o próprio perfil
+    if (user.id === currentProfileId) {
       alert("Você não pode curtir seu próprio perfil.");
       return;
     }
@@ -211,6 +221,7 @@ export default function PerfilScreen({
     const nextLiked = !hasLiked;
     const nextCount = Math.max(0, likesCount + (nextLiked ? 1 : -1));
 
+    // Atualização otimista na interface
     setHasLiked(nextLiked);
     setLikesCount(nextCount);
     try {
@@ -218,37 +229,27 @@ export default function PerfilScreen({
     } catch {}
 
     try {
-      const isRealUser = user && user.provider !== "demo";
-      if (isRealUser) {
-        let res = await supabase.rpc("studioos_toggle_profile_like", {
+      let res = await supabase.rpc("studioos_toggle_profile_like", {
+        p_target_id: currentProfileId,
+      });
+      if (res.error) {
+        res = await supabase.rpc("toggle_profile_like", {
           p_target_id: currentProfileId,
         });
-        if (res.error) {
-          res = await supabase.rpc("toggle_profile_like", {
-            p_target_id: currentProfileId,
-          });
-        }
-        if (!res.error && res.data) {
-          setHasLiked(Boolean(res.data.liked));
-          setLikesCount(Number(res.data.likes_count) || 0);
-        }
-      } else {
-        let res = await supabase.rpc("studioos_toggle_profile_like_guest", {
-          p_target_id: currentProfileId,
-          p_liked: nextLiked,
-        });
-        if (res.error) {
-          res = await supabase.rpc("toggle_profile_like_guest", {
-            p_target_id: currentProfileId,
-            p_liked: nextLiked,
-          });
-        }
-        if (!res.error && res.data) {
-          setLikesCount(Number(res.data.likes_count) || 0);
-        }
+      }
+      if (!res.error && res.data) {
+        setHasLiked(Boolean(res.data.liked));
+        setLikesCount(Number(res.data.likes_count) || 0);
+      } else if (res.error) {
+        // Se a API recusar (ex: sem conta ou erro), reverte o estado otimista
+        setHasLiked(!nextLiked);
+        setLikesCount(likesCount);
+        alert(res.error.message || "Não foi possível registrar a curtida.");
       }
     } catch (err) {
       console.error("Erro ao curtir perfil:", err);
+      setHasLiked(!nextLiked);
+      setLikesCount(likesCount);
     } finally {
       setLikingLoading(false);
     }
@@ -828,11 +829,13 @@ export default function PerfilScreen({
         days_56: accountMetrics.days56,
         tool_breakdown: accountMetrics.toolsList,
         avg_rating: accountMetrics.avgRatingStr,
-        best_dow: accountMetrics.bestDowName
+        best_dow: accountMetrics.bestDowName,
+        likes_count: likesCount,
+        curtidas_recebidas: likesCount
       };
       supabase.from('profiles').update({ stats: payload }).eq('id', user.id).then();
     }
-  }, [user, accountMetrics, isViewingOther]);
+  }, [user, accountMetrics, isViewingOther, likesCount]);
 
   const [sessions] = useState([
     { id: 1, name: "Chrome no Windows", location: "São Paulo, BR • Sessão Ativa", current: true, time: "Atual" },
@@ -1227,6 +1230,7 @@ export default function PerfilScreen({
   const activeStatsObj = isViewingOther ? (targetProfile?.stats || {}) : userStats;
 
   const achievements = [
+    { id: "community_liked", icon: "heart", label: "Estúdio Reconhecido", desc: "Recebeu curtidas da comunidade do StudioOS.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: likesCount >= 1 },
     { id: "seq21", icon: "spark", label: "Sequência de 21 dias", desc: "Acessou o painel por 21 dias seguidos.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: metrics.streak >= 21 },
     { id: "ideias200", icon: "target", label: "200 ideias ranqueadas", desc: "Mais de 200 ideias processadas no painel.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: metrics.ideasCount >= 200 },
     { id: "top4", icon: "star", label: "Top 4% do canal", desc: "Seu desempenho superou 96% dos criadores.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(activeStatsObj['top4']) === 1 },
@@ -1518,7 +1522,7 @@ export default function PerfilScreen({
                   [metrics.projectsCount.toString(), metrics.projectsCount === 1 ? "projeto" : "projetos"],
                   [metrics.ideasCount.toString(), "ideias ranqueadas"],
                   [metrics.avgRatingStr, "nota média"],
-                  [likesCount.toString(), likesCount === 1 ? "curtida" : "curtidas"],
+                  [likesCount.toString(), likesCount === 1 ? "curtida recebida" : "curtidas recebidas"],
                 ].map(([v, l]) => (
                   <div key={l} className="flex items-baseline gap-2">
                     <span className="font-display text-[16px] font-bold text-bone-50 tabular-nums">{v}</span>
@@ -2566,6 +2570,48 @@ export default function PerfilScreen({
         </Reveal>
       )}
 
+      {/* MODAL DE LOGIN NECESSÁRIO PARA CURTIR */}
+      {showLoginPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md anim-fade">
+          <Reveal className="w-full max-w-md">
+            <Panel className="border-[#232327] bg-[#0c0c0e] p-6 shadow-2xl w-full mx-auto relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-[#F2B33D]" />
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10 border border-red-500/20 text-red-500">
+                  <Icon name="heart" className="h-5 w-5 fill-red-500" />
+                </div>
+                <div>
+                  <h3 className="font-display text-lg font-bold text-white tracking-tight">Conta necessária</h3>
+                  <p className="text-[11px] font-mono uppercase tracking-wider text-[#8c8c94]">Aster Account · StudioOS</p>
+                </div>
+              </div>
+              
+              <p className="mb-6 text-[13px] text-[#a8a8b0] leading-relaxed">
+                Apenas criadores conectados com uma conta ativa podem curtir o perfil de outro criador no StudioOS. Crie sua conta ou faça login para apoiar este estúdio.
+              </p>
+
+              <div className="flex items-center justify-end gap-3">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowLoginPrompt(false)}
+                  className="border-[#232327] bg-[#101012] text-[#8c8c94] hover:text-white"
+                >
+                  Fechar
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setShowLoginPrompt(false);
+                    if (onGo) onGo("login");
+                  }}
+                  className="bg-signal-400 text-ink-950 hover:bg-signal-300 font-semibold uppercase text-xs tracking-wider"
+                >
+                  Fazer Login / Criar Conta
+                </Button>
+              </div>
+            </Panel>
+          </Reveal>
+        </div>
+      )}
 
       {/* MODAL DE CONQUISTAS */}
       {showAchievModal && (
