@@ -7,6 +7,7 @@ import { useExampleMode } from "../auth";
 import { useToolRestore } from "../utils/toolStateRestore";
 import { type Calib } from "../calibration";
 import { CalibrationNotice } from "../components/CalibrationNotice";
+import { VipRgbColorPicker } from "../components/VipRgbColorPicker";
 
 /* ----------------------------------------------------------- ARQUÉTIPOS */
 
@@ -1550,43 +1551,23 @@ ${topThumbs || "Sem histórico registrado"}`;
             )}
 
             {/* Seletores de Cor */}
-            <div className="grid grid-cols-2 gap-4 border-t border-ink-800/80 pt-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-ink-800/80 pt-3">
               <div>
-                <Label hint="atmosfera">Fundo da Capa</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {BG_SWATCHES.map((s) => (
-                    <button
-                      key={s.hex}
-                      type="button"
-                      onClick={() => setBgHex(s.hex)}
-                      className={cn(
-                        "h-7 w-7 rounded border-2 transition-transform hover:scale-110",
-                        bgHex === s.hex ? "border-bone-100 scale-105" : "border-ink-700"
-                      )}
-                      style={{ background: s.hex }}
-                      title={s.name}
-                    />
-                  ))}
-                </div>
+                <VipRgbColorPicker
+                  value={bgHex}
+                  onChange={setBgHex}
+                  label="Fundo da Capa"
+                  palette={BG_SWATCHES.map((s) => s.hex)}
+                />
               </div>
 
               <div>
-                <Label hint="recorte fotográfico">Luz de Contorno (Rim)</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {RIM_LIGHT_SWATCHES.map((s) => (
-                    <button
-                      key={s.hex}
-                      type="button"
-                      onClick={() => setRimHex(s.hex)}
-                      className={cn(
-                        "h-7 w-7 rounded border-2 transition-transform hover:scale-110",
-                        rimHex === s.hex ? "border-bone-100 scale-105" : "border-ink-700"
-                      )}
-                      style={{ background: s.hex }}
-                      title={s.name}
-                    />
-                  ))}
-                </div>
+                <VipRgbColorPicker
+                  value={rimHex}
+                  onChange={setRimHex}
+                  label="Luz de Contorno (Rim)"
+                  palette={RIM_LIGHT_SWATCHES.map((s) => s.hex)}
+                />
               </div>
             </div>
           </div>

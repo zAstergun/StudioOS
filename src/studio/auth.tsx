@@ -30,6 +30,7 @@ export type StudioUser = {
   name: string;
   channel?: string;
   avatarUrl?: string;
+  coverUrl?: string;
   bio?: string;
   links?: Record<string, string>;
   card_visibility?: {
@@ -53,7 +54,7 @@ export const OAUTH_LABEL: Record<OAuthProvider, string> = {
   discord: "Discord",
 };
 
-type Result = { ok: true; message?: string; needsConfirmation?: boolean } | { ok: false; error: string };
+type Result = { ok: true; message?: string; needsConfirmation?: boolean; coverUrl?: string } | { ok: false; error: string };
 
 type AuthCtx = {
   user: StudioUser | null;
@@ -72,6 +73,7 @@ type AuthCtx = {
     channel: string,
     extra?: {
       bio?: string;
+      cover_url?: string | null;
       links?: Record<string, string>;
       card_visibility?: {
         stats?: boolean;
@@ -84,6 +86,7 @@ type AuthCtx = {
   ) => Promise<Result>;
   updateEmail: (email: string) => Promise<Result>;
   updateAvatar: (file: File) => Promise<Result>;
+  updateCover: (file: File | string | null) => Promise<Result>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<Result>;
   linkIdentity: (provider: OAuthProvider) => Promise<Result>;
@@ -147,6 +150,7 @@ function mapUser(u: SbUser): StudioUser {
       (meta.channel as string) ||
       (provider === "discord" ? ((meta.user_name as string) ? `@${meta.user_name as string}` : undefined) : undefined),
     avatarUrl: (meta.avatar_url as string) || (meta.picture as string) || undefined,
+    coverUrl: (meta.cover_url as string) || (meta.banner_url as string) || undefined,
     bio: (meta.bio as string) || undefined,
     links: (meta.links as Record<string, string>) || undefined,
     card_visibility: (meta.card_visibility as any) || undefined,
@@ -195,6 +199,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [recovering, setRecovering] = useState(false);
   const demo = !isSupabaseConfigured;
 
+  const syncUserWithProfile = useCallback(async (baseUser: StudioUser | null): Promise<StudioUser | null> => {
+    if (!baseUser || !supabase) return baseUser;
+    try {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("is_vip, avatar_url, cover_url, channel, full_name")
+        .eq("id", baseUser.id)
+        .maybeSingle();
+      if (prof) {
+        return {
+          ...baseUser,
+          is_vip: typeof prof.is_vip === "boolean" ? prof.is_vip : baseUser.is_vip,
+          avatarUrl: prof.avatar_url || baseUser.avatarUrl,
+          coverUrl: prof.cover_url || baseUser.coverUrl,
+          channel: prof.channel || baseUser.channel,
+          name: prof.full_name || baseUser.name,
+        };
+      }
+    } catch {
+      // ignore
+    }
+    return baseUser;
+  }, []);
+
   useEffect(() => {
     if (!supabase) {
       try {
@@ -216,29 +244,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const client = supabase;
-
-    const syncUserWithProfile = async (baseUser: StudioUser | null): Promise<StudioUser | null> => {
-      if (!baseUser) return null;
-      try {
-        const { data: prof } = await client
-          .from("profiles")
-          .select("is_vip, avatar_url, channel, full_name")
-          .eq("id", baseUser.id)
-          .maybeSingle();
-        if (prof) {
-          return {
-            ...baseUser,
-            is_vip: typeof prof.is_vip === "boolean" ? prof.is_vip : baseUser.is_vip,
-            avatarUrl: prof.avatar_url || baseUser.avatarUrl,
-            channel: prof.channel || baseUser.channel,
-            name: prof.full_name || baseUser.name,
-          };
-        }
-      } catch {
-        // ignore
-      }
-      return baseUser;
-    };
 
     client.auth.getSession().then(async ({ data }) => {
       let u = data.session?.user ? mapUser(data.session.user as SbUser) : null;
@@ -511,6 +516,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (extra?.bio !== undefined) u.bio = extra.bio;
         if (extra?.links !== undefined) u.links = extra.links;
         if (extra?.card_visibility !== undefined) u.card_visibility = extra.card_visibility;
+        if (extra?.cover_url !== undefined) {
+          if (u.is_vip || extra.cover_url === null) {
+            u.coverUrl = extra.cover_url || undefined;
+          }
+        }
         localStorage.setItem(DEMO_KEY, JSON.stringify(u));
         setUser(u);
       }
@@ -539,6 +549,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (extra?.links !== undefined) upsertData.links = extra.links;
     if (extra?.card_visibility !== undefined) upsertData.card_visibility = extra.card_visibility;
     if (extra?.featured_video !== undefined) upsertData.featured_video = extra.featured_video;
+    if (extra?.cover_url !== undefined) {
+      if (user.is_vip || extra.cover_url === null) {
+        upsertData.cover_url = extra.cover_url;
+      }
+    }
 
     // Atualiza primeiro no DB para checar restrição de unicidade do @
     const { error: dbError } = await supabase
@@ -556,10 +571,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const authMeta: Record<string, any> = {
       full_name: name,
       channel: cleanChannel || null,
+      is_vip: user.is_vip,
     };
     if (extra?.bio !== undefined) authMeta.bio = extra.bio;
     if (extra?.links !== undefined) authMeta.links = extra.links;
     if (extra?.card_visibility !== undefined) authMeta.card_visibility = extra.card_visibility;
+    if (extra?.cover_url !== undefined) {
+      if (user.is_vip || extra.cover_url === null) {
+        authMeta.cover_url = extra.cover_url;
+      }
+    }
 
     const { data, error } = await supabase.auth.updateUser({
       data: authMeta,
@@ -567,10 +588,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     if (error) return { ok: false, error: translate(error.message) };
     if (data.user) {
-      setUser(mapUser(data.user as SbUser));
+      const mapped = await syncUserWithProfile(mapUser(data.user as SbUser));
+      setUser(mapped);
     }
     return { ok: true, message: "Perfil atualizado com sucesso." };
-  }, [user]);
+  }, [user, syncUserWithProfile]);
 
   const updateEmail = useCallback<AuthCtx["updateEmail"]>(async (newEmail) => {
     if (!supabase) {
@@ -664,6 +686,110 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: true, message: "Foto atualizada!" };
   }, [user]);
 
+  const updateCover = useCallback<AuthCtx["updateCover"]>(async (input) => {
+    if (!user) return { ok: false, error: "Não autenticado." };
+
+    if (input !== null && !user.is_vip) {
+      return {
+        ok: false,
+        error: "Apenas membros VIP podem personalizar a capa do perfil.",
+      };
+    }
+
+    // Remoção da capa
+    if (input === null) {
+      if (!supabase) {
+        const raw = localStorage.getItem(DEMO_KEY);
+        if (raw) {
+          const u = JSON.parse(raw) as StudioUser;
+          delete u.coverUrl;
+          localStorage.setItem(DEMO_KEY, JSON.stringify(u));
+          setUser(u);
+        } else {
+          setUser(prev => prev ? { ...prev, coverUrl: undefined } : null);
+        }
+        return { ok: true, message: "Capa removida com sucesso!" };
+      }
+
+      await supabase.from("profiles").upsert({ id: user.id, cover_url: null, updated_at: new Date().toISOString() });
+      await supabase.auth.updateUser({ data: { cover_url: null } });
+      setUser(prev => prev ? { ...prev, coverUrl: undefined } : null);
+      return { ok: true, message: "Capa removida com sucesso!" };
+    }
+
+    // URL direta (presets ou links)
+    if (typeof input === "string") {
+      if (!supabase) {
+        const raw = localStorage.getItem(DEMO_KEY);
+        if (raw) {
+          const u = JSON.parse(raw) as StudioUser;
+          u.coverUrl = input;
+          localStorage.setItem(DEMO_KEY, JSON.stringify(u));
+          setUser(u);
+        } else {
+          setUser(prev => prev ? { ...prev, coverUrl: input } : null);
+        }
+        return { ok: true, coverUrl: input, message: "Capa atualizada com sucesso!" };
+      }
+
+      await supabase.from("profiles").upsert({ id: user.id, cover_url: input, updated_at: new Date().toISOString() });
+      await supabase.auth.updateUser({ data: { cover_url: input } });
+      setUser(prev => prev ? { ...prev, coverUrl: input } : null);
+      return { ok: true, coverUrl: input, message: "Capa atualizada com sucesso!" };
+    }
+
+    // Upload de arquivo File
+    const file = input;
+    const isGif = file.type === "image/gif" || file.name.toLowerCase().endsWith(".gif");
+
+    if (!supabase) {
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      const raw = localStorage.getItem(DEMO_KEY);
+      if (raw) {
+        const u = JSON.parse(raw) as StudioUser;
+        u.coverUrl = dataUrl;
+        localStorage.setItem(DEMO_KEY, JSON.stringify(u));
+        setUser(u);
+      } else {
+        setUser(prev => prev ? { ...prev, coverUrl: dataUrl } : null);
+      }
+      return { ok: true, coverUrl: dataUrl, message: "Capa atualizada com sucesso!" };
+    }
+
+    const fileExt = file.name.split('.').pop() || (isGif ? "gif" : "jpg");
+    const fileName = `cover-${user.id}-${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(fileName, file, {
+        upsert: true,
+        contentType: isGif ? "image/gif" : undefined
+      });
+
+    if (uploadError) return { ok: false, error: "Falha ao enviar a imagem de capa: " + uploadError.message };
+
+    const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      data: { cover_url: data.publicUrl }
+    });
+
+    await supabase.from("profiles").upsert({
+      id: user.id,
+      cover_url: data.publicUrl,
+      updated_at: new Date().toISOString()
+    });
+
+    if (updateError) return { ok: false, error: translate(updateError.message) };
+
+    setUser(prev => prev ? { ...prev, coverUrl: data.publicUrl } : null);
+    return { ok: true, coverUrl: data.publicUrl, message: "Capa atualizada com sucesso!" };
+  }, [user]);
+
   const linkIdentity = useCallback<AuthCtx["linkIdentity"]>(async (provider) => {
     if (!supabase) return { ok: false, error: "Disponível apenas com Supabase configurado." };
     const { error } = await supabase.auth.linkIdentity({
@@ -721,13 +847,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile,
       updateEmail,
       updateAvatar,
+      updateCover,
       signOut,
       deleteAccount,
       linkIdentity,
       unlinkIdentity,
       getIdentities,
     }),
-    [user, loading, demo, recovering, signIn, signUp, signInWithOAuth, signInWithTestAccount, sendMagicLink, resetPassword, updatePassword, updateProfile, updateEmail, updateAvatar, signOut, deleteAccount, linkIdentity, unlinkIdentity, getIdentities]
+    [user, loading, demo, recovering, signIn, signUp, signInWithOAuth, signInWithTestAccount, sendMagicLink, resetPassword, updatePassword, updateProfile, updateEmail, updateAvatar, updateCover, signOut, deleteAccount, linkIdentity, unlinkIdentity, getIdentities]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

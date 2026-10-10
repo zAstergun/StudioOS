@@ -5,6 +5,7 @@ import { cn } from "../utils/cn";
 import { ProjetoDetailScreen } from "./ProjetoDetailScreen";
 import { useAuth, supabase } from "../auth";
 import { SaveToSalvosModal } from "../components/SaveToSalvosModal";
+import { VipRgbColorPicker } from "../components/VipRgbColorPicker";
 
 export interface Project {
   id: string;
@@ -63,6 +64,9 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
   const [showModal, setShowModal] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectColor, setNewProjectColor] = useState("#F2604C");
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editProjectName, setEditProjectName] = useState("");
+  const [editProjectColor, setEditProjectColor] = useState("");
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [savingProject, setSavingProject] = useState<Project | null>(null);
   const [projectToRemoveFromSalvos, setProjectToRemoveFromSalvos] = useState<Project | null>(null);
@@ -163,8 +167,16 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
       })
       .subscribe();
 
+    const handleSync = () => {
+      fetchProjects();
+    };
+    window.addEventListener("studioos:history", handleSync);
+    window.addEventListener("studioos:projects", handleSync);
+
     return () => {
       supabase!.removeChannel(channel);
+      window.removeEventListener("studioos:history", handleSync);
+      window.removeEventListener("studioos:projects", handleSync);
     };
   }, [user, fetchProjects, fetchSavedItems]);
 
@@ -234,6 +246,9 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
       <ProjetoDetailScreen 
         project={selectedProject} 
         onBack={() => handleSelectProject(null)} 
+        onDeleteProject={(id) => {
+          setProjects(prev => prev.filter(p => p.id !== id));
+        }}
         onUpdateProject={(updated) => {
           setProjects(prev => prev.map(p => p.id === selectedProject.id ? { ...p, ...updated } : p));
           setSelectedProject(prev => prev ? { ...prev, ...updated } : null);
@@ -282,6 +297,36 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
         console.error("Erro ao criar projeto:", error);
         alert("Erro ao criar projeto: " + error.message);
       }
+    }
+  };
+
+  const handleEditProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProject || !editProjectName.trim()) return;
+
+    try {
+      if (supabase) {
+        const { error } = await supabase
+          .from("studioos_projects")
+          .update({
+            name: editProjectName.trim(),
+            color: editProjectColor
+          })
+          .eq("id", editingProject.id);
+
+        if (error) throw error;
+      }
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === editingProject.id
+            ? { ...p, name: editProjectName.trim(), color: editProjectColor }
+            : p
+        )
+      );
+      setEditingProject(null);
+    } catch (err) {
+      console.error("Erro ao editar projeto", err);
+      alert("Erro ao editar projeto");
     }
   };
 
@@ -472,6 +517,22 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                           );
                         })()}
                         
+                        {/* EDIT BUTTON */}
+                        {user?.id === proj.owner_id && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingProject(proj);
+                              setEditProjectName(proj.name);
+                              setEditProjectColor(proj.color || "#F2604C");
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-ink-400 opacity-0 transition-all duration-200 hover:bg-ink-800 hover:text-bone-200 group-hover:opacity-100"
+                            title="Editar Projeto"
+                          >
+                            <Icon name="edit" className="h-3 w-3" strokeWidth={1.8} />
+                          </button>
+                        )}
+                        
                         {/* TRASH BUTTON */}
                       {user?.id === proj.owner_id && (
                         <button
@@ -602,30 +663,13 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                 />
               </div>
 
-              <div className="mb-8">
-                <label className="mb-3 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Cor de Destaque
-                </label>
-                <div className="flex gap-2.5">
-                  {PALETTE.map(c => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setNewProjectColor(c)}
-                      className={cn(
-                        "relative flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200",
-                        newProjectColor === c 
-                          ? "scale-110 ring-2 ring-bone-300/60 ring-offset-2 ring-offset-ink-900" 
-                          : "hover:scale-110"
-                      )}
-                      style={{ backgroundColor: c }}
-                    >
-                      {newProjectColor === c && (
-                        <Icon name="check" className="h-3 w-3 text-ink-950" strokeWidth={3} />
-                      )}
-                    </button>
-                  ))}
-                </div>
+              <div className="mb-6">
+                <VipRgbColorPicker
+                  value={newProjectColor}
+                  onChange={(color) => setNewProjectColor(color)}
+                  label="Cor de Destaque"
+                  palette={PALETTE}
+                />
               </div>
 
               {/* MODAL PREVIEW */}
@@ -671,6 +715,102 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
         </div>
       )}
 
+      {/* MODAL EDITAR PROJETO */}
+      {editingProject && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/85 p-4 backdrop-blur-md"
+          onClick={(e) => { if (e.target === e.currentTarget) setEditingProject(null); }}
+        >
+          <div className="relative w-full max-w-[440px] overflow-hidden rounded-2xl border border-ink-700/50 bg-ink-900 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)]">
+            {/* MODAL HEADER */}
+            <div className="border-b border-ink-800/60 bg-ink-900/80 px-6 py-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-signal-400/10">
+                    <Icon name="edit" className="h-3.5 w-3.5 text-signal-400" strokeWidth={2} />
+                  </div>
+                  <div>
+                    <h2 className="font-display text-lg font-bold text-bone-50">Editar Projeto</h2>
+                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">Atualizar configurações</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setEditingProject(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-bone-300 transition-colors hover:bg-ink-800 hover:text-bone-200"
+                >
+                  <Icon name="close" className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            
+            {/* MODAL BODY */}
+            <form onSubmit={handleEditProject} className="p-6">
+              <div className="mb-6">
+                <label className="mb-2 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
+                  Nome do Projeto
+                </label>
+                <input 
+                  type="text" 
+                  value={editProjectName}
+                  onChange={(e) => setEditProjectName(e.target.value)}
+                  autoFocus
+                  className="w-full rounded-lg border border-ink-800/60 bg-ink-950/50 px-4 py-3 text-[14px] text-bone-100 transition-colors focus:border-signal-400/60 focus:outline-none focus:ring-1 focus:ring-signal-400/20"
+                  required
+                />
+              </div>
+
+              <div className="mb-6">
+                <VipRgbColorPicker
+                  value={editProjectColor}
+                  onChange={(color) => setEditProjectColor(color)}
+                  label="Cor de Destaque"
+                  palette={PALETTE}
+                />
+              </div>
+
+              {/* MODAL PREVIEW */}
+              {editProjectName.trim() && (
+                <div className="mb-6 overflow-hidden rounded-lg border border-ink-800/40 bg-ink-950/30">
+                  <div className="flex items-center gap-3 p-3">
+                    <div 
+                      className="h-1.5 w-1.5 rounded-full" 
+                      style={{ backgroundColor: editProjectColor }} 
+                    />
+                    <span className="font-mono text-[9px] tracking-[0.12em] text-bone-300 uppercase">Preview</span>
+                  </div>
+                  <div className="flex items-center gap-3 border-t border-ink-800/30 px-3 py-3">
+                    <div 
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
+                      style={{ backgroundColor: `${editProjectColor}15`, color: editProjectColor }}
+                    >
+                      <Icon name="layers" className="h-3.5 w-3.5" />
+                    </div>
+                    <span className="truncate font-display text-[14px] font-bold text-bone-200">{editProjectName}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setEditingProject(null)}
+                  className="rounded-lg px-4 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-300 uppercase transition-colors hover:text-bone-200"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  disabled={!editProjectName.trim()}
+                  className="rounded-lg bg-signal-400 px-6 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-950 uppercase shadow-[0_6px_20px_-8px_rgba(242,179,61,0.6)] transition-all duration-200 disabled:opacity-40 disabled:shadow-none hover:bg-signal-300 hover:shadow-[0_8px_25px_-8px_rgba(242,179,61,0.7)]"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL EXCLUIR PROJETO */}
       {projectToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
@@ -698,11 +838,33 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
               </button>
               <button 
                 onClick={async () => {
+                  if (!projectToDelete) return;
+                  const idToDelete = projectToDelete.id;
+
+                  // Atualização otimista imediata na interface
+                  setProjects((prev) => prev.filter((p) => p.id !== idToDelete));
+                  setProjectToDelete(null);
+
                   if (supabase) {
-                    await supabase.from("studioos_projects").update({ status: "trashed" }).eq("id", projectToDelete.id);
+                    try {
+                      const { error } = await supabase
+                        .from("studioos_projects")
+                        .update({ status: "trashed" })
+                        .eq("id", idToDelete);
+
+                      if (error) {
+                        console.error("Erro ao mover projeto para a lixeira:", error);
+                        fetchProjects();
+                        return;
+                      }
+                    } catch (err) {
+                      console.error("Erro ao mover projeto para a lixeira:", err);
+                      fetchProjects();
+                      return;
+                    }
                   }
                   window.dispatchEvent(new Event("studioos:history"));
-                  setProjectToDelete(null);
+                  window.dispatchEvent(new Event("studioos:projects"));
                 }}
                 className="flex-1 rounded-lg bg-red-500/10 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-red-500 uppercase transition-colors hover:bg-red-500 hover:text-white"
               >

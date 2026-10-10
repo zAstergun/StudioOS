@@ -3,6 +3,7 @@ import { Icon, Reveal } from "../components/ui";
 import { cn } from "../utils/cn";
 import { useAuth, supabase } from "../auth";
 import { prepareToolRestore, formatFriendlySummary } from "../utils/toolStateRestore";
+import { VipRgbColorPicker } from "../components/VipRgbColorPicker";
 
 const PALETTE = ["#F2604C", "#F2B33D", "#2FD4A0", "#6E93F5", "#D946EF", "#A855F7", "#F472B6", "#38BDF8"];
 
@@ -554,29 +555,12 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
               </div>
 
               <div className="mb-8">
-                <label className="mb-3 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Cor de Destaque
-                </label>
-                <div className="flex gap-2.5">
-                  {PALETTE.map(c => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setNewTabColor(c)}
-                      className={cn(
-                        "relative flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200",
-                        newTabColor === c 
-                          ? "scale-110 ring-2 ring-bone-300/60 ring-offset-2 ring-offset-ink-900" 
-                          : "hover:scale-110"
-                      )}
-                      style={{ backgroundColor: c }}
-                    >
-                      {newTabColor === c && (
-                        <Icon name="check" className="h-3 w-3 text-ink-950" strokeWidth={3} />
-                      )}
-                    </button>
-                  ))}
-                </div>
+                <VipRgbColorPicker
+                  value={newTabColor}
+                  onChange={setNewTabColor}
+                  label="Cor de Destaque"
+                  palette={PALETTE}
+                />
               </div>
 
               <div className="flex gap-3">
@@ -645,29 +629,12 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                   </div>
 
                   <div className="mb-8">
-                    <label className="mb-3 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                      Cor de Destaque
-                    </label>
-                    <div className="flex gap-2.5">
-                      {PALETTE.map(c => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => setEditTabColor(c)}
-                          className={cn(
-                            "relative flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200",
-                            editTabColor === c 
-                              ? "scale-110 ring-2 ring-bone-300/60 ring-offset-2 ring-offset-ink-900" 
-                              : "hover:scale-110"
-                          )}
-                          style={{ backgroundColor: c }}
-                        >
-                          {editTabColor === c && (
-                            <Icon name="check" className="h-3 w-3 text-ink-950" strokeWidth={3} />
-                          )}
-                        </button>
-                      ))}
-                    </div>
+                    <VipRgbColorPicker
+                      value={editTabColor}
+                      onChange={setEditTabColor}
+                      label="Cor de Destaque"
+                      palette={PALETTE}
+                    />
                   </div>
 
                   <div className="flex items-center justify-between mt-4">

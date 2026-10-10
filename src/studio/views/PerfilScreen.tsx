@@ -5,6 +5,7 @@ import { VipBadge } from "../components/VipBadge";
 import { useAuth, supabase } from "../auth";
 import { computeProjectStatus } from "./ProjetosScreen";
 import { cn } from "../utils/cn";
+import { VipRgbColorPicker } from "../components/VipRgbColorPicker";
 
 const getCroppedImg = async (imageSrc: string, pixelCrop: any): Promise<File | null> => {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -44,6 +45,66 @@ const getCroppedImg = async (imageSrc: string, pixelCrop: any): Promise<File | n
   });
 };
 
+const PRESET_COVERS = [
+  {
+    id: "studio-gold",
+    name: "Studio Gold",
+    url: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=1920&q=80",
+  },
+  {
+    id: "dark-waves",
+    name: "Dark Waves",
+    url: "https://images.unsplash.com/photo-1507499739999-097706ad8914?auto=format&fit=crop&w=1920&q=80",
+  },
+  {
+    id: "deep-space",
+    name: "Deep Space",
+    url: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=1920&q=80",
+  },
+  {
+    id: "cyber-matrix",
+    name: "Cyber Tech",
+    url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1920&q=80",
+  },
+];
+
+export const isCoverColor = (val?: string | null): boolean => {
+  if (!val) return false;
+  const trimmed = val.trim();
+  return (
+    trimmed.startsWith("#") ||
+    trimmed.startsWith("rgb(") ||
+    trimmed.startsWith("rgba(") ||
+    trimmed.startsWith("hsl(") ||
+    trimmed.startsWith("hsla(") ||
+    trimmed.startsWith("linear-gradient(") ||
+    trimmed.startsWith("radial-gradient(") ||
+    trimmed.startsWith("conic-gradient(")
+  );
+};
+
+const PRESET_SOLID_COLORS = [
+  { id: "gold", name: "Dourado VIP", value: "#F2B33D", textColor: "#000" },
+  { id: "amber", name: "Âmbar Real", value: "#D97706", textColor: "#fff" },
+  { id: "purple", name: "Roxo Cyber", value: "#8B5CF6", textColor: "#fff" },
+  { id: "indigo", name: "Índigo Noturno", value: "#4F46E5", textColor: "#fff" },
+  { id: "cyan", name: "Azul Neon", value: "#0284C7", textColor: "#fff" },
+  { id: "emerald", name: "Esmeralda", value: "#10B981", textColor: "#000" },
+  { id: "ruby", name: "Vermelho Rubi", value: "#EF4444", textColor: "#fff" },
+  { id: "rose", name: "Rosa Choque", value: "#EC4899", textColor: "#fff" },
+  { id: "charcoal", name: "Preto Carbono", value: "#18181B", textColor: "#fff" },
+  { id: "slate", name: "Ardósia Escura", value: "#334155", textColor: "#fff" },
+];
+
+const PRESET_GRADIENTS = [
+  { id: "grad-gold", name: "Obsidian Gold", value: "linear-gradient(135deg, #18181b 0%, #78350f 50%, #f59e0b 100%)" },
+  { id: "grad-sunset", name: "Sunset Horizon", value: "linear-gradient(135deg, #991b1b 0%, #d97706 50%, #f59e0b 100%)" },
+  { id: "grad-cyberpunk", name: "Cyberpunk", value: "linear-gradient(135deg, #4c1d95 0%, #be185d 50%, #06b6d4 100%)" },
+  { id: "grad-aurora", name: "Aurora Neon", value: "linear-gradient(135deg, #064e3b 0%, #0284c7 50%, #8b5cf6 100%)" },
+  { id: "grad-deep-ocean", name: "Deep Ocean", value: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #3b82f6 100%)" },
+  { id: "grad-magenta", name: "Vapor Neon", value: "linear-gradient(135deg, #311042 0%, #a21caf 50%, #fb7185 100%)" },
+];
+
 export default function PerfilScreen({
   onGo,
   viewedHandle,
@@ -53,7 +114,21 @@ export default function PerfilScreen({
   viewedHandle?: string | null;
   onClearViewedHandle?: () => void;
 }) {
-  const { user, updateProfile, updateEmail, updateAvatar, deleteAccount, updatePassword, linkIdentity, unlinkIdentity, getIdentities } = useAuth();
+  const { user, updateProfile, updateEmail, updateAvatar, updateCover, deleteAccount, updatePassword, linkIdentity, unlinkIdentity, getIdentities } = useAuth();
+
+  const [coverUrl, setCoverUrl] = useState<string | null>(user?.coverUrl || null);
+  const [draftCover, setDraftCover] = useState<string | null>(user?.coverUrl || null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [coverEditTab, setCoverEditTab] = useState<"image" | "color">("image");
+  const [customHexColor, setCustomHexColor] = useState<string>("#F2B33D");
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (user?.coverUrl) {
+      setCoverUrl(user.coverUrl);
+      setDraftCover(user.coverUrl);
+    }
+  }, [user?.coverUrl]);
   
   const cleanViewedHandle = viewedHandle ? viewedHandle.trim().replace(/^@/, '').toLowerCase() : null;
   const myChannelClean = (user?.channel || "").trim().replace(/^@/, '').toLowerCase();
@@ -1017,9 +1092,13 @@ export default function PerfilScreen({
   const displayedCardVis = isViewingOther 
     ? (targetProfile?.card_visibility || { stats: true, projects: true, video: true, achievements: true, comments: true }) 
     : cardVisibility;
+  const isProfileVip = isViewingOther ? Boolean(targetProfile?.is_vip) : Boolean(user?.is_vip);
   const displayedName = isViewingOther ? (targetProfile?.full_name || `@${cleanViewedHandle}`) : (name || "Usuário");
   const displayedChannel = isViewingOther ? `@${cleanViewedHandle}` : (channel ? (channel.startsWith('@') ? channel : `@${channel}`) : "@usuario");
   const displayedAvatar = isViewingOther ? targetProfile?.avatar_url : user?.avatarUrl;
+  const displayedCover = isProfileVip
+    ? (isViewingOther ? targetProfile?.cover_url : (isEditingProfile ? draftCover : (coverUrl || user?.coverUrl)))
+    : null;
   const displayedBio = isViewingOther ? (targetProfile?.bio || DEFAULT_BIO) : (bio || DEFAULT_BIO);
   const displayedLinks = isViewingOther ? (targetProfile?.links || {}) : {
     website, youtube, instagram, tiktok, discord
@@ -1234,6 +1313,10 @@ export default function PerfilScreen({
     if (user && supabase) {
       supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data }: { data: any }) => {
         if (data) {
+          if (data.cover_url !== undefined) {
+            setCoverUrl(data.cover_url);
+            setDraftCover(data.cover_url);
+          }
           if (data.stats) setUserStats(data.stats);
           if (data.full_name) setName(data.full_name);
           if (data.channel) setChannel(data.channel);
@@ -1256,6 +1339,11 @@ export default function PerfilScreen({
       });
     } else if (user) {
       // Fallback local storage
+      const savedCover = localStorage.getItem(`studioos.cover.${user.id}`);
+      if (savedCover) {
+        setCoverUrl(savedCover);
+        setDraftCover(savedCover);
+      }
       const savedBio = localStorage.getItem(`studioos.bio.${user.id}`);
       if (savedBio) setBio(savedBio);
       const savedLinks = localStorage.getItem(`studioos.links.${user.id}`);
@@ -1283,6 +1371,13 @@ export default function PerfilScreen({
     setDraftName(name || "");
     setDraftChannel(channel ? channel.replace(/^@/, '') : "");
     setDraftBio(bio || "");
+    setDraftCover(coverUrl);
+    if (isCoverColor(coverUrl)) {
+      setCoverEditTab("color");
+      if (coverUrl?.startsWith("#")) setCustomHexColor(coverUrl);
+    } else {
+      setCoverEditTab("image");
+    }
     setDraftWebsite(website || "");
     setDraftYoutube(youtube || "");
     setDraftInstagram(instagram || "");
@@ -1309,6 +1404,13 @@ export default function PerfilScreen({
     setDraftName(name || "");
     setDraftChannel(channel ? channel.replace(/^@/, '') : "");
     setDraftBio(bio || "");
+    setDraftCover(coverUrl);
+    if (isCoverColor(coverUrl)) {
+      setCoverEditTab("color");
+      if (coverUrl?.startsWith("#")) setCustomHexColor(coverUrl);
+    } else {
+      setCoverEditTab("image");
+    }
     setDraftWebsite(website || "");
     setDraftYoutube(youtube || "");
     setDraftInstagram(instagram || "");
@@ -1373,6 +1475,64 @@ export default function PerfilScreen({
     }
   };
 
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      if (!user?.is_vip) {
+        alert("Apenas membros VIP podem personalizar a capa do perfil.");
+        if (coverFileInputRef.current) coverFileInputRef.current.value = "";
+        return;
+      }
+      setUploadingCover(true);
+      try {
+        const res = await updateCover(file);
+        if (res.ok) {
+          const newUrl = res.coverUrl || user?.coverUrl || null;
+          setDraftCover(newUrl);
+          setCoverUrl(newUrl);
+          if (user && newUrl) {
+            localStorage.setItem(`studioos.cover.${user.id}`, newUrl);
+          }
+        } else {
+          alert(res.error || "Erro ao fazer upload da capa.");
+        }
+      } catch (err: any) {
+        alert("Erro ao enviar a capa: " + (err?.message || "falha no upload"));
+      } finally {
+        setUploadingCover(false);
+        if (coverFileInputRef.current) coverFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleRemoveCover = async () => {
+    setDraftCover(null);
+    setCoverUrl(null);
+    if (user) {
+      localStorage.removeItem(`studioos.cover.${user.id}`);
+      await updateCover(null);
+    }
+  };
+
+  const handleSelectCoverPreset = (presetUrl: string) => {
+    if (!user?.is_vip) {
+      alert("Apenas membros VIP podem definir uma capa para o perfil.");
+      return;
+    }
+    setDraftCover(presetUrl);
+  };
+
+  const handleSelectCoverColor = (colorValue: string) => {
+    if (!user?.is_vip) {
+      alert("Apenas membros VIP podem definir uma cor para a capa do perfil.");
+      return;
+    }
+    setDraftCover(colorValue);
+    if (colorValue.startsWith("#")) {
+      setCustomHexColor(colorValue);
+    }
+  };
+
   const saveProfileChanges = async () => {
     const cleanHandle = draftChannel.trim().replace(/^@/, '').toLowerCase();
     const currentClean = (channel || "").trim().replace(/^@/, '').toLowerCase();
@@ -1390,6 +1550,7 @@ export default function PerfilScreen({
     setSaving(true);
     const extraPayload = {
       bio: draftBio.trim(),
+      cover_url: user?.is_vip ? draftCover : null,
       links: {
         website: draftWebsite.trim(),
         youtube: draftYoutube.trim(),
@@ -1415,6 +1576,7 @@ export default function PerfilScreen({
     setName(draftName.trim() || "Criador");
     setChannel(cleanHandle);
     setBio(draftBio.trim());
+    setCoverUrl(user?.is_vip ? draftCover : null);
     setWebsite(draftWebsite.trim());
     setYoutube(draftYoutube.trim());
     setInstagram(draftInstagram.trim());
@@ -1427,6 +1589,7 @@ export default function PerfilScreen({
       localStorage.setItem(`studioos.onboarding.hasPrefs.${user.id}`, "true");
       setHasPrefs(true);
       localStorage.setItem(`studioos.bio.${user.id}`, draftBio.trim());
+      localStorage.setItem(`studioos.cover.${user.id}`, (user?.is_vip ? draftCover : "") || "");
       localStorage.setItem(`studioos.links.${user.id}`, JSON.stringify(extraPayload.links));
       localStorage.setItem(`studioos.cardVis.${user.id}`, JSON.stringify(draftCardVisibility));
     }
@@ -1753,8 +1916,45 @@ export default function PerfilScreen({
       )}
 
       {/* HEADER */}
-      <Reveal className="mb-10 flex flex-col md:flex-row md:items-start gap-6 sm:gap-8">
-        {/* Avatar */}
+      <Reveal
+        className={cn(
+          "relative mb-10 transition-all duration-300",
+          displayedCover
+            ? "overflow-hidden rounded-2xl border border-white/10 bg-[#0c0c0e]/90 p-5 sm:p-7 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-md"
+            : ""
+        )}
+      >
+        {/* Capa de Fundo (Exclusivo VIP) */}
+        {displayedCover && (
+          <div className="absolute inset-0 z-0 pointer-events-none select-none overflow-hidden">
+            {isCoverColor(displayedCover) ? (
+              <div
+                className="h-full w-full transition-all duration-700 ease-out"
+                style={{ background: displayedCover }}
+              />
+            ) : (
+              <img
+                src={displayedCover}
+                alt="Capa do perfil"
+                className="h-full w-full object-cover object-center transform transition-transform duration-700 ease-out"
+              />
+            )}
+            {/* Gradientes cinematográficos que garantem contraste e elegância suprema */}
+            <div className={cn(
+              "absolute inset-0",
+              isCoverColor(displayedCover)
+                ? "bg-gradient-to-r from-[#09090b]/85 via-[#09090b]/65 to-[#09090b]/40"
+                : "bg-gradient-to-r from-[#09090b]/95 via-[#09090b]/85 to-[#09090b]/70"
+            )} />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#09090b]/95 via-[#09090b]/35 to-transparent" />
+            <div className="absolute inset-0 backdrop-blur-[0.5px]" />
+            <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-2xl" />
+
+          </div>
+        )}
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-start gap-6 sm:gap-8">
+          {/* Avatar */}
         <div className="relative group shrink-0 self-start">
           <div className="relative h-24 w-24 overflow-hidden rounded-full border-2 border-signal-400 bg-ink-900 shadow-[0_12px_30px_rgba(0,0,0,0.5)] sm:h-28 sm:w-28 md:h-[120px] md:w-[120px]">
             <Icon name="user" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-10 w-10 text-ink-500" />
@@ -2106,6 +2306,391 @@ export default function PerfilScreen({
                 </div>
               </div>
 
+              {/* Box de Medidas e Formatos Ideais (Avatar & Capa) */}
+              <div className="rounded-xl border border-white/10 bg-[#0c0c0e] p-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-[#232327]">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">📐</span>
+                    <span className="font-display text-[13.5px] font-bold text-white tracking-tight">
+                      Medidas e Formatos Ideais para o Perfil
+                    </span>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-mono text-signal-400 bg-signal-400/10 border border-signal-400/25 px-2.5 py-0.5 rounded-full w-fit">
+                    <span>✨</span> Especificações Técnicas
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Foto de Perfil (Avatar) */}
+                  <div className="rounded-xl border border-ink-800 bg-[#121215] p-3.5 flex flex-col justify-between gap-2.5">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 text-white text-xs font-bold">
+                          <Icon name="user" className="h-3.5 w-3.5 text-signal-400" />
+                          <span>Foto do Perfil (Avatar)</span>
+                        </div>
+                        <span className="font-mono text-[10.5px] font-bold text-signal-400 bg-signal-400/15 border border-signal-400/30 px-2 py-0.5 rounded">
+                          400 × 400 px
+                        </span>
+                      </div>
+                      <div className="space-y-1.5 text-[11px] font-mono">
+                        <div className="flex items-center justify-between text-ink-400">
+                          <span>Proporção:</span>
+                          <span className="text-bone-200 font-semibold">1:1 (Quadrada · Corte circular)</span>
+                        </div>
+                        <div className="flex items-center justify-between text-ink-400">
+                          <span>Formatos:</span>
+                          <span className="text-bone-200">JPG, PNG, WEBP ou GIF (VIP)</span>
+                        </div>
+                        <div className="flex items-center justify-between text-ink-400">
+                          <span>Peso Máximo:</span>
+                          <span className="text-bone-200">Até 5 MB</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-ink-400 font-sans leading-relaxed pt-2 border-t border-[#1e1e24]">
+                      Centralize o rosto ou a marca no centro da imagem para manter o enquadramento perfeito dentro do círculo.
+                    </p>
+                  </div>
+
+                  {/* Capa de Fundo (Banner) */}
+                  <div className="rounded-xl border border-amber-500/25 bg-gradient-to-br from-amber-500/5 via-[#121215] to-[#121215] p-3.5 flex flex-col justify-between gap-2.5">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 text-white text-xs font-bold">
+                          <Icon name="frame" className="h-3.5 w-3.5 text-amber-400" />
+                          <span>Capa de Fundo (Banner VIP)</span>
+                        </div>
+                        <span className="font-mono text-[10.5px] font-bold text-amber-400 bg-amber-400/15 border border-amber-400/35 px-2 py-0.5 rounded">
+                          1920 × 480 px
+                        </span>
+                      </div>
+                      <div className="space-y-1.5 text-[11px] font-mono">
+                        <div className="flex items-center justify-between text-ink-400">
+                          <span>Proporção:</span>
+                          <span className="text-bone-200 font-semibold">4:1 (Panorâmica · Mín: 1200×300 px)</span>
+                        </div>
+                        <div className="flex items-center justify-between text-ink-400">
+                          <span>Área Segura:</span>
+                          <span className="text-bone-200">1920 × 400 px (foco central/direita)</span>
+                        </div>
+                        <div className="flex items-center justify-between text-ink-400">
+                          <span>Formatos:</span>
+                          <span className="text-bone-200">JPG, PNG, WEBP, GIF ou Cor VIP</span>
+                        </div>
+                        <div className="flex items-center justify-between text-ink-400">
+                          <span>Peso Máximo:</span>
+                          <span className="text-bone-200">Até 10 MB</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-ink-400 font-sans leading-relaxed pt-2 border-t border-amber-500/15">
+                      O avatar e o nome sobrepõem o canto esquerdo da capa. Mantenha elementos gráficos principais no centro ou à direita.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Opção de Capa de Fundo do Perfil (Exclusivo VIP) */}
+              <div className={cn(
+                "rounded-xl border p-4 transition-all relative",
+                user?.is_vip
+                  ? "border-amber-500/30 bg-gradient-to-r from-amber-500/5 via-[#101012] to-[#0c0c0e] shadow-[0_0_25px_rgba(242,179,61,0.06)]"
+                  : "border-ink-800 bg-[#0d0d10] opacity-95"
+              )}>
+                {/* Shimmer de fundo sutil para VIP */}
+                {user?.is_vip && (
+                  <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 rounded-full bg-signal-400/5 blur-3xl pointer-events-none" />
+                )}
+
+                <div className="flex flex-col gap-3.5 relative z-10">
+                  {/* Cabeçalho da Opção */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-[#232327]">
+                    <div className="flex items-center gap-2.5">
+                      <Icon name="frame" className={cn("h-4 w-4", user?.is_vip ? "text-signal-400" : "text-ink-400")} />
+                      <span className="font-display text-[13.5px] font-bold text-white tracking-tight">Capa de Fundo do Perfil</span>
+                      {user?.is_vip ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-signal-400/40 bg-signal-400/10 px-2 py-0.5 text-[9.5px] font-mono font-bold uppercase tracking-wider text-signal-400 shadow-[0_0_10px_rgba(242,179,61,0.2)]">
+                          <span>👑</span> VIP Ativo
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9.5px] font-mono font-bold uppercase tracking-wider text-amber-400">
+                          <span>🔒</span> Exclusivo VIP
+                        </span>
+                      )}
+                    </div>
+
+                    <span className="text-[11px] font-mono text-ink-400">
+                      {user?.is_vip ? "Fotos, GIFs animados ou cores e gradientes VIP" : "Disponível apenas para membros VIP"}
+                    </span>
+                  </div>
+
+                  {/* Conteúdo: VIP Liberado vs Não-VIP Bloqueado */}
+                  {user?.is_vip ? (
+                    <div className="flex flex-col gap-4 pt-1">
+                      {/* Top Row: Preview + Modos de escolha */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                        {/* Box de Preview da Capa */}
+                        <div className="relative h-24 sm:h-20 sm:w-48 w-full rounded-lg overflow-hidden border border-ink-700 bg-ink-900 shrink-0 group shadow-inner">
+                          {draftCover ? (
+                            isCoverColor(draftCover) ? (
+                              <div
+                                className="h-full w-full transition-all"
+                                style={{ background: draftCover }}
+                              >
+                                <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
+                                  <span className="text-[9px] font-mono uppercase tracking-wider text-white font-bold bg-black/70 px-2 py-0.5 rounded border border-white/20">
+                                    Cor VIP Ativa
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <img src={draftCover} alt="Prévia da capa" className="h-full w-full object-cover object-center" />
+                                <div className="absolute inset-0 bg-ink-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  <span className="text-[9px] font-mono uppercase tracking-wider text-white font-bold bg-black/70 px-2 py-0.5 rounded border border-white/20">
+                                    Prévia Ativa
+                                  </span>
+                                </div>
+                              </>
+                            )
+                          ) : (
+                            <div className="h-full w-full flex flex-col items-center justify-center text-ink-500 p-2 text-center bg-[#141416]">
+                              <Icon name="frame" className="h-5 w-5 mb-1 opacity-50 text-ink-400" />
+                              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-400">Sem capa definida</span>
+                            </div>
+                          )}
+                          {uploadingCover && (
+                            <div className="absolute inset-0 bg-ink-950/75 flex items-center justify-center gap-2 text-signal-400 text-xs font-mono">
+                              <Icon name="spark" className="h-4 w-4 animate-pulse" />
+                              <span>Enviando...</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Abas e ações principais */}
+                        <div className="flex-1 flex flex-col justify-center gap-2.5">
+                          {/* Seletor de Modo: Foto vs Cor */}
+                          <div className="flex items-center gap-2">
+                            <div className="inline-flex rounded-lg border border-[#232327] bg-[#121215] p-1">
+                              <button
+                                type="button"
+                                onClick={() => setCoverEditTab("image")}
+                                className={cn(
+                                  "flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer",
+                                  coverEditTab === "image"
+                                    ? "bg-signal-400 text-ink-950 font-bold shadow-sm"
+                                    : "text-ink-400 hover:text-bone-200"
+                                )}
+                              >
+                                <Icon name="spark" className="h-3 w-3" />
+                                <span>Foto / Imagem</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCoverEditTab("color")}
+                                className={cn(
+                                  "flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer",
+                                  coverEditTab === "color"
+                                    ? "bg-signal-400 text-ink-950 font-bold shadow-sm"
+                                    : "text-ink-400 hover:text-bone-200"
+                                )}
+                              >
+                                <Icon name="palette" className="h-3 w-3" />
+                                <span>Cor / Gradiente</span>
+                              </button>
+                            </div>
+
+                            {draftCover && (
+                              <button
+                                type="button"
+                                onClick={handleRemoveCover}
+                                disabled={uploadingCover}
+                                className="flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer ml-auto"
+                                title="Remover capa e restaurar fundo padrão"
+                              >
+                                <Icon name="trash" className="h-3.5 w-3.5" />
+                                <span>Remover</span>
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="text-[11px] text-ink-400 font-mono">
+                            {coverEditTab === "image" ? (
+                              <span>Recomendado: 1920 × 480 px (4:1) · JPG, PNG, WEBP ou GIF animado</span>
+                            ) : (
+                              <span>Escolha uma cor sólida, um gradiente moderno ou personalize via HEX</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Conteúdo da Aba: FOTO */}
+                      {coverEditTab === "image" && (
+                        <div className="pt-2 border-t border-[#1e1e24] flex flex-col gap-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              ref={coverFileInputRef} 
+                              onChange={handleCoverUpload} 
+                            />
+                            <button
+                              type="button"
+                              onClick={() => coverFileInputRef.current?.click()}
+                              disabled={uploadingCover}
+                              className="flex items-center gap-2 rounded-lg bg-signal-400 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-950 hover:bg-signal-300 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+                            >
+                              <Icon name="spark" className="h-3.5 w-3.5" />
+                              <span>{draftCover && !isCoverColor(draftCover) ? "Trocar Imagem / GIF" : "Fazer Upload de Capa"}</span>
+                            </button>
+                            <span className="text-[10.5px] font-mono text-ink-400">
+                              Formatos aceitos: JPG, PNG, WEBP e GIFs animados (até 10 MB)
+                            </span>
+                          </div>
+
+                          {/* Galeria de sugestões / Presets Rápidos */}
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-ink-400 mr-1">Sugestões de Fotos:</span>
+                            {PRESET_COVERS.map((preset) => (
+                              <button
+                                key={preset.id}
+                                type="button"
+                                onClick={() => handleSelectCoverPreset(preset.url)}
+                                className={cn(
+                                  "rounded px-2.5 py-1 text-[10.5px] font-mono border transition-all cursor-pointer",
+                                  draftCover === preset.url
+                                    ? "border-signal-400 bg-signal-400/20 text-signal-400 font-bold shadow-[0_0_8px_rgba(242,179,61,0.2)]"
+                                    : "border-ink-800 bg-ink-900/60 text-bone-400 hover:border-ink-700 hover:text-bone-200"
+                                )}
+                              >
+                                {preset.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Conteúdo da Aba: COR / GRADIENTE */}
+                      {coverEditTab === "color" && (
+                        <div className="pt-2 border-t border-[#1e1e24] flex flex-col gap-3.5">
+                          {/* Cores Sólidas VIP */}
+                          <div>
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-ink-400 block mb-2">
+                              Cores Sólidas VIP:
+                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {PRESET_SOLID_COLORS.map((c) => {
+                                const isSelected = draftCover?.toLowerCase() === c.value.toLowerCase();
+                                return (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => handleSelectCoverColor(c.value)}
+                                    title={c.name}
+                                    className={cn(
+                                      "group relative flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-all cursor-pointer",
+                                      isSelected
+                                        ? "border-signal-400 bg-signal-400/15 shadow-[0_0_10px_rgba(242,179,61,0.25)]"
+                                        : "border-[#232327] bg-[#141417] hover:border-ink-600"
+                                    )}
+                                  >
+                                    <span
+                                      className="h-3.5 w-3.5 rounded-full border border-white/20 shrink-0 shadow-sm"
+                                      style={{ backgroundColor: c.value }}
+                                    />
+                                    <span className={cn(
+                                      "font-mono text-[11px]",
+                                      isSelected ? "text-signal-400 font-bold" : "text-bone-300 group-hover:text-white"
+                                    )}>
+                                      {c.name}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Gradientes Cinematográficos VIP */}
+                          <div>
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-ink-400 block mb-2">
+                              Gradientes Cinematográficos VIP:
+                            </span>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                              {PRESET_GRADIENTS.map((g) => {
+                                const isSelected = draftCover === g.value;
+                                return (
+                                  <button
+                                    key={g.id}
+                                    type="button"
+                                    onClick={() => handleSelectCoverColor(g.value)}
+                                    className={cn(
+                                      "group relative flex flex-col items-center justify-end rounded-lg p-2 text-center transition-all cursor-pointer overflow-hidden border h-16",
+                                      isSelected
+                                        ? "border-signal-400 ring-2 ring-signal-400/50 shadow-[0_0_12px_rgba(242,179,61,0.3)]"
+                                        : "border-[#232327] hover:border-ink-600"
+                                    )}
+                                  >
+                                    <div
+                                      className="absolute inset-0 z-0 transition-transform duration-300 group-hover:scale-110"
+                                      style={{ background: g.value }}
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent z-1" />
+                                    <span className={cn(
+                                      "relative z-2 text-[10px] font-mono font-bold leading-tight drop-shadow",
+                                      isSelected ? "text-signal-400" : "text-bone-100"
+                                    )}>
+                                      {g.name}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Seletor de Cor Personalizada e Tabela RGB VIP */}
+                          <div className="pt-2 border-t border-[#1e1e24]">
+                            <VipRgbColorPicker
+                              value={customHexColor.startsWith("#") ? customHexColor : "#F2B33D"}
+                              onChange={(val) => {
+                                setCustomHexColor(val);
+                                handleSelectCoverColor(val);
+                              }}
+                              label="Tabela RGB & Cor Personalizada da Capa"
+                              palette={PRESET_SOLID_COLORS.map((c) => c.value)}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Estado Bloqueado para Não-VIP */
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
+                      <div className="flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-ink-800/80 border border-ink-700 flex items-center justify-center text-ink-400 shrink-0">
+                          <Icon name="lock" className="h-5 w-5 text-amber-400/80" />
+                        </div>
+                        <div>
+                          <p className="text-[12.5px] text-bone-300 leading-relaxed max-w-xl">
+                            Apenas criadores com assinatura <strong className="text-amber-400 font-semibold">VIP</strong> ativa podem definir capas fotográficas, GIFs animados ou cores de fundo personalizadas no perfil.
+                          </p>
+                          <p className="text-[11px] text-ink-400 mt-1 font-mono">
+                            Opção disponível exclusivamente para contas VIP · Mostre seu estúdio com visual personalizado
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                        <div className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-400 select-none">
+                          <Icon name="lock" className="h-3.5 w-3.5" />
+                          <span>Apenas para VIP</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Editor de Links */}
               <div className="rounded-xl border border-[#232327] bg-[#0c0c0e] p-4">
                 <div className="flex items-center gap-2 mb-3">
@@ -2172,6 +2757,7 @@ export default function PerfilScreen({
               </div>
             </div>
           )}
+        </div>
         </div>
       </Reveal>
 
@@ -3437,7 +4023,10 @@ export default function PerfilScreen({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <Reveal className="w-full max-w-md flex flex-col">
             <Panel className="p-6 border-[#232327] bg-[#0c0c0e] shadow-2xl">
-              <h3 className="mb-5 font-display text-lg font-bold text-white tracking-tight">Ajustar foto de perfil</h3>
+              <h3 className="mb-1 font-display text-lg font-bold text-white tracking-tight">Ajustar foto de perfil</h3>
+              <p className="mb-4 text-xs font-mono text-[#8c8c94]">
+                Medida ideal recomendada: <span className="text-[#F2B33D] font-bold">400 × 400 px</span> (Proporção 1:1 quadrada) · Máx 5 MB
+              </p>
               
               <div className="relative h-64 w-full bg-[#101012] border border-[#232327] rounded-xl overflow-hidden mb-6">
                 <Cropper

@@ -57,11 +57,13 @@ const normalizeSavedItems = (raw: any[]): ProjectSavedItem[] => {
 export function ProjetoDetailScreen({ 
   project, 
   onBack,
+  onDeleteProject,
   onUpdateProject,
   onGo,
 }: { 
   project: Project, 
   onBack: () => void,
+  onDeleteProject?: (id: string) => void,
   onUpdateProject?: (updated: Partial<Project>) => void,
   onGo?: (view: string) => void,
 }) {
@@ -1468,12 +1470,16 @@ export function ProjetoDetailScreen({
               </button>
               <button 
                 onClick={async () => {
-                  if (supabase) {
-                    await supabase.from("studioos_projects").update({ status: "trashed" }).eq("id", project.id);
-                  }
-                  window.dispatchEvent(new Event("studioos:history"));
+                  const idToDelete = project.id;
+                  onDeleteProject?.(idToDelete);
                   setShowDeleteModal(false);
                   onBack();
+
+                  if (supabase) {
+                    await supabase.from("studioos_projects").update({ status: "trashed" }).eq("id", idToDelete);
+                  }
+                  window.dispatchEvent(new Event("studioos:history"));
+                  window.dispatchEvent(new Event("studioos:projects"));
                 }}
                 className="flex-1 rounded-lg bg-red-500/10 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-red-500 uppercase transition-colors hover:bg-red-500 hover:text-white"
               >
@@ -1547,13 +1553,17 @@ export function ProjetoDetailScreen({
               </button>
               <button 
                 onClick={async () => {
-                  if (supabase) {
-                    await supabase.from("studioos_projects").delete().eq("id", project.id);
-                    await supabase.from("studioos_saved_items").delete().filter("metadata->>id", "eq", String(project.id));
-                  }
-                  window.dispatchEvent(new Event("studioos:history"));
+                  const idToDelete = project.id;
+                  onDeleteProject?.(idToDelete);
                   setShowDeleteForeverModal(false);
                   onBack();
+
+                  if (supabase) {
+                    await supabase.from("studioos_projects").delete().eq("id", idToDelete);
+                    await supabase.from("studioos_saved_items").delete().filter("metadata->>id", "eq", String(idToDelete));
+                  }
+                  window.dispatchEvent(new Event("studioos:history"));
+                  window.dispatchEvent(new Event("studioos:projects"));
                 }}
                 className="flex-1 rounded-lg bg-red-600 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-white uppercase transition-colors hover:bg-red-700"
               >

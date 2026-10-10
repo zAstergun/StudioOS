@@ -6,6 +6,7 @@ import { Card, ToolShell } from "../components/ToolShell";
 import { CALIBRATION_QUESTIONS, WIKI, accentSoft } from "../data";
 import { AI_PROVIDERS, AIModelUnavailableError, listAvailableModels, requestAI, type AISettings } from "../ai";
 import type { StudioConfig } from "../history";
+import { VipRgbColorPicker } from "../components/VipRgbColorPicker";
 
 /* ----------------------------------------------------------------- WIKI */
 
@@ -753,27 +754,12 @@ export function Calibracao({
               </div>
 
               <div className="mb-5">
-                <label className="mb-3 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Cor de Identificação
-                </label>
-                <div className="flex gap-2.5">
-                  {CALIB_PALETTE.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setNewProfileColor(c)}
-                      className={cn(
-                        "relative flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200",
-                        newProfileColor === c
-                          ? "scale-110 ring-2 ring-bone-300/60 ring-offset-2 ring-offset-ink-900"
-                          : "hover:scale-110"
-                      )}
-                      style={{ backgroundColor: c }}
-                    >
-                      {newProfileColor === c && <Icon name="check" className="h-3 w-3 text-ink-950" strokeWidth={3} />}
-                    </button>
-                  ))}
-                </div>
+                <VipRgbColorPicker
+                  value={newProfileColor}
+                  onChange={setNewProfileColor}
+                  label="Cor de Identificação"
+                  palette={CALIB_PALETTE}
+                />
               </div>
 
               <div className="mb-6">
@@ -872,27 +858,12 @@ export function Calibracao({
               </div>
 
               <div className="mb-6">
-                <label className="mb-3 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Cor
-                </label>
-                <div className="flex gap-2.5">
-                  {CALIB_PALETTE.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setEditColor(c)}
-                      className={cn(
-                        "relative flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200",
-                        editColor === c
-                          ? "scale-110 ring-2 ring-bone-300/60 ring-offset-2 ring-offset-ink-900"
-                          : "hover:scale-110"
-                      )}
-                      style={{ backgroundColor: c }}
-                    >
-                      {editColor === c && <Icon name="check" className="h-3 w-3 text-ink-950" strokeWidth={3} />}
-                    </button>
-                  ))}
-                </div>
+                <VipRgbColorPicker
+                  value={editColor}
+                  onChange={setEditColor}
+                  label="Cor"
+                  palette={CALIB_PALETTE}
+                />
               </div>
 
               {/* Ações adicionais */}
