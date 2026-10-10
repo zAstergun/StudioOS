@@ -1183,36 +1183,46 @@ export default function PerfilScreen({
 
     if (isEditingProfile) {
       return (
-        <div className={`px-4 py-3 border-b transition-all ${
+        <div className={`px-3.5 sm:px-4 py-2.5 border-b transition-all ${
           isVisible 
             ? 'bg-[#2FD4A0]/10 border-[#2FD4A0]/30 text-[#2FD4A0]' 
             : 'bg-[#18181b]/95 border-[#232327] text-[#8c8c94]'
         }`}>
           <div className="flex flex-col gap-1.5">
-            {/* Linha superior: Status e Botão de Alternância */}
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <Icon name={isVisible ? "eye" : "eyeOff"} className="h-4 w-4 shrink-0" />
-                <span className="font-mono text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+            {/* Linha superior: Status e Toggle Switch Compacto */}
+            <div className="flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Icon name={isVisible ? "eye" : "eyeOff"} className="h-3.5 w-3.5 shrink-0" />
+                <span className="font-mono text-[10.5px] font-bold uppercase tracking-wider truncate">
                   {isVisible ? "Visível no Perfil Público" : "Oculto no Perfil Público"}
                 </span>
               </div>
               <button
                 type="button"
+                role="switch"
+                aria-checked={isVisible}
+                aria-label={isVisible ? "Tornar bloco oculto no perfil público" : "Tornar bloco visível no perfil público"}
+                title={isVisible ? "Visível publicamente (clique para ocultar)" : "Oculto (clique para tornar público)"}
                 onClick={() => setDraftCardVisibility(prev => ({ ...prev, [cardKey]: !prev[cardKey] }))}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-all duration-200 ease-in-out focus:outline-none hover:opacity-90 active:scale-95 ${
                   isVisible
-                    ? 'bg-[#2FD4A0] text-[#0c0c0e] hover:bg-[#2FD4A0]/90 shadow-[0_0_12px_rgba(47,212,160,0.3)]'
-                    : 'bg-[#232327] text-white hover:bg-[#2d2d32]'
+                    ? 'bg-[#2FD4A0] shadow-[0_0_10px_rgba(47,212,160,0.35)]'
+                    : 'bg-[#222226] border border-[#38383e] hover:border-[#4b4b53]'
                 }`}
               >
-                <Icon name={isVisible ? "check" : "close"} className="h-3 w-3 stroke-[3]" />
-                <span>{isVisible ? "Público" : "Oculto"}</span>
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full shadow-sm transition-transform duration-200 ease-in-out ${
+                    isVisible
+                      ? 'translate-x-[16px] bg-[#0c0c0e]'
+                      : 'translate-x-0 bg-[#8c8c94]'
+                  }`}
+                />
               </button>
             </div>
 
             {/* Linha inferior: Identificador do Bloco e Descrição com espaço total */}
-            <div className="flex items-center gap-2 flex-wrap pl-6">
+            <div className="flex items-center gap-2 flex-wrap pl-5">
               <span className="text-[9px] px-1.5 py-0.5 rounded border font-mono opacity-80 uppercase tracking-widest bg-black/40 border-current shrink-0 whitespace-nowrap">
                 {cardLabel}
               </span>
