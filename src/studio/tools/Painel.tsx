@@ -15,6 +15,13 @@ export function Wiki({ onBack, onGo }: { onBack: () => void; onGo: (id: string) 
   const [cat, setCat] = useState("Todos");
   const [open, setOpen] = useState<string | null>("rank");
 
+  useEffect(() => {
+    try {
+      localStorage.setItem("studioos.onboarding.readWiki", "true");
+      window.dispatchEvent(new CustomEvent("studioos:wiki_read"));
+    } catch {}
+  }, []);
+
   const cats = ["Todos", ...Array.from(new Set(WIKI.map((w) => w.cat)))];
   const list = useMemo(
     () =>

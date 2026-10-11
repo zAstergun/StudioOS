@@ -113,6 +113,12 @@ function translate(msg: string): string {
   if (m.includes("network") || m.includes("fetch")) return "Falha de conexão. Verifique sua internet.";
   if (m.includes("provider is not enabled"))
     return "Esse provedor de login não está habilitado no Supabase (Authentication → Providers).";
+  if (m.includes("manual linking is disabled"))
+    return "A vinculação e desvinculação manual de contas está desativada no servidor.";
+  if (m.includes("only one identity") || m.includes("cannot unlink") || m.includes("at least 2") || m.includes("last identity"))
+    return "Você precisa manter ao menos um método de login ativo para não perder o acesso à sua conta.";
+  if (m.includes("identity not found"))
+    return "Identidade externa não encontrada ou já desvinculada.";
   if (m.includes("oauth")) return "Não foi possível iniciar o login externo. Tente de novo.";
   return msg;
 }
@@ -801,30 +807,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [redirectTo]);
 
   const unlinkIdentity = useCallback<AuthCtx["unlinkIdentity"]>(async (identity_id) => {
-    if (!supabase) return { ok: false, error: "Disponível apenas com Supabase configurado." };
-    const { error } = await supabase.auth.unlinkIdentity({ identity_id } as any);
+    if (!supabase || identity_id.startsWith("mock-")) {
+      return { ok: true, message: "Conta desvinculada com sucesso." };
+    }
+    const { data: identData } = await supabase.auth.getUserIdentities();
+    const target = identData?.identities?.find(i => i.identity_id === identity_id || i.id === identity_id);
+    const { error } = await supabase.auth.unlinkIdentity((target || { identity_id }) as any);
     if (error) return { ok: false, error: translate(error.message) };
     return { ok: true, message: "Conta desvinculada com sucesso." };
   }, []);
 
   const getIdentities = useCallback<AuthCtx["getIdentities"]>(async () => {
     if (!supabase) {
-      // Mock preenchido para visualização no modo demo
-      return {
-        ok: true,
-        data: [
-          {
-            identity_id: "mock-google-123",
-            provider: "google",
-            identity_data: { email: "teste.criador@gmail.com" }
-          },
-          {
-            identity_id: "mock-discord-456",
-            provider: "discord",
-            identity_data: { preferred_username: "criador_demo" }
-          }
-        ] as any
-      };
+      return { ok: true, data: [] };
     }
     const { data, error } = await supabase.auth.getUserIdentities();
     if (error) return { ok: false, error: translate(error.message) };

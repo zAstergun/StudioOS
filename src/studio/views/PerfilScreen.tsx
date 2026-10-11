@@ -7,6 +7,7 @@ import { computeProjectStatus } from "./ProjetosScreen";
 import { cn } from "../utils/cn";
 import { VipRgbColorPicker } from "../components/VipRgbColorPicker";
 import { openVipModal } from "../components/VipModal";
+import { NoticeModal, type NoticeType } from "../components/NoticeModal";
 
 const getCroppedImg = async (imageSrc: string, pixelCrop: any): Promise<File | null> => {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -149,6 +150,50 @@ export default function PerfilScreen({
   const [hasLiked, setHasLiked] = useState<boolean>(false);
   const [likingLoading, setLikingLoading] = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+
+  // Modal de Notificação / Alerta customizado
+  const [notice, setNotice] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: NoticeType;
+    actionText?: string;
+    cancelText?: string;
+    onAction?: () => void;
+    customIcon?: string;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    type: "info",
+  });
+
+  const showNotice = (
+    title: string,
+    message: string,
+    type: NoticeType = "info",
+    options?: {
+      actionText?: string;
+      cancelText?: string;
+      onAction?: () => void;
+      customIcon?: string;
+    }
+  ) => {
+    setNotice({
+      isOpen: true,
+      title,
+      message,
+      type,
+      actionText: options?.actionText || (options?.cancelText ? "Confirmar" : "Entendido"),
+      cancelText: options?.cancelText,
+      onAction: options?.onAction,
+      customIcon: options?.customIcon,
+    });
+  };
+
+  const closeNotice = () => {
+    setNotice((prev) => ({ ...prev, isOpen: false }));
+  };
 
   const [tab, setTab] = useState<"geral" | "seguranca" | "preferencias" | "atividade">("geral");
   const [name, setName] = useState(user?.name || "");
@@ -321,13 +366,21 @@ export default function PerfilScreen({
     }
 
     if (user.is_temporary) {
-      alert("Contas de teste não podem curtir perfis. Crie uma conta definitiva para interagir.");
+      showNotice(
+        "Conta de Teste",
+        "Contas de teste não podem curtir perfis. Crie uma conta definitiva para interagir no StudioOS.",
+        "warning"
+      );
       return;
     }
 
     // 2. Não pode curtir o próprio perfil
     if (user.id === currentProfileId) {
-      alert("Você não pode curtir seu próprio perfil.");
+      showNotice(
+        "Ação Não Permitida",
+        "Você não pode curtir o seu próprio perfil.",
+        "info"
+      );
       return;
     }
 
@@ -358,7 +411,11 @@ export default function PerfilScreen({
         // Se a API recusar (ex: sem conta ou erro), reverte o estado otimista
         setHasLiked(!nextLiked);
         setLikesCount(likesCount);
-        alert(res.error.message || "Não foi possível registrar a curtida.");
+        showNotice(
+          "Não Foi Possível Curtir",
+          res.error.message || "Não foi possível registrar a curtida no servidor.",
+          "error"
+        );
       }
     } catch (err) {
       console.error("Erro ao curtir perfil:", err);
@@ -457,12 +514,23 @@ export default function PerfilScreen({
   const handlePostComment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!user || user.provider === "demo") {
-      alert("Apenas usuários autenticados com conta podem comentar nos perfis do StudioOS.");
-      onGo?.("login");
+      showNotice(
+        "Conta Necessária",
+        "Apenas usuários autenticados com conta podem comentar nos perfis do StudioOS.",
+        "warning",
+        {
+          actionText: "Fazer Login",
+          onAction: () => onGo?.("login"),
+        }
+      );
       return;
     }
     if (user.is_temporary) {
-      alert("Contas de teste não podem comentar em perfis. Crie uma conta definitiva para interagir.");
+      showNotice(
+        "Conta de Teste",
+        "Contas de teste não podem comentar em perfis. Crie uma conta definitiva para interagir.",
+        "warning"
+      );
       return;
     }
     if (!currentProfileId || !supabase) return;
@@ -470,7 +538,11 @@ export default function PerfilScreen({
     const trimmed = commentText.trim();
     if (!trimmed) return;
     if (trimmed.length > 500) {
-      alert("O comentário deve ter no máximo 500 caracteres.");
+      showNotice(
+        "Texto Muito Longo",
+        "O comentário deve ter no máximo 500 caracteres.",
+        "warning"
+      );
       return;
     }
 
@@ -515,13 +587,21 @@ export default function PerfilScreen({
         .eq("id", commentToDelete.id);
 
       if (error) {
-        alert(error.message || "Não foi possível excluir o comentário.");
+        showNotice(
+          "Não Foi Possível Excluir",
+          error.message || "Não foi possível excluir o comentário.",
+          "error"
+        );
       } else {
         setComments((prev) => prev.filter((c) => c.id !== commentToDelete.id));
         setCommentToDelete(null);
       }
     } catch {
-      alert("Erro ao excluir comentário.");
+      showNotice(
+        "Erro Inesperado",
+        "Erro inesperado ao tentar excluir comentário.",
+        "error"
+      );
     } finally {
       setIsDeletingComment(false);
       setDeletingCommentId(null);
@@ -587,7 +667,9 @@ export default function PerfilScreen({
   const [readWiki, setReadWiki] = useState(false);
   const [hasProject, setHasProject] = useState(false);
   const [hasPrefs, setHasPrefs] = useState(false);
+  const [aiTested, setAiTested] = useState(false);
   const [hideOnboarding, setHideOnboarding] = useState(false);
+  const [onboardingCollapsed, setOnboardingCollapsed] = useState(false);
 
   const [ongoingProjects, setOngoingProjects] = useState<any[]>([]);
   const [completedProjectsCount, setCompletedProjectsCount] = useState<number>(0);
@@ -867,9 +949,22 @@ export default function PerfilScreen({
 
   useEffect(() => {
     if (user) {
-      setReadWiki(localStorage.getItem(`studioos.onboarding.readWiki.${user.id}`) === "true");
-      setHasProject(localStorage.getItem(`studioos.onboarding.hasProject.${user.id}`) === "true");
-      setHasPrefs(localStorage.getItem(`studioos.onboarding.hasPrefs.${user.id}`) === "true");
+      setReadWiki(
+        localStorage.getItem(`studioos.onboarding.readWiki.${user.id}`) === "true" ||
+        localStorage.getItem("studioos.onboarding.readWiki") === "true"
+      );
+      setHasProject(
+        localStorage.getItem(`studioos.onboarding.hasProject.${user.id}`) === "true" ||
+        localStorage.getItem("studioos.onboarding.hasProject") === "true"
+      );
+      setHasPrefs(
+        localStorage.getItem(`studioos.onboarding.hasPrefs.${user.id}`) === "true" ||
+        localStorage.getItem("studioos.onboarding.hasPrefs") === "true"
+      );
+      setAiTested(
+        localStorage.getItem(`studioos.onboarding.aiTested.${user.id}`) === "true" ||
+        localStorage.getItem("studioos.onboarding.aiTested") === "true"
+      );
       setHideOnboarding(localStorage.getItem(`studioos.onboarding.hidden.${user.id}`) === "true");
 
       const savedTitle = localStorage.getItem(`studioos.showcaseTitle.${user.id}`);
@@ -879,6 +974,20 @@ export default function PerfilScreen({
       if (savedProject) setJokerProject(savedProject);
     }
   }, [user]);
+
+  useEffect(() => {
+    const handleWikiRead = () => setReadWiki(true);
+    const handleProjectCreated = () => setHasProject(true);
+    const handleAiTested = () => setAiTested(true);
+    window.addEventListener("studioos:wiki_read", handleWikiRead);
+    window.addEventListener("studioos:project_created", handleProjectCreated);
+    window.addEventListener("studioos:history", handleAiTested);
+    return () => {
+      window.removeEventListener("studioos:wiki_read", handleWikiRead);
+      window.removeEventListener("studioos:project_created", handleProjectCreated);
+      window.removeEventListener("studioos:history", handleAiTested);
+    };
+  }, []);
 
   useEffect(() => {
     if (user && mounted) {
@@ -1575,8 +1684,15 @@ export default function PerfilScreen({
     e.stopPropagation();
     if (isEditingProfile) return;
     if (!channel) {
-      alert("Você ainda está com o @usuario padrão visual. Defina seu @ de usuário e salve seu perfil para ativar sua página pública!");
-      startEditingProfile("channel");
+      showNotice(
+        "Defina seu @ de Usuário",
+        "Você ainda está com o @usuario padrão visual. Defina seu @ de usuário e salve seu perfil para ativar sua página pública!",
+        "warning",
+        {
+          actionText: "Editar Perfil",
+          onAction: () => startEditingProfile("channel"),
+        }
+      );
       return;
     }
     const cleanHandle = channel.replace(/^@/, '');
@@ -1600,8 +1716,15 @@ export default function PerfilScreen({
   const handleCopyProfileLink = async () => {
     const handleToCopy = isViewingOther ? cleanViewedHandle : (channel ? channel.replace(/^@/, '') : "");
     if (!handleToCopy) {
-      alert("Você ainda está com o @usuario padrão visual. Defina seu @ de usuário e salve seu perfil para ativar e copiar seu link!");
-      startEditingProfile("channel");
+      showNotice(
+        "Defina seu @ de Usuário",
+        "Você ainda está com o @usuario padrão visual. Defina seu @ de usuário e salve seu perfil para ativar e copiar seu link!",
+        "warning",
+        {
+          actionText: "Editar Perfil",
+          onAction: () => startEditingProfile("channel"),
+        }
+      );
       return;
     }
     const cleanHandle = handleToCopy.replace(/^@/, '');
@@ -1621,7 +1744,11 @@ export default function PerfilScreen({
       setTimeout(() => setCopiedLink(false), 2500);
     } catch (err) {
       console.error("Erro ao copiar link:", err);
-      alert(`Seu link é: ${profileUrl}`);
+      showNotice(
+        "Link do Perfil",
+        `Não foi possível copiar automaticamente para a área de transferência. Seu link é: ${profileUrl}`,
+        "info"
+      );
     }
   };
 
@@ -1647,11 +1774,11 @@ export default function PerfilScreen({
           if (res.error?.includes("VIP")) {
             openVipModal();
           } else {
-            alert(res.error || "Erro ao fazer upload da capa.");
+            showNotice("Erro na Capa", res.error || "Erro ao fazer upload da capa.", "error");
           }
         }
       } catch (err: any) {
-        alert("Erro ao enviar a capa: " + (err?.message || "falha no upload"));
+        showNotice("Falha no Upload", "Erro ao enviar a capa: " + (err?.message || "falha no upload"), "error");
       } finally {
         setUploadingCover(false);
         if (coverFileInputRef.current) coverFileInputRef.current.value = "";
@@ -1692,12 +1819,21 @@ export default function PerfilScreen({
     const currentClean = (channel || "").trim().replace(/^@/, '').toLowerCase();
 
     if (currentClean && cleanHandle !== currentClean && !user?.email_confirmed_at) {
-      alert("Você só pode alterar seu nome de usuário (@) após verificar o seu e-mail. Verifique a caixa de entrada da sua conta para liberar a alteração.");
+      showNotice(
+        "E-mail Não Verificado",
+        "Você só pode alterar seu nome de usuário (@) após verificar o seu e-mail. Verifique a caixa de entrada da sua conta para liberar a alteração.",
+        "warning",
+        { customIcon: "mail" }
+      );
       return;
     }
     
     if (cleanHandle && !/^[a-z0-9_.-]+$/.test(cleanHandle)) {
-      alert("O nome de usuário (@) só pode conter letras minúsculas, números, sublinhados (_), hífens (-) e pontos (.).");
+      showNotice(
+        "Formato de @ Inválido",
+        "O nome de usuário (@) só pode conter letras minúsculas, números, sublinhados (_), hífens (-) e pontos (.).",
+        "warning"
+      );
       return;
     }
 
@@ -1723,7 +1859,7 @@ export default function PerfilScreen({
     setSaving(false);
 
     if (!res.ok) {
-      alert(res.error);
+      showNotice("Erro ao Salvar Perfil", res.error, "error");
       return;
     }
 
@@ -1750,28 +1886,59 @@ export default function PerfilScreen({
   };
 
   const handleSaveEmail = async () => {
-    setSaving(true);
-    if (email !== user?.email) {
-      const res = await updateEmail(email);
-      if (!res.ok) alert(res.error);
-      else alert(res.message);
+    const trimmed = email.trim();
+    if (!trimmed) {
+      showNotice("E-mail Obrigatório", "Por favor, digite um endereço de e-mail válido.", "warning");
+      return;
     }
+    if (trimmed === user?.email) {
+      showNotice("E-mail Inalterado", "O endereço digitado já é o seu e-mail cadastrado atualmente.", "info");
+      return;
+    }
+    setSaving(true);
+    const res = await updateEmail(trimmed);
     setSaving(false);
+    if (!res.ok) {
+      showNotice("Erro na Atualização", res.error, "error");
+    } else {
+      showNotice(
+        "Link de Confirmação Enviado",
+        res.message || "Enviamos um link de confirmação para o novo e-mail. Verifique sua caixa de entrada para concluir a alteração.",
+        "info",
+        {
+          actionText: "Entendido",
+          customIcon: "mail",
+        }
+      );
+    }
   };
 
   const handleSavePassword = async () => {
-    if (!newPass || newPass !== newPassConf) return alert("As senhas não coincidem ou estão vazias.");
-    if (newPass.length < 8) return alert("A nova senha deve ter no mínimo 8 caracteres.");
+    if (!pass) {
+      showNotice("Senha Atual Obrigatória", "Por favor, digite sua senha atual para continuar.", "warning");
+      return;
+    }
+    if (!newPass || newPass !== newPassConf) {
+      showNotice("Senhas Divergentes", "As novas senhas digitadas não coincidem ou estão vazias. Por favor, confira e tente novamente.", "warning");
+      return;
+    }
+    if (newPass.length < 8) {
+      showNotice("Senha Muito Curta", "A nova senha deve ter no mínimo 8 caracteres para sua segurança.", "warning");
+      return;
+    }
     setPassSaving(true);
     const res = await updatePassword(newPass);
-    if (!res.ok) alert(res.error);
-    else {
-      alert("Senha atualizada com sucesso!");
+    setPassSaving(false);
+    if (!res.ok) {
+      showNotice("Erro ao Atualizar Senha", res.error, "error");
+    } else {
+      showNotice("Senha Atualizada", "Sua senha foi alterada com sucesso!", "success", {
+        customIcon: "lock",
+      });
       setPass("");
       setNewPass("");
       setNewPassConf("");
     }
-    setPassSaving(false);
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1791,10 +1958,10 @@ export default function PerfilScreen({
         try {
           const res = await updateAvatar(file);
           if (!res.ok) {
-            alert(res.error);
+            showNotice("Erro no Avatar", res.error, "error");
           }
         } catch (err: any) {
-          alert("Erro ao enviar GIF: " + (err?.message || "falha no upload"));
+          showNotice("Falha no Upload", "Erro ao enviar GIF: " + (err?.message || "falha no upload"), "error");
         } finally {
           setUploadingAvatar(false);
           if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1816,11 +1983,11 @@ export default function PerfilScreen({
       const croppedFile = await getCroppedImg(cropImage, croppedAreaPixels);
       if (croppedFile) {
         const res = await updateAvatar(croppedFile);
-        if (!res.ok) alert(res.error);
+        if (!res.ok) showNotice("Erro ao Salvar Avatar", res.error, "error");
       }
     } catch (e) {
       console.error(e);
-      alert("Erro ao cortar a imagem");
+      showNotice("Erro no Recorte", "Não foi possível cortar e salvar a foto de perfil.", "error");
     } finally {
       setUploadingAvatar(false);
       setCropImage(null);
@@ -1837,7 +2004,7 @@ export default function PerfilScreen({
     setIsDeleting(true);
     const res = await deleteAccount();
     setIsDeleting(false);
-    if (!res.ok) alert(res.error);
+    if (!res.ok) showNotice("Erro ao Excluir Conta", res.error, "error");
     else setShowDeleteModal(false);
   };
 
@@ -1846,36 +2013,45 @@ export default function PerfilScreen({
       setName(user.name || "");
       setChannel(user.channel || "");
       setEmail(user.email || "");
-      // Forçando o mock para você visualizar o design:
-      setIdentities([
-        {
-          identity_id: "mock-google-123",
-          provider: "google",
-          identity_data: { email: "teste.criador@gmail.com" }
-        },
-        {
-          identity_id: "mock-discord-456",
-          provider: "discord",
-          identity_data: { preferred_username: "criador_demo" }
-        }
-      ]);
+      getIdentities().then(r => {
+        if (r.ok && r.data) setIdentities(r.data);
+      });
     }
-  }, [user]);
+  }, [user, getIdentities]);
 
   const handleLink = async (provider: "google" | "discord") => {
     const res = await linkIdentity(provider);
-    if (!res.ok) alert(res.error);
+    if (!res.ok) {
+      showNotice(
+        `Erro ao Vincular ${provider === "google" ? "Google" : "Discord"}`,
+        res.error,
+        "error"
+      );
+    }
   };
 
-  const handleUnlink = async (identity_id: string) => {
-    const res = await unlinkIdentity(identity_id);
-    if (!res.ok) alert(res.error);
-    else {
-      alert(res.message);
-      getIdentities().then(r => {
-        if (r.ok) setIdentities(r.data);
-      });
-    }
+  const handleUnlink = async (identity_id: string, providerName?: string) => {
+    showNotice(
+      "Desvincular Conta",
+      `Tem certeza de que deseja desvincular a sua conta ${providerName || "externa"}? Você poderá reconectá-la a qualquer momento.`,
+      "warning",
+      {
+        actionText: "Desvincular",
+        cancelText: "Cancelar",
+        onAction: async () => {
+          const res = await unlinkIdentity(identity_id);
+          if (!res.ok) {
+            showNotice("Erro ao Desvincular", res.error, "error");
+          } else {
+            showNotice("Conta Desvinculada", res.message || "A conta foi desvinculada com sucesso.", "success");
+            setIdentities(prev => prev.filter(i => (i.identity_id || i.id) !== identity_id));
+            getIdentities().then(r => {
+              if (r.ok && r.data) setIdentities(r.data);
+            });
+          }
+        }
+      }
+    );
   };
 
   const tabs = isPublicView
@@ -1897,18 +2073,117 @@ export default function PerfilScreen({
     }
   };
 
+  const activeStatsObj = isViewingOther ? (targetProfile?.stats || {}) : userStats;
+
+  const isProfileDone = Boolean(name && channel && (user?.avatarUrl || targetProfile?.avatar_url || (bio && bio !== DEFAULT_BIO)));
+  const isWikiDone = Boolean(readWiki);
+  const isAiDone = Boolean(
+    aiTested ||
+    metrics.totalRuns > 0 ||
+    metrics.ideasCount > 0 ||
+    (metrics.toolsList && metrics.toolsList.length > 0) ||
+    Number(activeStatsObj['total_runs']) > 0 ||
+    Number(activeStatsObj['ideias_ranqueadas']) > 0
+  );
+  const isProjectDone = Boolean(
+    hasProject ||
+    ongoingProjects.length > 0 ||
+    videoProjects.length > 0 ||
+    metrics.projectsCount > 0 ||
+    metrics.completedProjectsCount > 0 ||
+    Number(activeStatsObj['projetos']) > 0
+  );
+  const isDiscordDone = Boolean(
+    identities.some(i => i.provider === "discord") ||
+    (displayedLinks.discord && displayedLinks.discord.trim() !== "discord.gg/aster" && displayedLinks.discord.trim() !== "")
+  );
+  const isPrefsDone = Boolean(
+    hasPrefs ||
+    Object.values(cardVisibility).some(v => v === false) ||
+    (displayedLinks.youtube && displayedLinks.youtube !== "youtube.com/@aster")
+  );
+
   const onboardingItems = [
-    { label: "Configurar seu perfil", done: !!(name && channel && user?.avatarUrl), action: () => startEditingProfile() },
-    { label: "Ler a Wiki do estúdio", done: readWiki, action: () => { localStorage.setItem("studioos.onboarding.readWiki", "true"); setReadWiki(true); if (onGo) onGo("wiki"); } },
-    { label: "Conectar conta do Discord", done: identities.some(i => i.provider === "discord"), action: () => scrollTo("panel-sso", "seguranca") },
-    { label: "Adicionar seu primeiro projeto", done: hasProject, action: () => { localStorage.setItem("studioos.onboarding.hasProject", "true"); setHasProject(true); alert("Ainda não implementado: ir para Projetos"); } },
-    { label: "Personalizar suas preferências", done: hasPrefs, action: () => setTab("preferencias") },
+    {
+      id: "profile",
+      label: "Configurar seu perfil",
+      desc: "Defina seu nome, @canal oficial e biografia do estúdio.",
+      tag: "Perfil",
+      icon: "user",
+      done: isProfileDone,
+      action: () => startEditingProfile(),
+    },
+    {
+      id: "wiki",
+      label: "Ler a Wiki do estúdio",
+      desc: "Conheça as diretrizes, boas práticas e funcionamento de cada ferramenta.",
+      tag: "Guia",
+      icon: "book",
+      done: isWikiDone,
+      action: () => {
+        setReadWiki(true);
+        if (user?.id) localStorage.setItem(`studioos.onboarding.readWiki.${user.id}`, "true");
+        localStorage.setItem("studioos.onboarding.readWiki", "true");
+        window.dispatchEvent(new CustomEvent("studioos:wiki_read"));
+        if (onGo) onGo("wiki");
+      },
+    },
+    {
+      id: "ai_tool",
+      label: "Testar uma ferramenta de IA",
+      desc: "Ranqueie ideias, gere títulos ou crie roteiros no laboratório de criação.",
+      tag: "IA",
+      icon: "sparkles",
+      done: isAiDone,
+      action: () => {
+        setAiTested(true);
+        if (user?.id) localStorage.setItem(`studioos.onboarding.aiTested.${user.id}`, "true");
+        localStorage.setItem("studioos.onboarding.aiTested", "true");
+        if (onGo) onGo("rank");
+      },
+    },
+    {
+      id: "project",
+      label: "Adicionar seu primeiro projeto",
+      desc: "Inicie uma produção na esteira Kanban de projetos do estúdio.",
+      tag: "Produção",
+      icon: "kanban",
+      done: isProjectDone,
+      action: () => {
+        setHasProject(true);
+        if (user?.id) localStorage.setItem(`studioos.onboarding.hasProject.${user.id}`, "true");
+        localStorage.setItem("studioos.onboarding.hasProject", "true");
+        if (onGo) {
+          onGo("projetos");
+        } else {
+          scrollTo("panel-projects", "geral");
+        }
+      },
+    },
+    {
+      id: "discord",
+      label: "Conectar conta do Discord",
+      desc: "Vincule para login unificado e integração com a comunidade do estúdio.",
+      tag: "Conexão",
+      icon: "discord",
+      done: isDiscordDone,
+      action: () => scrollTo("panel-sso", "seguranca"),
+    },
+    {
+      id: "preferences",
+      label: "Personalizar suas preferências",
+      desc: "Ajuste notificações, idioma ou a visibilidade dos blocos do perfil.",
+      tag: "Ajustes",
+      icon: "dial",
+      done: isPrefsDone,
+      action: () => setTab("preferencias"),
+    },
   ];
 
   const completedCount = onboardingItems.filter(i => i.done).length;
-  const progressPercent = Math.round((completedCount / 5) * 100);
-  const strokeDashoffset = 238.7 - (238.7 * (completedCount / 5));
-  const remainingItems = 5 - completedCount;
+  const progressPercent = Math.round((completedCount / onboardingItems.length) * 100);
+  const strokeDashoffset = 238.7 - (238.7 * (completedCount / onboardingItems.length));
+  const remainingItems = onboardingItems.length - completedCount;
 
   const renderCardVisibilityBanner = (cardKey: "stats" | "projects" | "video" | "achievements" | "comments", cardLabel: string) => {
     if (isViewingOther) return null;
@@ -1982,15 +2257,15 @@ export default function PerfilScreen({
     return null;
   };
 
-  const activeStatsObj = isViewingOther ? (targetProfile?.stats || {}) : userStats;
 
   const achievements = [
+    // --- Conquistas Clássicas e Marcos Iniciais (13 existentes) ---
     { id: "community_liked", icon: "heart", label: "Estúdio Reconhecido", desc: "Recebeu curtidas da comunidade do StudioOS.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: likesCount >= 1 },
     { id: "seq21", icon: "spark", label: "Sequência de 21 dias", desc: "Acessou o painel por 21 dias seguidos.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: metrics.streak >= 21 },
     { id: "ideias200", icon: "target", label: "200 ideias ranqueadas", desc: "Mais de 200 ideias processadas no painel.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: metrics.ideasCount >= 200 },
     { id: "top4", icon: "star", label: "Top 4% do canal", desc: "Seu desempenho superou 96% dos criadores.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(activeStatsObj['top4']) === 1 },
     { id: "verified", icon: "check", label: "Conta verificada", desc: "Identidade confirmada com sucesso.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: isViewingOther ? Number(activeStatsObj['verified']) === 1 : (!!user?.email_confirmed_at || Number(activeStatsObj['verified']) === 1) },
-    { id: "onboarding", icon: "layers", label: "Primeiros Passos", desc: "Completou todas as tarefas de onboarding.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: !isViewingOther && completedCount === onboardingItems.length },
+    { id: "onboarding", icon: "layers", label: "Primeiros Passos", desc: "Completou todas as tarefas de onboarding.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: isViewingOther ? Number(activeStatsObj['onboarding']) === 1 : (completedCount === onboardingItems.length || Number(activeStatsObj['onboarding']) === 1) },
     { id: "viral", icon: "bolt", label: "Post Viral", desc: "Atingiu 100k visualizações em um único post.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: Number(activeStatsObj['viral']) === 1 },
     { id: "thumb", icon: "frame", label: "Mestre das Thumbnails", desc: "Aprovou 50 thumbnails no painel.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(activeStatsObj['thumb_approved']) >= 50 },
     { id: "roteiro", icon: "book", label: "Roteirista Nato", desc: "Criou seu primeiro roteiro completo.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: metrics.toolsList.some((t: any) => t.id && t.id.includes("roteiro")) || Number(activeStatsObj['producoes']) >= 1 },
@@ -1998,22 +2273,70 @@ export default function PerfilScreen({
     { id: "collec", icon: "stack", label: "Colecionador", desc: "Salvou 500 referências no banco de ideias.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: metrics.ideasCount >= 500 },
     { id: "eng", icon: "eye", label: "Atenção Total", desc: "Manteve 60% de retenção no YouTube.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(activeStatsObj['high_retention']) === 1 },
     { id: "vet", icon: "clock", label: "Veterano", desc: "Completou 1 ano de estúdio.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: Number(activeStatsObj['veteran']) === 1 },
+
+    // --- Roteirização, Hooks, Títulos & Ferramentas IA (+8) ---
+    { id: "titulos_pro", icon: "type", label: "Mestre dos Títulos", desc: "Gerou mais de 50 variações de títulos com alto CTR no laboratório.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: metrics.toolsList.some((t: any) => t.id?.includes("titulo") && (t.runs || t.count) >= 50) || Number(activeStatsObj['titulos_gerados']) >= 50 || metrics.totalRuns >= 50 },
+    { id: "hook_master", icon: "anchor", label: "Gancho Imbatível", desc: "Estruturou ganchos magnéticos para prender a atenção nos primeiros 3 segundos.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: metrics.toolsList.some((t: any) => t.id?.includes("hook")) || Number(activeStatsObj['hooks_criados']) >= 1 },
+    { id: "humanizador_ninja", icon: "sparkles", label: "Voz Autêntica", desc: "Humanizou textos com cadência e naturalidade no Humanizador IA.", tone: "text-[#A855F7]", bg: "bg-[#A855F7]/10", hex: "#A855F7", unlocked: metrics.toolsList.some((t: any) => t.id?.includes("humaniza")) || Number(activeStatsObj['humanizador_runs']) >= 1 },
+    { id: "receita_viral", icon: "receipt", label: "Engenharia Reversa", desc: "Desconstruiu a anatomia de um formato de sucesso na Receita Viral.", tone: "text-[#EC4899]", bg: "bg-[#EC4899]/10", hex: "#EC4899", unlocked: metrics.toolsList.some((t: any) => t.id?.includes("receita")) || Number(activeStatsObj['receitas_virais']) >= 1 },
+    { id: "score_post", icon: "gauge", label: "Auditoria Implacável", desc: "Alcançou nota máxima de potencial na análise do Score de Post.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: Boolean(metrics.avgRatingNum && metrics.avgRatingNum >= 4.5) || Number(activeStatsObj['score_max']) >= 9 },
+    { id: "mentor_copilot", icon: "bot", label: "Consultoria Estratégica", desc: "Refinou linha editorial e roteiro com orientações do Mentor IA.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: metrics.toolsList.some((t: any) => t.id?.includes("mentor")) || Number(activeStatsObj['mentor_consultas']) >= 1 },
+    { id: "lab_criativo", icon: "flask", label: "Cientista de Conteúdo", desc: "Executou mais de 100 testes de IA no arsenal de ferramentas do estúdio.", tone: "text-[#8B5CF6]", bg: "bg-[#8B5CF6]/10", hex: "#8B5CF6", unlocked: metrics.totalRuns >= 100 },
+    { id: "shorts_sniper", icon: "scissors", label: "Especialista em Cortes", desc: "Criou e adaptou roteiros dedicados para Shorts e formatos dinâmicos.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: Number(activeStatsObj['shorts_count']) >= 5 || metrics.toolsList.some((t: any) => t.id?.includes("short")) },
+
+    // --- Miniaturas, Visual & Vitrine (+3) ---
+    { id: "ab_champion", icon: "image", label: "Teste A/B Vencedor", desc: "Validou diferentes miniaturas e selecionou a de maior taxa de cliques projetada.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: Number(activeStatsObj['thumb_ab_tests']) >= 1 || Number(activeStatsObj['thumb_approved']) >= 10 },
+    { id: "heatmap_vision", icon: "search", label: "Visão de Raio-X", desc: "Mapeou o calor visual e os pontos focais da thumbnail pelo visualizador.", tone: "text-[#0284C7]", bg: "bg-[#0284C7]/10", hex: "#0284C7", unlocked: Number(activeStatsObj['heatmap_analyzed']) >= 1 || metrics.toolsList.some((t: any) => t.id?.includes("thumb")) },
+    { id: "showcase_video", icon: "monitor", label: "Vitrine do Estúdio", desc: "Fixou uma produção audiovisual autoral no destaque do seu perfil.", tone: "text-[#EC4899]", bg: "bg-[#EC4899]/10", hex: "#EC4899", unlocked: Boolean(isViewingOther ? targetProfile?.featured_video?.id : jokerProject) },
+
+    // --- Projetos, Kanban & Produção (+6) ---
+    { id: "first_project", icon: "play", label: "Primeiro Frame", desc: "Iniciou seu primeiro projeto oficial no painel de produções.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: metrics.projectsCount >= 1 },
+    { id: "kanban_flow", icon: "kanban", label: "Pipeline Ativo", desc: "Avançou projetos através de todas as etapas do fluxo Kanban.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: metrics.projectsCount >= 3 },
+    { id: "project_closer", icon: "send", label: "Missão Cumprida", desc: "Completou e publicou 10 projetos com fluxo completo no estúdio.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: metrics.completedProjectsCount >= 10 },
+    { id: "project_titan", icon: "flag", label: "Máquina de Conteúdo", desc: "Entregou mais de 25 produções finalizadas no StudioOS.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: metrics.completedProjectsCount >= 25 },
+    { id: "checklist_perfection", icon: "listCheck", label: "Rigor Editorial", desc: "Concluiu 100% dos passos de checklist e pós-produção em um projeto.", tone: "text-[#0284C7]", bg: "bg-[#0284C7]/10", hex: "#0284C7", unlocked: Number(activeStatsObj['checklists_done']) >= 1 || metrics.completedProjectsCount >= 1 },
+    { id: "briefing_master", icon: "fileText", label: "Roteiro Blindado", desc: "Redigiu anotações técnicas, falas e referências completas para gravação.", tone: "text-[#8B5CF6]", bg: "bg-[#8B5CF6]/10", hex: "#8B5CF6", unlocked: metrics.toolsList.some((t: any) => t.id?.includes("roteiro")) || metrics.completedProjectsCount >= 2 },
+
+    // --- Banco de Ideias, Repertório & Organização (+5) ---
+    { id: "ideia_iniciante", icon: "bulb", label: "Faísca Criativa", desc: "Registrou suas primeiras 10 ideias de conteúdo no banco de pautas.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: metrics.ideasCount >= 10 },
+    { id: "ideia_centena", icon: "trendingUp", label: "Cofre de Ideias", desc: "Mapeou e organizou mais de 100 ideias qualificadas no sistema.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: metrics.ideasCount >= 100 },
+    { id: "bookmark_curator", icon: "bookmark", label: "Curador Afiado", desc: "Guardou 20 ou mais referências inspiradoras na sua pasta de Salvos.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(activeStatsObj['saved_refs']) >= 20 || metrics.ideasCount >= 20 },
+    { id: "audio_hunter", icon: "sound", label: "Acervo Sonoro", desc: "Catalogou referências de sonoplastia e trilhas de áudio no estúdio.", tone: "text-[#EC4899]", bg: "bg-[#EC4899]/10", hex: "#EC4899", unlocked: Number(activeStatsObj['audio_refs']) >= 1 || metrics.ideasCount >= 15 },
+    { id: "organizer", icon: "folder", label: "Estrutura Perfeita", desc: "Segmentou suas ideias e pautas com categorias e tags organizadas.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: metrics.projectsCount >= 5 || metrics.ideasCount >= 30 },
+
+    // --- Ranking & Comunidade (+6) ---
+    { id: "top_rank_1", icon: "trophy", label: "Lenda do StudioOS", desc: "Alcançou o 1º lugar absoluto no Ranking Global de Criadores.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: userRank === 1 || Number(activeStatsObj['top1']) === 1 },
+    { id: "top_rank_podium", icon: "medal", label: "Pódio de Elite", desc: "Conquistou uma posição no Top 3 do ranking de criadores.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: (userRank !== null && userRank <= 3) || Number(activeStatsObj['top3']) === 1 },
+    { id: "top_rank_10", icon: "award", label: "Mural da Fama", desc: "Entrou no Top 10 criadores mais produtivos da plataforma.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: (userRank !== null && userRank <= 10) || Number(activeStatsObj['top10']) === 1 },
+    { id: "community_popular", icon: "flame", label: "Estúdio em Alta", desc: "Acumulou 10 curtidas recebidas da comunidade no seu perfil.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: likesCount >= 10 },
+    { id: "community_superstar", icon: "zap", label: "Estúdio Superstar", desc: "Ultrapassou a marca de 50 curtidas de apoio no StudioOS.", tone: "text-[#A855F7]", bg: "bg-[#A855F7]/10", hex: "#A855F7", unlocked: likesCount >= 50 },
+    { id: "community_voice", icon: "message", label: "Voz da Comunidade", desc: "Interagiu e deixou mensagens no mural público de outros estúdios.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Number(activeStatsObj['comments_left']) >= 1 || likesCount >= 2 },
+
+    // --- Perfil, VIP & Conectividade (+6) ---
+    { id: "vip_subscriber", icon: "crown", label: "Membro Lendário", desc: "Ativou o plano StudioOS VIP com recursos e personalizações liberadas.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: Boolean(isProfileVip) },
+    { id: "custom_identity", icon: "palette", label: "Estética Própria", desc: "Personalizou as cores temáticas e a identidade visual do estúdio.", tone: "text-[#EC4899]", bg: "bg-[#EC4899]/10", hex: "#EC4899", unlocked: Boolean(isProfileVip) || Boolean(displayedBio && displayedBio.length > 20) },
+    { id: "connected_ecosystem", icon: "link", label: "Ecossistema Conectado", desc: "Vinculou links das suas redes sociais principais ao seu perfil.", tone: "text-[#6E93F5]", bg: "bg-[#6E93F5]/10", hex: "#6E93F5", unlocked: Boolean((displayedLinks.youtube || displayedLinks.website) && (displayedLinks.discord || displayedLinks.instagram || displayedLinks.tiktok)) },
+    { id: "youtube_linked", icon: "youtube", label: "Canal Conectado", desc: "Configurou o canal do YouTube no perfil para sincronizar produções.", tone: "text-[#F2604C]", bg: "bg-[#F2604C]/10", hex: "#F2604C", unlocked: Boolean(displayedLinks.youtube || (channel && channel.length > 2)) },
+    { id: "discord_linked", icon: "discord", label: "Membro da Guilda", desc: "Integrou sua conta Discord ao sistema para notificações e comunidade.", tone: "text-[#5865F2]", bg: "bg-[#5865F2]/10", hex: "#5865F2", unlocked: identities.some(i => i.provider === "discord") || Boolean(displayedLinks.discord) },
+    { id: "global_reach", icon: "globe", label: "Presença Global", desc: "Definiu seu site ou portfólio oficial com visualização pública ativa.", tone: "text-[#0284C7]", bg: "bg-[#0284C7]/10", hex: "#0284C7", unlocked: Boolean(displayedLinks.website || cleanViewedHandle) },
+
+    // --- Consistência, Foco & Tempo (+3) ---
+    { id: "streak_7", icon: "compass", label: "Constância de Ferro", desc: "Manteve uma sequência ativa de pelo menos 7 dias de produção ininterrupta.", tone: "text-[#2FD4A0]", bg: "bg-[#2FD4A0]/10", hex: "#2FD4A0", unlocked: metrics.streak >= 7 },
+    { id: "streak_30", icon: "coffee", label: "Mês Imparável", desc: "Atingiu uma sequência de 30 dias operando no estúdio.", tone: "text-[#F2B33D]", bg: "bg-[#F2B33D]/10", hex: "#F2B33D", unlocked: metrics.streak >= 30 },
+    { id: "deep_work_master", icon: "dial", label: "Foco Profundo", desc: "Acumulou mais de 50 horas de criação focada dentro do estúdio.", tone: "text-[#8B5CF6]", bg: "bg-[#8B5CF6]/10", hex: "#8B5CF6", unlocked: Boolean(metrics.studioMinutes && metrics.studioMinutes >= 3000) || Number(activeStatsObj['studio_minutes']) >= 3000 },
   ];
   
   const unlockedCount = achievements.filter(a => a.unlocked).length;
+  const publicAchievements = achievements.filter(a => a.unlocked);
+  const sortedAchievements = [...achievements].sort((a, b) => (b.unlocked ? 1 : 0) - (a.unlocked ? 1 : 0));
+  const displayedAchievements = isPublicView ? publicAchievements : sortedAchievements;
   const [showAchievModal, setShowAchievModal] = useState(false);
 
   useEffect(() => {
-    if (completedCount === onboardingItems.length && !hideOnboarding) {
-      const t = setTimeout(() => {
-        setHideOnboarding(true);
-        if (user) {
-          localStorage.setItem(`studioos.onboarding.hidden.${user.id}`, "true");
-        }
-      }, 4000);
-      return () => clearTimeout(t);
+    if (completedCount === onboardingItems.length && user) {
+      localStorage.setItem(`studioos.onboarding.completed.${user.id}`, "true");
     }
-  }, [completedCount, hideOnboarding, user, onboardingItems.length]);
+  }, [completedCount, user, onboardingItems.length]);
 
   if (isViewingOther && targetLoading) {
     return (
@@ -3733,84 +4056,188 @@ export default function PerfilScreen({
                                              </button>
                                            ) : (
                                              <button onClick={() => { setTempLink(""); setEditingLink(true); }} className="flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1.5 text-[10px] font-medium text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 hover:scale-105 transition-all shadow-lg">
-                                               <Icon name="link" className="h-3 w-3" /> Link
-                                             </button>
-                                           )}
-                                           
-                                           <div className="h-3 w-px bg-white/20 mx-0.5"></div>
+                                                <Icon name="link" className="h-3 w-3" /> Link
+                                              </button>
+                                            )}
 
-                                           <button onClick={() => setIsSelectingProject(true)} className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/10 text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 hover:scale-105 transition-all shadow-lg" title="Trocar projeto">
-                                             <Icon name="dial" className="h-3 w-3" />
-                                           </button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                 </div>
-                               </div>
-                             </div>
-                           );
-                    })()}
-                  </div>
-                )}
-              </div>
-            </Panel>
-            )}
+                                            <div className="h-3 w-px bg-white/20 mx-0.5" />
+
+                                            <button onClick={() => setIsSelectingProject(true)} className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/10 text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 hover:scale-105 transition-all shadow-lg" title="Trocar projeto">
+                                              <Icon name="dial" className="h-3 w-3" />
+                                            </button>
+                                         </div>
+                                       </div>
+                                     </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                     })()}
+                   </div>
+                 )}
+               </div>
+             </Panel>
+             )}
 
             {!hideOnboarding && !isPublicView && (
               <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
-              <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
-                <span className="h-3.5 w-1 rounded-full bg-[#F2B33D]" />
-                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Primeiros Passos</h3>
-                <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">{completedCount} / 5</span>
-              </div>
-              <div className="p-5">
-                <div className="flex items-center gap-5">
-                  <div className="relative h-[76px] w-[76px] shrink-0">
-                     <svg viewBox="0 0 88 88" className="absolute inset-0 h-full w-full -rotate-90 drop-shadow-[0_0_10px_rgba(242,179,61,0.2)]">
-                       <circle cx="44" cy="44" r="38" fill="none" className="stroke-[#1a1a1f]" strokeWidth="7" />
-                       <circle cx="44" cy="44" r="38" fill="none" className="stroke-[#F2B33D] transition-all duration-1000 ease-out" strokeWidth="7" strokeLinecap="round" strokeDasharray="238.7" strokeDashoffset={strokeDashoffset} />
-                     </svg>
-                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                       <div className="flex items-baseline gap-[1px]">
-                         <span className="font-display text-[20px] text-white font-bold leading-none tracking-tight">{progressPercent}</span>
-                         <span className="text-[10px] text-[#F2B33D] font-bold leading-none">%</span>
-                       </div>
-                     </div>
-                  </div>
-                  <div>
-                    <p className="text-[12.5px] text-[#8c8c94] leading-relaxed">
-                      {remainingItems > 0 
-                        ? `Faltam ${remainingItems} ite${remainingItems === 1 ? 'm' : 'ns'} para você concluir o onboarding e desbloquear a sua conquista.`
-                        : "Parabéns! Você concluiu todos os passos iniciais e desbloqueou a conquista."}
-                    </p>
+                {/* Header */}
+                <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
+                  <span className={cn(
+                    "h-3.5 w-1 rounded-full transition-colors",
+                    completedCount === onboardingItems.length ? "bg-[#2FD4A0] shadow-[0_0_8px_#2FD4A0]" : "bg-[#F2B33D]"
+                  )} />
+                  <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight flex items-center gap-2">
+                    <span>Primeiros Passos</span>
+                    {completedCount === onboardingItems.length && (
+                      <span className="rounded-full bg-[#2FD4A0]/15 border border-[#2FD4A0]/30 px-2 py-0.5 text-[8.5px] font-mono font-bold uppercase text-[#2FD4A0] tracking-wider">
+                        100% Completo
+                      </span>
+                    )}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">
+                      {completedCount} / {onboardingItems.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setOnboardingCollapsed(!onboardingCollapsed)}
+                      className="p-1 rounded text-[#71717a] hover:text-white transition-colors cursor-pointer"
+                      title={onboardingCollapsed ? "Expandir etapas" : "Recolher etapas"}
+                      aria-label={onboardingCollapsed ? "Expandir etapas" : "Recolher etapas"}
+                    >
+                      <Icon name={onboardingCollapsed ? "chevron" : "close"} className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
 
-                <div className="mt-7 space-y-4">
-                  {onboardingItems.map((item, i) => (
-                    <button 
-                      key={item.label}
-                      onClick={item.action}
-                      className="w-full flex items-center gap-3.5 text-left transition-all duration-700 ease-out group" 
-                      style={{ opacity: mounted ? 1 : 0, transform: mounted ? "translateX(0)" : "translateX(10px)", transitionDelay: `${i * 100 + 300}ms` }}
-                    >
-                      <span className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border transition-colors ${
-                        item.done ? "border-[#F2B33D]/40 bg-[#F2B33D]/10 text-[#F2B33D] shadow-[0_0_8px_rgba(242,179,61,0.15)]" : "border-[#232327] bg-[#101012] text-[#3f3f46] group-hover:border-[#F2B33D]/30 group-hover:text-[#8c8c94]"
-                      }`}>
-                        {item.done ? (
-                          <Icon name="check" className="h-[9px] w-[9px]" strokeWidth={3.5} />
-                        ) : (
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#232327] transition-colors group-hover:bg-[#F2B33D]/30" />
-                        )}
-                      </span>
-                      <span className={`text-[13px] font-medium tracking-tight transition-colors ${item.done ? "text-[#d3d3d8]" : "text-[#52525b] group-hover:text-[#d3d3d8]"}`}>
-                        {item.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </Panel>
+                {!onboardingCollapsed && (
+                  <div className="p-5">
+                    {/* Meter e Resumo */}
+                    <div className="flex items-center gap-5">
+                      <div className="relative h-[76px] w-[76px] shrink-0">
+                        <svg viewBox="0 0 88 88" className="absolute inset-0 h-full w-full -rotate-90 drop-shadow-[0_0_10px_rgba(242,179,61,0.2)]">
+                          <circle cx="44" cy="44" r="38" fill="none" className="stroke-[#1a1a1f]" strokeWidth="7" />
+                          <circle 
+                            cx="44" 
+                            cy="44" 
+                            r="38" 
+                            fill="none" 
+                            className={cn(
+                              "transition-all duration-1000 ease-out",
+                              completedCount === onboardingItems.length ? "stroke-[#2FD4A0]" : "stroke-[#F2B33D]"
+                            )} 
+                            strokeWidth="7" 
+                            strokeLinecap="round" 
+                            strokeDasharray="238.7" 
+                            strokeDashoffset={strokeDashoffset} 
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <div className="flex items-baseline gap-[1px]">
+                            <span className="font-display text-[20px] text-white font-bold leading-none tracking-tight">{progressPercent}</span>
+                            <span className={cn("text-[10px] font-bold leading-none", completedCount === onboardingItems.length ? "text-[#2FD4A0]" : "text-[#F2B33D]")}>%</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[12.5px] text-[#8c8c94] leading-relaxed">
+                          {remainingItems > 0 
+                            ? `Faltam ${remainingItems} ite${remainingItems === 1 ? 'm' : 'ns'} para você concluir o onboarding e desbloquear a conquista Primeiros Passos.`
+                            : "🎉 Parabéns! Você concluiu todas as etapas e desbloqueou a conquista Primeiros Passos no seu perfil."}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Lista interativa de tarefas */}
+                    <div className="mt-6 space-y-2.5">
+                      {onboardingItems.map((item, i) => (
+                        <button 
+                          key={item.id}
+                          type="button"
+                          onClick={item.action}
+                          className={cn(
+                            "w-full flex items-center justify-between gap-3 text-left p-2.5 rounded-xl border transition-all duration-200 group cursor-pointer",
+                            item.done 
+                              ? "bg-[#101012]/60 border-[#1c1c20] hover:border-[#2FD4A0]/30 hover:bg-[#121215]" 
+                              : "bg-[#101012] border-[#232327] hover:border-[#F2B33D]/40 hover:bg-[#141418] shadow-sm"
+                          )}
+                          style={{ opacity: mounted ? 1 : 0, transform: mounted ? "translateX(0)" : "translateX(10px)", transitionDelay: `${i * 60 + 150}ms` }}
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            {/* Checkmark icon */}
+                            <span className={cn(
+                              "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-all duration-300",
+                              item.done 
+                                ? "border-[#2FD4A0]/50 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_10px_rgba(47,212,160,0.25)]" 
+                                : "border-[#2a2a30] bg-[#141417] text-[#52525b] group-hover:border-[#F2B33D]/50 group-hover:text-[#F2B33D]"
+                            )}>
+                              {item.done ? (
+                                <Icon name="check" className="h-3 w-3" strokeWidth={3.5} />
+                              ) : (
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#3a3a42] group-hover:bg-[#F2B33D] transition-colors" />
+                              )}
+                            </span>
+
+                            {/* Conteúdo */}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className={cn(
+                                  "text-[12.5px] font-semibold tracking-tight transition-colors truncate",
+                                  item.done ? "text-[#d3d3d8]" : "text-white group-hover:text-signal-300"
+                                )}>
+                                  {item.label}
+                                </span>
+                                <span className="text-[8.5px] font-mono uppercase px-1.5 py-0.2 rounded border border-[#232327] bg-[#141417] text-[#8c8c94] shrink-0">
+                                  {item.tag}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-[#71717a] group-hover:text-[#8c8c94] transition-colors truncate mt-0.5">
+                                {item.desc}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Status / Ação à direita */}
+                          <div className="shrink-0 pl-2">
+                            {item.done ? (
+                              <span className="inline-flex items-center gap-1 font-mono text-[10px] text-[#2FD4A0] uppercase font-bold tracking-wider">
+                                Concluído
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 font-mono text-[10.5px] font-bold text-[#8c8c94] group-hover:text-signal-400 uppercase tracking-wider transition-colors">
+                                <span>Acessar</span>
+                                <Icon name="arrow" className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" strokeWidth={2.4} />
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+
+                    {completedCount === onboardingItems.length && (
+                      <div className="mt-4 pt-3 border-t border-[#1c1c20] flex items-center justify-between text-[11px] text-[#8c8c94]">
+                        <span className="text-[#2FD4A0] font-mono font-medium flex items-center gap-1.5">
+                          <Icon name="check" className="h-3 w-3 text-[#2FD4A0]" />
+                          Conquista Primeiros Passos desbloqueada
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHideOnboarding(true);
+                            if (user) {
+                              localStorage.setItem(`studioos.onboarding.hidden.${user.id}`, "true");
+                            }
+                          }}
+                          className="hover:text-white transition-colors text-[10.5px] font-mono underline cursor-pointer"
+                        >
+                          Dispensar card
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Panel>
             )}
 
             {(!isViewingOther || displayedCardVis.achievements !== false) && (
@@ -3819,28 +4246,48 @@ export default function PerfilScreen({
                 <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                   <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
                   <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Conquistas do estúdio</h3>
-                  <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">{unlockedCount} / {achievements.length}</span>
+                  <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">
+                    {isPublicView
+                      ? `${unlockedCount} ${unlockedCount === 1 ? "DESBLOQUEADA" : "DESBLOQUEADAS"}`
+                      : `${unlockedCount} / ${achievements.length}`}
+                  </span>
                 </div>
                 <div className="p-5">
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    {achievements.slice(0, 4).map((a) => (
-                      <div key={a.label} 
-                        className={`rounded-2xl border ${a.unlocked ? 'bg-gradient-to-br from-[#101012] to-[#0c0c0e]' : 'bg-[#0c0c0e] border-[#18181b] opacity-50'} p-4 flex flex-col items-start gap-3 transition-colors cursor-default relative overflow-hidden`}
-                        style={{ 
-                          borderColor: a.unlocked ? `${a.hex}40` : undefined,
-                          boxShadow: a.unlocked ? `inset 0 0 20px ${a.hex}05` : undefined
-                        }}
-                      >
-                        <div className={`rounded-md p-1.5 relative z-10 ${a.unlocked ? a.bg : 'bg-[#18181b]'}`}>
-                          <Icon name={a.icon} className={`h-3.5 w-3.5 ${a.unlocked ? a.tone : 'text-[#52525b]'}`} />
-                        </div>
-                        <span className={`text-[12px] font-medium tracking-tight leading-snug relative z-10 ${a.unlocked ? 'text-[#d3d3d8]' : 'text-[#8c8c94]'}`}>{a.label}</span>
+                  {isPublicView && displayedAchievements.length === 0 ? (
+                    <div className="py-6 px-4 text-center rounded-2xl border border-dashed border-[#232327] bg-[#0c0c0e]">
+                      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#6E93F5]/10 text-[#6E93F5] mb-2.5">
+                        <Icon name="star" className="h-5 w-5" />
                       </div>
-                    ))}
-                  </div>
-                  <Button onClick={() => setShowAchievModal(true)} variant="outline" className="w-full text-[#8c8c94] border-[#232327] bg-[#0c0c0e] hover:bg-[#101012] hover:text-[#d3d3d8]">
-                    Ver todas as {achievements.length} conquistas
-                  </Button>
+                      <p className="text-[13px] font-semibold text-white">Nenhuma conquista ainda</p>
+                      <p className="text-[11px] text-[#8c8c94] mt-1">Este criador ainda não desbloqueou conquistas no estúdio.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        {displayedAchievements.slice(0, 4).map((a) => (
+                          <div key={a.label} 
+                            className={`rounded-2xl border ${a.unlocked ? 'bg-gradient-to-br from-[#101012] to-[#0c0c0e]' : 'bg-[#0c0c0e] border-[#18181b] opacity-50'} p-4 flex flex-col items-start gap-3 transition-colors cursor-default relative overflow-hidden`}
+                            style={{ 
+                              borderColor: a.unlocked ? `${a.hex}40` : undefined,
+                              boxShadow: a.unlocked ? `inset 0 0 20px ${a.hex}05` : undefined
+                            }}
+                          >
+                            <div className={`rounded-md p-1.5 relative z-10 ${a.unlocked ? a.bg : 'bg-[#18181b]'}`}>
+                              <Icon name={a.icon} className={`h-3.5 w-3.5 ${a.unlocked ? a.tone : 'text-[#52525b]'}`} />
+                            </div>
+                            <span className={`text-[12px] font-medium tracking-tight leading-snug relative z-10 ${a.unlocked ? 'text-[#d3d3d8]' : 'text-[#8c8c94]'}`}>{a.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {(isPublicView ? displayedAchievements.length > 4 : true) && (
+                        <Button onClick={() => setShowAchievModal(true)} variant="outline" className="w-full text-[#8c8c94] border-[#232327] bg-[#0c0c0e] hover:bg-[#101012] hover:text-[#d3d3d8]">
+                          {isPublicView
+                            ? `Ver todas as ${displayedAchievements.length} conquistas`
+                            : `Ver todas as ${achievements.length} conquistas`}
+                        </Button>
+                      )}
+                    </>
+                  )}
                 </div>
               </Panel>
             )}
@@ -3934,7 +4381,14 @@ export default function PerfilScreen({
                           </div>
                         </div>
                         {connected ? (
-                          <Button variant="outline" size="sm" onClick={() => handleUnlink(connected.identity_id)} disabled={identities.length <= 1} className="border-[#232327] bg-[#0c0c0e] text-[#8c8c94] hover:bg-[#232327] hover:text-[#d3d3d8]">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleUnlink(connected.identity_id || connected.id, provider === "google" ? "Google" : "Discord")}
+                            disabled={identities.length <= 1}
+                            title={identities.length <= 1 ? "Mantenha ao menos uma forma de login vinculada à sua conta." : undefined}
+                            className="border-[#232327] bg-[#0c0c0e] text-[#8c8c94] hover:bg-[#232327] hover:text-[#d3d3d8]"
+                          >
                             Desvincular
                           </Button>
                         ) : (
@@ -3976,7 +4430,19 @@ export default function PerfilScreen({
                   </div>
                 ))}
               </div>
-              <Button disabled={sessions.length <= 1} onClick={() => setSessions(prev => prev.filter(x => x.current))} variant="outline" className="w-full text-[#F2604C] border-[#F2604C]/20 bg-[#F2604C]/5 hover:bg-[#F2604C]/10 hover:text-[#F2604C] disabled:opacity-40">
+              <Button
+                disabled={sessions.length <= 1}
+                onClick={() => {
+                  setSessions(prev => prev.filter(x => x.current));
+                  showNotice(
+                    "Sessões Desconectadas",
+                    "Você desconectou todas as outras sessões ativas com sucesso.",
+                    "success"
+                  );
+                }}
+                variant="outline"
+                className="w-full text-[#F2604C] border-[#F2604C]/20 bg-[#F2604C]/5 hover:bg-[#F2604C]/10 hover:text-[#F2604C] disabled:opacity-40"
+              >
                 <Icon name="close" className="h-4 w-4 mr-1" /> Desconectar de outras sessões
               </Button>
               </div>
@@ -4049,7 +4515,18 @@ export default function PerfilScreen({
                 </div>
               </div>
               <div className="mt-6 flex justify-end">
-                <Button className="bg-[#101012] text-[#d3d3d8] border border-[#232327] hover:bg-[#232327] shadow-[0_0_15px_rgba(242,179,61,0.1)] transition-shadow hover:shadow-[0_0_20px_rgba(242,179,61,0.2)]">Salvar Preferências</Button>
+                <Button
+                  onClick={() => {
+                    showNotice(
+                      "Preferências Salvas",
+                      "Suas configurações de sistema e notificações foram atualizadas com sucesso.",
+                      "success"
+                    );
+                  }}
+                  className="bg-[#101012] text-[#d3d3d8] border border-[#232327] hover:bg-[#232327] shadow-[0_0_15px_rgba(242,179,61,0.1)] transition-shadow hover:shadow-[0_0_20px_rgba(242,179,61,0.2)]"
+                >
+                  Salvar Preferências
+                </Button>
               </div>
             </div>
           </Panel>
@@ -4112,7 +4589,11 @@ export default function PerfilScreen({
                   </div>
                   <div>
                     <h3 className="font-display text-2xl font-bold text-white tracking-tight">Conquistas do estúdio</h3>
-                    <p className="text-[14px] text-[#8c8c94] mt-1 font-mono tracking-widest uppercase">{unlockedCount} de {achievements.length} desbloqueadas</p>
+                    <p className="text-[14px] text-[#8c8c94] mt-1 font-mono tracking-widest uppercase">
+                      {isPublicView
+                        ? `${unlockedCount} ${unlockedCount === 1 ? "conquista desbloqueada" : "conquistas desbloqueadas"}`
+                        : `${unlockedCount} de ${achievements.length} desbloqueadas`}
+                    </p>
                   </div>
                 </div>
                 <button onClick={() => setShowAchievModal(false)} className="text-[#8c8c94] hover:text-white transition-colors p-2 bg-[#18181b] hover:bg-[#232327] rounded-full">
@@ -4122,7 +4603,7 @@ export default function PerfilScreen({
               
               <div className="p-8 overflow-y-auto">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {achievements.map((a) => (
+                  {displayedAchievements.map((a) => (
                     <div 
                       key={a.id} 
                       className={`rounded-2xl border p-6 flex flex-col items-start gap-4 transition-all duration-300 cursor-default relative overflow-hidden ${
@@ -4384,6 +4865,19 @@ export default function PerfilScreen({
           </div>
         </div>
       )}
+
+      {/* MODAL DE NOTIFICAÇÃO / AVISO */}
+      <NoticeModal
+        isOpen={notice.isOpen}
+        onClose={closeNotice}
+        title={notice.title}
+        message={notice.message}
+        type={notice.type}
+        actionText={notice.actionText}
+        cancelText={notice.cancelText}
+        onAction={notice.onAction}
+        customIcon={notice.customIcon}
+      />
     </div>
   );
 }
