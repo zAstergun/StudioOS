@@ -34,6 +34,17 @@ drop policy if exists "Perfil editÃ¡vel pelo prÃ³prio usuÃ¡rio" on public.
 drop policy if exists "Users can manage their own profiles" on public.profiles;
 create policy "Perfil editável pelo próprio usuário"
   on public.profiles for update
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
+
+drop policy if exists "Usuários podem criar seu próprio perfil" on public.profiles;
+create policy "Usuários podem criar seu próprio perfil"
+  on public.profiles for insert
+  with check (auth.uid() = id);
+
+drop policy if exists "Usuários podem deletar seu próprio perfil" on public.profiles;
+create policy "Usuários podem deletar seu próprio perfil"
+  on public.profiles for delete
   using (auth.uid() = id);
 
 -- Função para o login por username (necessária para buscar o email pelo canal)

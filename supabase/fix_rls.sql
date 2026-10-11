@@ -89,6 +89,12 @@ CREATE POLICY "Apenas o dono ou o próprio membro podem remover membros"
 ON public.studioos_project_members FOR DELETE
 USING (public.is_project_owner(project_id) OR user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Dono ou membro podem atualizar membros" ON public.studioos_project_members;
+CREATE POLICY "Dono ou membro podem atualizar membros"
+ON public.studioos_project_members FOR UPDATE
+USING (public.is_project_owner(project_id) OR user_id = auth.uid())
+WITH CHECK (public.is_project_owner(project_id) OR user_id = auth.uid());
+
 -- 5. Políticas para Tarefas (studioos_tasks)
 DROP POLICY IF EXISTS "Tarefas visíveis para dono e membros" ON public.studioos_tasks;
 CREATE POLICY "Tarefas visíveis para dono e membros"
@@ -142,6 +148,12 @@ DROP POLICY IF EXISTS "Dono pode gerenciar aplicacoes" ON public.studioos_projec
 CREATE POLICY "Dono pode gerenciar aplicacoes"
 ON public.studioos_project_applications FOR UPDATE
 USING (public.is_project_owner(project_id));
+
+DROP POLICY IF EXISTS "Usuario pode atualizar sua propria aplicacao" ON public.studioos_project_applications;
+CREATE POLICY "Usuario pode atualizar sua propria aplicacao"
+ON public.studioos_project_applications FOR UPDATE
+USING (user_id = auth.uid())
+WITH CHECK (user_id = auth.uid());
 
 DROP POLICY IF EXISTS "Dono pode deletar aplicacoes" ON public.studioos_project_applications;
 DROP POLICY IF EXISTS "Dono ou usuario pode deletar aplicacoes" ON public.studioos_project_applications;
