@@ -203,8 +203,22 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
             {/* Tile 2: Cores RGB */}
             <div className="group rounded-xl border border-white/[0.07] bg-white/[0.02] p-3 hover:border-signal-400/40 hover:bg-signal-400/[0.03] transition-all">
               <div className="flex items-start gap-2.5">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-pink-500/20 via-purple-500/20 to-cyan-500/20 border border-purple-400/30 text-purple-300 group-hover:scale-105 transition-transform">
-                  <Icon name="sparkles" className="h-4 w-4 text-signal-400" />
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-pink-500/20 via-purple-500/20 to-cyan-500/20 border border-purple-400/30 group-hover:scale-105 transition-transform shadow-sm">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="h-4 w-4 text-signal-400"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.56-2.51 5.56-5.56C22 6.5 17.5 2 12 2Z" />
+                    <circle cx="7.5" cy="11.5" r="1.1" fill="#F43F5E" stroke="#F43F5E" />
+                    <circle cx="10" cy="7.5" r="1.1" fill="#EAB308" stroke="#EAB308" />
+                    <circle cx="14.5" cy="7.5" r="1.1" fill="#10B981" stroke="#10B981" />
+                    <circle cx="17" cy="11.5" r="1.1" fill="#3B82F6" stroke="#3B82F6" />
+                  </svg>
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
