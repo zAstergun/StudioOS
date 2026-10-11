@@ -141,6 +141,30 @@ export function StatusBar({
             : "Calibração pendente"}
         </span>
       </button>
+      <span className="hidden shrink-0 h-3 w-px bg-ink-600 sm:block" />
+      <a
+        href="https://discord.gg/EDzYV5JvMk"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group relative overflow-hidden flex shrink-0 items-center gap-2 rounded-full border border-[#5865F2]/50 bg-gradient-to-r from-[#5865F2]/20 via-[#4752C4]/15 to-[#5865F2]/20 px-2.5 sm:px-3 py-1 font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-[#c2cbff] shadow-[0_0_14px_rgba(88,101,242,0.25),inset_0_1px_1px_rgba(255,255,255,0.15)] transition-all duration-300 hover:border-[#5865F2] hover:from-[#5865F2]/35 hover:via-[#5865F2]/25 hover:to-[#4752C4]/40 hover:text-white hover:shadow-[0_0_22px_rgba(88,101,242,0.5)] cursor-pointer select-none active:scale-95 no-underline"
+        title="Entrar na comunidade Discord do Aster (convite: EDzYV5JvMk)"
+      >
+        {/* Shimmer sweep effect */}
+        <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
+
+        <span className="relative flex items-center justify-center">
+          <Icon
+            name="discord"
+            className="h-3 w-3 text-[#7983f5] drop-shadow-[0_0_6px_rgba(88,101,242,0.85)] shrink-0 transition-transform duration-300 group-hover:scale-115 group-hover:-rotate-6 group-hover:text-white"
+          />
+        </span>
+        <span className="relative drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+          Discord
+        </span>
+        <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-[#5865F2]/25 text-[#d5dbff] transition-all duration-200 group-hover:bg-[#5865F2] group-hover:text-white group-hover:translate-x-0.5">
+          <Icon name="arrow" className="h-2 w-2" strokeWidth={2.8} />
+        </span>
+      </a>
       <div className="ml-auto flex shrink-0 items-center gap-4 pl-4 sm:pl-0">
         <Clock />
         {userName ? (
