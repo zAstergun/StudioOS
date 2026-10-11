@@ -20,3 +20,9 @@ Consult these guides before working on related tasks:
 - [Adding or managing content](https://docs.astro.build/en/guides/content-collections/)
 - [Adding styles or using Tailwind](https://docs.astro.build/en/guides/styling/)
 - [Supporting multiple languages](https://docs.astro.build/en/guides/internationalization/)
+
+## Supabase & Resource Rules
+
+- **NEVER use `query_logs` or scan remote logs**: Do NOT invoke `query_logs` or perform ClickHouse log queries via Supabase MCP. This rapidly exhausts the 100 GB free tier Log Query quota.
+- **Debug Locally**: Always debug issues by inspecting client/server error responses (`const { error } = await supabase...`), local terminal logs, or direct database queries via `execute_sql`.
+- **Database Inspection**: Use `execute_sql` or `list_tables` for database schema inspection.

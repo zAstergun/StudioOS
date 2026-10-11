@@ -22,12 +22,16 @@ alter table public.profiles add constraint profiles_channel_key unique (channel)
 
 drop policy if exists "Perfil visível para o próprio usuário" on public.profiles;
 drop policy if exists "Perfis são visíveis publicamente" on public.profiles;
+drop policy if exists "Perfis sÃ£o visÃ­veis publicamente" on public.profiles;
+drop policy if exists "Public profiles are viewable by everyone." on public.profiles;
 
 create policy "Perfis são visíveis publicamente"
   on public.profiles for select
   using (true);
 
 drop policy if exists "Perfil editável pelo próprio usuário" on public.profiles;
+drop policy if exists "Perfil editÃ¡vel pelo prÃ³prio usuÃ¡rio" on public.profiles;
+drop policy if exists "Users can manage their own profiles" on public.profiles;
 create policy "Perfil editável pelo próprio usuário"
   on public.profiles for update
   using (auth.uid() = id);
@@ -134,21 +138,25 @@ $$;
 
 -- Políticas de acesso (O usuário só vê, cria e edita o próprio histórico)
 drop policy if exists "Usuários podem ver seu próprio histórico" on public.studioos_history;
+drop policy if exists "UsuÃ¡rios podem ver seu prÃ³prio histÃ³rico" on public.studioos_history;
 create policy "Usuários podem ver seu próprio histórico" 
 on public.studioos_history for select 
 using (auth.uid() = user_id);
 
 drop policy if exists "Usuários podem criar seu próprio histórico" on public.studioos_history;
+drop policy if exists "UsuÃ¡rios podem criar seu prÃ³prio histÃ³rico" on public.studioos_history;
 create policy "Usuários podem criar seu próprio histórico" 
 on public.studioos_history for insert 
 with check (auth.uid() = user_id);
 
 drop policy if exists "Usuários podem atualizar seu próprio histórico" on public.studioos_history;
+drop policy if exists "UsuÃ¡rios podem atualizar seu prÃ³prio histÃ³rico" on public.studioos_history;
 create policy "Usuários podem atualizar seu próprio histórico" 
 on public.studioos_history for update 
 using (auth.uid() = user_id);
 
 drop policy if exists "Usuários podem excluir seu próprio histórico" on public.studioos_history;
+drop policy if exists "UsuÃ¡rios podem excluir seu prÃ³prio histÃ³rico" on public.studioos_history;
 create policy "Usuários podem excluir seu próprio histórico" 
 on public.studioos_history for delete 
 using (auth.uid() = user_id);
@@ -166,15 +174,19 @@ $$;
 insert into storage.buckets (id, name, public) values ('avatars', 'avatars', true) on conflict do nothing;
 
 drop policy if exists "Avatares são publicamente visíveis" on storage.objects;
+drop policy if exists "Avatares sÃ£o publicamente visÃ­veis" on storage.objects;
 create policy "Avatares são publicamente visíveis" on storage.objects for select using (bucket_id = 'avatars');
 
 drop policy if exists "Usuários podem subir seus avatares" on storage.objects;
+drop policy if exists "UsuÃ¡rios podem subir seus avatares" on storage.objects;
 create policy "Usuários podem subir seus avatares" on storage.objects for insert with check (bucket_id = 'avatars' and auth.uid()::text = owner::text);
 
 drop policy if exists "Usuários podem atualizar seus avatares" on storage.objects;
+drop policy if exists "UsuÃ¡rios podem atualizar seus avatares" on storage.objects;
 create policy "Usuários podem atualizar seus avatares" on storage.objects for update with check (bucket_id = 'avatars' and auth.uid()::text = owner::text);
 
 drop policy if exists "Usuários podem deletar seus avatares" on storage.objects;
+drop policy if exists "UsuÃ¡rios podem deletar seus avatares" on storage.objects;
 create policy "Usuários podem deletar seus avatares" on storage.objects for delete using (bucket_id = 'avatars' and auth.uid()::text = owner::text);
 
 -- Tabela de Projetos
