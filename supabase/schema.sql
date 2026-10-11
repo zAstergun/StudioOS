@@ -108,23 +108,28 @@ create table if not exists public.studioos_history (
 alter table public.studioos_history enable row level security;
 
 
--- Funcao para verificar dono do projeto sem causar recursao nas politicas
-
--- Funcao para verificar se usuario e membro
-create or replace function public.is_project_member(pid text)
-returns boolean
-language sql
-security definer set search_path = public
-as $$
-  select exists(select 1 from public.studioos_project_members where project_id = pid and user_id = auth.uid());
-$$;
+-- Funções para verificar dono e membro sem causar recursão nas políticas (plpgsql impede inlining)
+drop function if exists public.is_project_owner(text) cascade;
+drop function if exists public.is_project_member(text) cascade;
 
 create or replace function public.is_project_owner(p_project_id text)
 returns boolean
-language sql
+language plpgsql
 security definer set search_path = public
 as $$
-  select exists(select 1 from public.studioos_projects where id = p_project_id and owner_id = auth.uid());
+begin
+  return exists(select 1 from public.studioos_projects where id = p_project_id and owner_id = auth.uid());
+end;
+$$;
+
+create or replace function public.is_project_member(p_project_id text)
+returns boolean
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  return exists(select 1 from public.studioos_project_members where project_id = p_project_id and user_id = auth.uid());
+end;
 $$;
 
 -- Políticas de acesso (O usuário só vê, cria e edita o próprio histórico)
@@ -235,7 +240,7 @@ create policy "Membros visíveis para a equipe"
 on public.studioos_project_members for select
 using (
   user_id = auth.uid() or 
-  public.is_project_owner(public.studioos_project_members.project_id) or
+  public.is_project_owner(project_id) or
   public.is_project_member(project_id)
 );
 
