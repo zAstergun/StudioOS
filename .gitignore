@@ -42,6 +42,8 @@ contexto
 
 # Supabase
 supabase/.temp/
+supabase/.env*
+supabase/*.local.toml
 
 # Next.js artifacts
 .next/

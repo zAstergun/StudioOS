@@ -168,12 +168,12 @@ export function Card({
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-lg border border-ink-700/80 bg-ink-900/70",
+        "relative rounded-lg border border-ink-700/80 bg-ink-900/70",
         className
       )}
     >
       {title && (
-        <header className="flex items-center gap-3 border-b border-ink-800 px-4 py-3">
+        <header className="flex items-center gap-3 rounded-t-lg border-b border-ink-800 px-4 py-3">
           <span
             className={cn("h-3.5 w-[3px] rounded-full", {
               "bg-signal-400": accent === "signal",

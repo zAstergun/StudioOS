@@ -87,6 +87,14 @@ export function Sidebar({
 
         <div className="mt-0.5 space-y-0.5">
           <NavItem
+            active={active === "ranking"}
+            onClick={() => go("ranking")}
+            icon="trophy"
+            label="Ranking"
+            kicker="Top criadores"
+            accent="signal"
+          />
+          <NavItem
             active={active === "login" || (active === "perfil" && !viewedProfileHandle)}
             onClick={() => go(authenticated ? "perfil" : "login")}
             icon={authenticated ? "user" : "login"}

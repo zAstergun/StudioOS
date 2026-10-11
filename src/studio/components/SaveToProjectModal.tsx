@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Icon, Button } from "./ui";
 import { cn } from "../utils/cn";
 import { supabase, useAuth } from "../auth";
@@ -49,6 +50,7 @@ export function SaveToProjectModal({
   onGoToProject,
 }: SaveToProjectModalProps) {
   const { user } = useAuth();
+  const [mounted, setMounted] = useState(false);
   const [projects, setProjects] = useState<MiniProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -57,21 +59,50 @@ export function SaveToProjectModal({
   const [savedSuccessProject, setSavedSuccessProject] = useState<MiniProject | null>(null);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
     if (isOpen && user && supabase) {
       setLoading(true);
       setSavedSuccessProject(null);
       supabase
         .from("studioos_projects")
-        .select("id, name, status, color, saved_links")
+        .select("id, name, status, color, saved_links, owner_id, studioos_project_members(user_id)")
         .neq("status", "trashed")
         .order("created_at", { ascending: false })
         .then(({ data }) => {
           if (data) {
-            setProjects(data);
-            if (preselectedProjectId && data.some(p => p.id === preselectedProjectId)) {
+            const leftIds: string[] = (() => {
+              try {
+                return JSON.parse(localStorage.getItem(`studioos_left_projects_${user.id}`) || '[]');
+              } catch {
+                return [];
+              }
+            })();
+
+            const userProjects = data.filter((p: any) => {
+              if (leftIds.includes(p.id)) return false;
+              const isOwner = p.owner_id === user.id;
+              const isMember = (p.studioos_project_members || []).some((m: any) => m.user_id === user.id);
+              return isOwner || isMember || !p.owner_id;
+            });
+
+            setProjects(userProjects);
+            if (preselectedProjectId && userProjects.some(p => p.id === preselectedProjectId)) {
               setSelectedProjectId(preselectedProjectId);
-            } else if (data.length > 0) {
-              setSelectedProjectId(data[0].id);
+            } else if (userProjects.length > 0) {
+              setSelectedProjectId(userProjects[0].id);
             }
           }
           setLoading(false);
@@ -85,7 +116,7 @@ export function SaveToProjectModal({
     }
   }, [item]);
 
-  if (!isOpen || !item) return null;
+  if (!isOpen || !item || !mounted || typeof document === "undefined") return null;
 
   const toolType = item.type || "link";
   const group = item.group || TOOL_GROUP_MAP[toolType] || (toolType === "link" ? "Link" : "Criação");
@@ -144,17 +175,17 @@ export function SaveToProjectModal({
     }
   };
 
-  return (
+  return createPortal(
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/85 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-ink-950/85 p-3 sm:p-4 backdrop-blur-md overflow-y-auto overscroll-contain"
       onClick={(e) => { if (e.target === e.currentTarget && !saving) onClose(); }}
     >
       <div 
-        className="relative w-full max-w-[500px] overflow-hidden rounded-2xl border border-ink-700/60 bg-ink-900 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)] animate-in fade-in zoom-in-95 duration-200"
+        className="relative my-auto w-full max-w-[500px] max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2.5rem)] flex flex-col overflow-hidden rounded-2xl border border-ink-700/60 bg-ink-900 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)] animate-in fade-in zoom-in-95 duration-200"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-ink-800/80 px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-ink-800/80 px-5 sm:px-6 py-3.5 sm:py-4">
           <div className="flex items-center gap-3">
             <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg border", style.badge)}>
               <Icon name={iconName} className="h-4 w-4" />
@@ -178,7 +209,7 @@ export function SaveToProjectModal({
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6">
           {savedSuccessProject ? (
             /* TELA DE SUCESSO */
             <div className="py-6 text-center animate-in fade-in">
@@ -218,7 +249,7 @@ export function SaveToProjectModal({
             </div>
           ) : (
             /* FORMULÁRIO DE SELEÇÃO */
-            <div className="space-y-5">
+            <div className="space-y-4 sm:space-y-5">
               {/* Título do item */}
               <div>
                 <label className="block mb-1.5 font-mono text-[10px] uppercase tracking-wider text-ink-400">
@@ -271,7 +302,7 @@ export function SaveToProjectModal({
                     </p>
                   </div>
                 ) : (
-                  <div className="max-h-[220px] space-y-1.5 overflow-y-auto pr-1">
+                  <div className="max-h-[160px] sm:max-h-[220px] space-y-1.5 overflow-y-auto pr-1">
                     {projects.map((proj) => {
                       const isSelected = selectedProjectId === proj.id;
                       const savedCount = Array.isArray(proj.saved_links) ? proj.saved_links.length : 0;
@@ -317,7 +348,7 @@ export function SaveToProjectModal({
               </div>
 
               {/* Botões do Rodapé */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-ink-800/80">
+              <div className="flex shrink-0 items-center justify-end gap-3 pt-3 border-t border-ink-800/80">
                 <Button 
                   variant="outline" 
                   onClick={onClose}
@@ -346,6 +377,7 @@ export function SaveToProjectModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

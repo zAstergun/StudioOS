@@ -273,7 +273,7 @@ export function useStudioOS() {
       const [{ data: hist }, { data: trsh }, { data: trashedProjs }] = await Promise.all([
         supabase.from("studioos_history").select("*").eq("user_id", user.id).is("deleted_at", null).order("created_at", { ascending: false }),
         supabase.from("studioos_history").select("*").eq("user_id", user.id).not("deleted_at", "is", null).order("deleted_at", { ascending: false }),
-        supabase.from("studioos_projects").select("*").eq("status", "trashed").order("created_at", { ascending: false }),
+        supabase.from("studioos_projects").select("*").eq("owner_id", user.id).eq("status", "trashed").order("created_at", { ascending: false }),
       ]);
       if (hist) cloudHist = hist.map(mapFromSupabase) as HistoryEntry[];
       if (trsh) cloudTrash = trsh.map(mapFromSupabase) as TrashEntry[];

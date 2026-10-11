@@ -305,7 +305,7 @@ export function Membros({
           <div className="space-y-3">
             <div>
               <Label>Formato principal</Label>
-              <Select defaultValue="aula">
+              <Select defaultValue="aula" headerTitle="Formatos disponíveis">
                 <option value="aula">Aulas gravadas + encontros</option>
                 <option value="comunidade">Comunidade com curadoria</option>
                 <option value="mentor">Mentoria em grupo pequeno</option>

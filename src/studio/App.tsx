@@ -39,6 +39,9 @@ import { AuthScreen } from "./views/AuthScreen";
 import PerfilScreen from "./views/PerfilScreen";
 import { ProjetosScreen } from "./views/ProjetosScreen";
 import { SalvosScreen } from "./views/SalvosScreen";
+import { RankingScreen } from "./views/RankingScreen";
+import { ProjectInviteModal } from "./components/ProjectInviteModal";
+import { VipModal } from "./components/VipModal";
 
 /* ------------------------------------------------------------- footer */
 
@@ -254,6 +257,7 @@ export default function App() {
   const [view, setView] = useState<string>(getInitialView);
   const [viewedProfileHandle, setViewedProfileHandle] = useState<string | null>(getInitialProfileHandle);
   const [protectedViewAfterLogin, setProtectedViewAfterLogin] = useState<string | null>(null);
+  const [pendingInvite, setPendingInvite] = useState<{ inviteId: string; role: string } | null>(null);
   const [menu, setMenu] = useState(false);
   const [calibStore, setCalibStore] = useState<{
     profiles: CalibProfile[];
@@ -373,28 +377,47 @@ export default function App() {
   useEffect(() => {
     if (auth.loading || !supabase) return;
     const url = new URL(window.location.href);
-    const inviteId = url.searchParams.get("invite");
-    const role = url.searchParams.get("role") || "editor";
-    
+    let inviteId = url.searchParams.get("invite");
+    let role = url.searchParams.get("role") || "editor";
+
+    // Se houver convite pendente guardado no sessionStorage após login
+    if (!inviteId) {
+      try {
+        const stored = sessionStorage.getItem("studioos_pending_invite");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          inviteId = parsed.inviteId;
+          role = parsed.role || "editor";
+        }
+      } catch {}
+    }
+
     if (inviteId) {
       if (!auth.user) {
+        try {
+          sessionStorage.setItem("studioos_pending_invite", JSON.stringify({ inviteId, role }));
+        } catch {}
         setProtectedViewAfterLogin("projetos");
         setView("login");
       } else {
-        supabase.rpc("apply_for_project", { p_project_id: inviteId, p_role: role }).then(({error}: {error: any}) => {
-          if (!error) {
-            alert("Acesso solicitado com sucesso! Aguarde o dono do projeto aceitar sua solicitação.");
-            url.searchParams.delete("invite");
-            url.searchParams.delete("role");
-            window.history.replaceState({}, document.title, url.toString());
-            setView("projetos");
-          } else {
-            alert("Erro ao solicitar acesso: O projeto não existe ou você já solicitou/possui acesso.");
-          }
-        });
+        try {
+          sessionStorage.removeItem("studioos_pending_invite");
+        } catch {}
+        setPendingInvite({ inviteId, role });
       }
     }
   }, [auth.loading, auth.user]);
+
+  const handleCloseInviteModal = () => {
+    setPendingInvite(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("invite");
+    url.searchParams.delete("role");
+    window.history.replaceState({}, document.title, url.toString());
+    try {
+      sessionStorage.removeItem("studioos_pending_invite");
+    } catch {}
+  };
 
   const go = (id: string, extra?: string) => {
     let nextHandle = viewedProfileHandle;
@@ -501,6 +524,7 @@ export default function App() {
       config: "Provedor de IA — StudioOS",
       historico: "Histórico & Lixeira — StudioOS",
       lixeira: "Lixeira — StudioOS",
+      ranking: "Ranking de Criadores — StudioOS",
       perfil: "Meu Perfil — StudioOS",
       projetos: "Meus Projetos — StudioOS",
       salvos: "Itens Salvos — StudioOS",
@@ -543,6 +567,8 @@ export default function App() {
               calibrated={progress >= 100}
               demo={!auth.user}
               userName={auth.user?.name}
+              isTemporary={auth.user?.is_temporary}
+              expiresAt={auth.user?.expires_at}
               onSignOut={auth.signOut}
               profileName={activeProfile.name}
               profileColor={activeProfile.color}
@@ -564,6 +590,8 @@ export default function App() {
                 ? "StudioOS"
                 : view === "login"
                   ? "Login"
+                : view === "ranking"
+                  ? "Ranking"
                 : tool?.name ??
                   (view === "historico" || view === "lixeira" ? "Histórico & Lixeira" : "Configuração")}
             </span>
@@ -694,6 +722,7 @@ export default function App() {
                     profileColor={activeProfile.color}
                   />
                 )}
+                {view === "ranking" && <RankingScreen onGo={go} />}
                 {view === "perfil" && (
                   <PerfilScreen
                     onGo={go}
@@ -741,6 +770,26 @@ export default function App() {
           </main>
         </div>
       </div>
+
+      {pendingInvite && (
+        <ProjectInviteModal
+          isOpen={true}
+          inviteId={pendingInvite.inviteId}
+          role={pendingInvite.role}
+          onClose={handleCloseInviteModal}
+          onGoToProject={(projId) => {
+            handleCloseInviteModal();
+            sessionStorage.setItem("studioos_open_project_id", projId);
+            go("projetos");
+          }}
+          onGoToProjects={() => {
+            handleCloseInviteModal();
+            go("projetos");
+          }}
+        />
+      )}
+
+      <VipModal />
     </div>
   );
 }

@@ -216,7 +216,8 @@ using (auth.uid() = owner_id or exists (select 1 from public.studioos_project_me
 drop policy if exists "Projetos editáveis por dono e membros" on public.studioos_projects;
 create policy "Projetos editáveis por dono e membros"
 on public.studioos_projects for update
-using (auth.uid() = owner_id or exists (select 1 from public.studioos_project_members where project_id = public.studioos_projects.id and user_id = auth.uid()));
+using (auth.uid() = owner_id or exists (select 1 from public.studioos_project_members where project_id = public.studioos_projects.id and user_id = auth.uid()))
+with check (true);
 
 drop policy if exists "Projetos criáveis pelo usuário" on public.studioos_projects;
 create policy "Projetos criáveis pelo usuário"
@@ -241,12 +242,12 @@ using (
 drop policy if exists "Apenas o dono do projeto pode adicionar membros" on public.studioos_project_members;
 create policy "Apenas o dono do projeto pode adicionar membros"
 on public.studioos_project_members for insert
-with check (public.is_project_owner(project_id));
+with check (public.is_project_owner(project_id) or user_id = auth.uid());
 
 drop policy if exists "Apenas o dono pode remover membros" on public.studioos_project_members;
 create policy "Apenas o dono pode remover membros"
 on public.studioos_project_members for delete
-using (public.is_project_owner(project_id));
+using (public.is_project_owner(project_id) or user_id = auth.uid());
 
 -- Políticas para Tarefas
 drop policy if exists "Tarefas visíveis para dono e membros" on public.studioos_tasks;
@@ -300,7 +301,7 @@ begin
     return false;
   end if;
 
-  select id into v_user_id from public.profiles where channel = p_channel;
+  select id into v_user_id from public.profiles where replace(channel, '@', '') = replace(p_channel, '@', '');
   if v_user_id is null then
     return false;
   end if;
@@ -344,7 +345,65 @@ using (public.is_project_owner(project_id));
 
 create policy "Dono pode deletar aplicacoes"
 on public.studioos_project_applications for delete
-using (public.is_project_owner(project_id));
+using (public.is_project_owner(project_id) or user_id = auth.uid());
+
+create or replace function public.leave_project(p_project_id text)
+returns boolean
+language plpgsql
+security definer set search_path = public
+as $body$
+begin
+  delete from public.studioos_project_members
+  where project_id = p_project_id and user_id = auth.uid();
+
+  delete from public.studioos_project_applications
+  where project_id = p_project_id and user_id = auth.uid();
+
+  return true;
+end;
+$body$;
+
+-- Transferir propriedade de um projeto para outro membro
+create or replace function public.transfer_project_ownership(p_project_id text, p_new_owner_id uuid)
+returns boolean
+language plpgsql
+security definer set search_path = public
+as $body$
+declare
+  v_old_owner_id uuid;
+begin
+  select owner_id into v_old_owner_id
+  from public.studioos_projects
+  where id = p_project_id;
+
+  if v_old_owner_id != auth.uid() then
+    return false;
+  end if;
+
+  if v_old_owner_id = p_new_owner_id then
+    return true;
+  end if;
+
+  -- 1. Atualizar dono na tabela de projetos
+  update public.studioos_projects
+  set owner_id = p_new_owner_id
+  where id = p_project_id;
+
+  -- 2. Garantir que o dono anterior continue com acesso como editor
+  insert into public.studioos_project_members (project_id, user_id, role)
+  values (p_project_id, v_old_owner_id, 'editor')
+  on conflict (project_id, user_id) do update set role = 'editor';
+
+  -- 3. Remover o novo dono da lista de membros (já que agora é owner_id)
+  delete from public.studioos_project_members
+  where project_id = p_project_id and user_id = p_new_owner_id;
+
+  return true;
+end;
+$body$;
+
+grant execute on function public.leave_project(text) to authenticated, anon;
+grant execute on function public.transfer_project_ownership(text, uuid) to authenticated, anon;
 
 create or replace function apply_for_project(p_project_id text, p_role text)
 returns boolean
@@ -526,10 +585,11 @@ create or replace function public.studioos_toggle_profile_like(p_target_id uuid)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, auth
 as $$
 declare
   v_uid uuid;
+  v_is_temp boolean;
   v_exists boolean;
   v_new_count bigint;
   v_liked boolean;
@@ -537,6 +597,16 @@ begin
   v_uid := auth.uid();
   if v_uid is null then
     raise exception 'Usuário não autenticado';
+  end if;
+
+  -- Bloquear contas de teste temporárias de curtir perfis
+  select coalesce((raw_user_meta_data->>'is_temporary')::boolean, false)
+  into v_is_temp
+  from auth.users
+  where id = v_uid;
+
+  if v_is_temp then
+    raise exception 'Contas de teste não podem curtir perfis. Crie uma conta definitiva para interagir.';
   end if;
   
   if v_uid = p_target_id then
@@ -630,3 +700,161 @@ grant execute on function public.get_profile_likes_info(uuid) to anon, authentic
 grant execute on function public.toggle_profile_like(uuid) to authenticated;
 grant execute on function public.toggle_profile_like_guest(uuid, boolean) to anon, authenticated;
 
+-- Função oficial para buscar o ranking público dos criadores no StudioOS
+create or replace function public.studioos_get_creators_ranking()
+returns table (
+  id uuid,
+  full_name text,
+  channel text,
+  avatar_url text,
+  bio text,
+  likes_count bigint,
+  completed_projects bigint,
+  total_projects bigint,
+  ideias_ranqueadas bigint,
+  total_runs bigint,
+  streak bigint
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    p.id,
+    coalesce(nullif(trim(p.full_name), ''), 'Criador StudioOS') as full_name,
+    coalesce(nullif(trim(p.channel), ''), 'user_' || substr(p.id::text, 1, 6)) as channel,
+    p.avatar_url,
+    p.bio,
+    coalesce((select count(*) from public.studioos_profile_likes l where l.target_user_id = p.id), ((p.stats->>'likes_count')::bigint), 0::bigint) as likes_count,
+    coalesce((select count(*) from public.studioos_projects pr where pr.owner_id = p.id and (pr.status = 'completed' or pr.progress >= 100)), ((p.stats->>'projetos_concluidos')::bigint), 0::bigint) as completed_projects,
+    coalesce((select count(*) from public.studioos_projects pr where pr.owner_id = p.id and pr.status != 'trashed'), ((p.stats->>'projetos')::bigint), 0::bigint) as total_projects,
+    coalesce(((p.stats->>'ideias_ranqueadas')::bigint), 0::bigint) as ideias_ranqueadas,
+    coalesce(((p.stats->>'total_runs')::bigint), 0::bigint) as total_runs,
+    coalesce(((p.stats->>'streak')::bigint), 0::bigint) as streak
+  from public.profiles p
+  order by likes_count desc, completed_projects desc, ideias_ranqueadas desc;
+$$;
+
+grant execute on function public.studioos_get_creators_ranking() to anon, authenticated;
+
+-- ==============================================================================
+-- StudioOS · Sistema de Comentários de Perfis
+-- Regra 1: Qualquer um pode visualizar os comentários públicos.
+-- Regra 2: Apenas usuários autenticados com conta real podem comentar nos perfis.
+-- Regra 3: O autor do comentário OU o dono do perfil podem apagar os comentários.
+-- ==============================================================================
+
+create table if not exists public.studioos_profile_comments (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  author_id uuid not null references public.profiles(id) on delete cascade,
+  content text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.studioos_profile_comments enable row level security;
+
+create policy "comments_select_all" on public.studioos_profile_comments for select using (true);
+create policy "comments_insert_authenticated" on public.studioos_profile_comments for insert with check (auth.uid() = author_id);
+create policy "comments_delete_owner_or_author" on public.studioos_profile_comments for delete using (auth.uid() = author_id or auth.uid() = profile_id);
+
+create or replace function public.studioos_get_profile_comments(p_profile_id uuid)
+returns table (
+  id uuid,
+  profile_id uuid,
+  author_id uuid,
+  content text,
+  created_at timestamptz,
+  author_name text,
+  author_channel text,
+  author_avatar text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    c.id,
+    c.profile_id,
+    c.author_id,
+    c.content,
+    c.created_at,
+    coalesce(p.full_name, 'Criador') as author_name,
+    p.channel as author_channel,
+    p.avatar_url as author_avatar
+  from public.studioos_profile_comments c
+  join public.profiles p on p.id = c.author_id
+  where c.profile_id = p_profile_id
+  order by c.created_at desc;
+$$;
+
+grant execute on function public.studioos_get_profile_comments(uuid) to anon, authenticated;
+grant select, insert, update, delete on table public.studioos_profile_comments to anon, authenticated;
+
+
+
+
+-- Regra de negócio: Usuário só pode alterar o @usuario se o e-mail estiver confirmado
+create or replace function public.check_channel_update_email_verified()
+returns trigger as $$
+declare
+  v_confirmed_at timestamptz;
+begin
+  if old.channel is not null and new.channel is distinct from old.channel then
+    select email_confirmed_at into v_confirmed_at from auth.users where id = new.id;
+    if v_confirmed_at is null then
+      raise exception 'Você só pode alterar seu nome de usuário após confirmar o seu e-mail.';
+    end if;
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists trg_check_channel_update_email_verified on public.profiles;
+create trigger trg_check_channel_update_email_verified
+before update of channel on public.profiles
+for each row
+execute function public.check_channel_update_email_verified();
+
+-- Bloqueio de comentários em perfis para contas de teste temporárias
+create or replace function public.check_comment_not_test_account()
+returns trigger as $$
+declare
+  v_is_temp boolean;
+begin
+  select coalesce((raw_user_meta_data->>'is_temporary')::boolean, false)
+  into v_is_temp
+  from auth.users
+  where id = new.author_id;
+
+  if v_is_temp then
+    raise exception 'Contas de teste não podem comentar em perfis. Crie uma conta definitiva para interagir.';
+  end if;
+
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public, auth;
+
+drop trigger if exists trg_check_comment_not_test_account on public.studioos_profile_comments;
+create trigger trg_check_comment_not_test_account
+before insert on public.studioos_profile_comments
+for each row
+execute function public.check_comment_not_test_account();
+
+-- Limpeza automtica de contas temporrias de teste aps 24h
+create or replace function public.cleanup_expired_test_accounts()
+returns integer as $$
+declare
+  v_count integer := 0;
+begin
+  with deleted as (
+    delete from auth.users
+    where (raw_user_meta_data->>'is_temporary')::boolean = true
+      and (raw_user_meta_data->>'expires_at')::timestamptz < now()
+    returning id
+  )
+  select count(*) into v_count from deleted;
+  return v_count;
+end;
+$$ language plpgsql security definer set search_path = public, auth;

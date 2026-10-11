@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Icon, Panel, Reveal, Button } from "../components/ui";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Icon, Panel, Reveal, Button, VipBadge } from "../components/ui";
 import { cn } from "../utils/cn";
 
 import { type Project, computeProjectStatus } from "./ProjetosScreen";
@@ -14,6 +14,8 @@ import {
   TOOL_ACCENT_STYLES 
 } from "../types/projectSavedItem";
 import { prepareToolRestore, formatFriendlySummary } from "../utils/toolStateRestore";
+import { ProjetoAIChat } from "../components/ProjetoAIChat";
+import { evaluate, verdict } from "../tools/RankIdeia";
 
 interface Task {
   id: string;
@@ -57,17 +59,21 @@ const normalizeSavedItems = (raw: any[]): ProjectSavedItem[] => {
 export function ProjetoDetailScreen({ 
   project, 
   onBack,
+  onDeleteProject,
   onUpdateProject,
   onGo,
 }: { 
   project: Project, 
   onBack: () => void,
+  onDeleteProject?: (id: string) => void,
   onUpdateProject?: (updated: Partial<Project>) => void,
   onGo?: (view: string) => void,
 }) {
   const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const tasksRef = useRef<Task[]>(tasks);
+  tasksRef.current = tasks;
   
   const [showTaskModal, setShowTaskModal] = useState<Task["status"] | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -84,7 +90,23 @@ export function ProjetoDetailScreen({
   const [shareRole, setShareRole] = useState<"editor" | "viewer">("editor");
   const [copied, setCopied] = useState(false);
 
+  const [members, setMembers] = useState<any[]>([]);
+  const isOwner = user?.id === project.owner_id;
+  const currentMember = members.find((m) => m.userId === user?.id);
+  const userRole: "owner" | "editor" | "viewer" = isOwner
+    ? "owner"
+    : (currentMember?.role === "viewer" ? "viewer" : "editor");
+
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState<{ userId: string; name: string } | null>(null);
+  const [isRemovingMember, setIsRemovingMember] = useState(false);
+  const [memberToTransfer, setMemberToTransfer] = useState<{ userId: string; name: string } | null>(null);
+  const [isTransferring, setIsTransferring] = useState(false);
+
   const [applications, setApplications] = useState<any[]>([]);
+  const [processingAppId, setProcessingAppId] = useState<string | null>(null);
   const [notes, setNotes] = useState<any[]>([]);
   const [newNoteContent, setNewNoteContent] = useState("");
   const [editingNote, setEditingNote] = useState<string | null>(null);
@@ -92,6 +114,8 @@ export function ProjetoDetailScreen({
 
   const os = useStudioOS();
   const [savedItems, setSavedItems] = useState<ProjectSavedItem[]>(() => normalizeSavedItems(project.saved_links || []));
+  const savedItemsRef = useRef<ProjectSavedItem[]>(savedItems);
+  savedItemsRef.current = savedItems;
   const [itemsFilter, setItemsFilter] = useState<"todos" | "Criação" | "Publicação" | "Estratégia" | "Link">("todos");
   const [viewingSavedItem, setViewingSavedItem] = useState<ProjectSavedItem | null>(null);
   const [showAddToolModal, setShowAddToolModal] = useState(false);
@@ -134,91 +158,216 @@ export function ProjetoDetailScreen({
   }, [project.external_link]);
 
   useEffect(() => {
-    setSavedItems(normalizeSavedItems(project.saved_links || []));
+    const items = normalizeSavedItems(project.saved_links || []);
+    savedItemsRef.current = items;
+    setSavedItems(items);
   }, [project.saved_links]);
 
   useEffect(() => {
     const handleSavedEvent = (e: any) => {
       if (e.detail?.projectId === project.id && e.detail?.savedItem) {
-        setSavedItems(prev => {
-          if (prev.some(p => p.id === e.detail.savedItem.id)) return prev;
-          return [e.detail.savedItem, ...prev];
-        });
+        const item = e.detail.savedItem;
+        const currentList = savedItemsRef.current;
+        if (!currentList.some(p => p.id === item.id)) {
+          const updated = [item, ...currentList];
+          savedItemsRef.current = updated;
+          setSavedItems(updated);
+          onUpdateProject?.({ saved_links: updated });
+        }
       }
     };
     window.addEventListener("studioos:project_saved_items", handleSavedEvent);
     return () => window.removeEventListener("studioos:project_saved_items", handleSavedEvent);
+  }, [project.id, onUpdateProject]);
+
+  const fetchTasks = useCallback(async () => {
+    if (!supabase || !project.id) return;
+    const { data, error } = await supabase
+      .from("studioos_tasks")
+      .select("*")
+      .eq("project_id", project.id)
+      .order("created_at", { ascending: true });
+
+    if (!error && data) {
+      const loadedTasks: Task[] = data.map(d => ({
+        id: d.id,
+        title: d.title,
+        description: d.description,
+        status: d.status as any,
+        project_id: d.project_id
+      }));
+      tasksRef.current = loadedTasks;
+      setTasks(loadedTasks);
+      syncProjectProgress(loadedTasks);
+    }
   }, [project.id]);
+
+  const fetchApps = useCallback(async () => {
+    if (!supabase || !project.id || project.owner_id !== user?.id) return;
+    try {
+      const { data, error } = await supabase.rpc("get_project_applications", { p_project_id: project.id });
+      if (!error && Array.isArray(data)) {
+        setApplications(data);
+      } else {
+        // Fallback seguro se a RPC falhar
+        const { data: directApps } = await supabase
+          .from("studioos_project_applications")
+          .select("id, user_id, role, status, created_at")
+          .eq("project_id", project.id)
+          .eq("status", "pending");
+
+        if (directApps && directApps.length > 0) {
+          const userIds = directApps.map((a: any) => a.user_id);
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("id, full_name, channel, avatar_url")
+            .in("id", userIds);
+          const profMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+          setApplications(directApps.map((a: any) => {
+            const prof = profMap.get(a.user_id);
+            return {
+              id: a.id,
+              user_id: a.user_id,
+              role: a.role,
+              status: a.status,
+              created_at: a.created_at,
+              channel: prof?.channel,
+              name: prof?.full_name,
+              avatar_url: prof?.avatar_url
+            };
+          }));
+        } else {
+          setApplications([]);
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao carregar aplicações:", err);
+    }
+  }, [project.id, project.owner_id, user?.id]);
+
+  const fetchNotes = useCallback(async () => {
+    if (!supabase || !project.id) return;
+    const { data } = await supabase.from('studioos_project_notes').select('*').eq('project_id', project.id).order('created_at', { ascending: false });
+    if (data && data.length > 0) {
+      const authorIds = Array.from(new Set(data.map(d => d.author_id)));
+      const { data: profiles } = await supabase.from('profiles').select('id, full_name, channel, avatar_url, is_vip').in('id', authorIds);
+      
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+      setNotes(data.map(d => ({ ...d, profile: profileMap.get(d.author_id) })));
+    } else {
+      setNotes([]);
+    }
+  }, [project.id]);
+
+  const fetchMembers = useCallback(async () => {
+    if (!supabase || !project.id) return;
+    try {
+      // Verificar se o usuário atual saiu deste projeto
+      const leftIds: string[] = (() => {
+        try {
+          return JSON.parse(localStorage.getItem(`studioos_left_projects_${user?.id}`) || '[]');
+        } catch {
+          return [];
+        }
+      })();
+      const userHasLeft = Boolean(user?.id && leftIds.includes(project.id));
+
+      const { data: membersData } = await supabase
+        .from('studioos_project_members')
+        .select('user_id, role')
+        .eq('project_id', project.id);
+
+      const allUserIds = Array.from(new Set([
+        ...(project.owner_id ? [project.owner_id] : []),
+        ...(!userHasLeft && user?.id ? [user.id] : []),
+        ...(membersData?.map((m: any) => m.user_id).filter((uid: string) => !(uid === user?.id && userHasLeft)) || []),
+      ]));
+
+      if (allUserIds.length === 0) {
+        setMembers([]);
+        return;
+      }
+
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, channel, avatar_url, is_vip')
+        .in('id', allUserIds);
+
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+      const memberList: any[] = [];
+
+      // 1. Proprietário do Projeto
+      if (project.owner_id) {
+        memberList.push({
+          userId: project.owner_id,
+          role: 'owner',
+          profile: profileMap.get(project.owner_id),
+          isOwner: true,
+        });
+      }
+
+      // 2. Membros registrados vindos do banco
+      (membersData || []).forEach((m: any) => {
+        if (m.user_id === user?.id && userHasLeft) {
+          return;
+        }
+        if (m.user_id !== project.owner_id && !memberList.some(item => item.userId === m.user_id)) {
+          memberList.push({
+            userId: m.user_id,
+            role: m.role || 'editor',
+            profile: profileMap.get(m.user_id) || (user && m.user_id === user.id ? {
+              id: user.id,
+              full_name: user.name,
+              channel: user.channel,
+              avatar_url: user.avatarUrl,
+              is_vip: user.is_vip,
+            } : undefined),
+            isOwner: false,
+          });
+        }
+      });
+
+      // Apenas membros oficialmente registrados ou o dono aparecem na lista de participantes
+      setMembers(memberList);
+    } catch (err) {
+      console.error("Erro ao carregar membros:", err);
+    }
+  }, [project.id, project.owner_id, user]);
 
   useEffect(() => {
     setMounted(true);
     if (!user || !project.id) return;
 
-    const fetchTasks = async () => {
-      if (!supabase) return;
-      const { data, error } = await supabase
-        .from("studioos_tasks")
-        .select("*")
-        .eq("project_id", project.id)
-        .order("created_at", { ascending: true });
-
-      if (!error && data) {
-        const loadedTasks: Task[] = data.map(d => ({
-          id: d.id,
-          title: d.title,
-          description: d.description,
-          status: d.status as any,
-          project_id: d.project_id
-        }));
-        setTasks(loadedTasks);
-        syncProjectProgress(loadedTasks);
-      }
-    };
-
-    const fetchApps = async () => {
-      if (!supabase || project.owner_id !== user.id) return;
-      const { data } = await supabase.rpc("get_project_applications", { p_project_id: project.id });
-      if (data) setApplications(data);
-    };
-
-    const fetchNotes = async () => {
-      if (!supabase) return;
-      const { data } = await supabase.from('studioos_project_notes').select('*').eq('project_id', project.id).order('created_at', { ascending: false });
-      if (data && data.length > 0) {
-        const authorIds = Array.from(new Set(data.map(d => d.author_id)));
-        const { data: profiles } = await supabase.from('profiles').select('id, full_name, channel, avatar_url').in('id', authorIds);
-        
-        const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
-        setNotes(data.map(d => ({ ...d, profile: profileMap.get(d.author_id) })));
-      } else {
-        setNotes([]);
-      }
-    };
-
     fetchTasks();
     fetchApps();
     fetchNotes();
+    fetchMembers();
 
     if (!supabase) return;
 
     const channelTasks = supabase.channel(`tasks_${project.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_tasks', filter: `project_id=eq.${project.id}` }, fetchTasks)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_tasks', filter: `project_id=eq.${project.id}` }, () => fetchTasks())
       .subscribe();
 
     const channelApps = supabase.channel(`apps_${project.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_project_applications', filter: `project_id=eq.${project.id}` }, fetchApps)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_project_applications', filter: `project_id=eq.${project.id}` }, () => fetchApps())
       .subscribe();
 
     const channelNotes = supabase.channel(`notes_${project.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_project_notes', filter: `project_id=eq.${project.id}` }, fetchNotes)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_project_notes', filter: `project_id=eq.${project.id}` }, () => fetchNotes())
+      .subscribe();
+
+    const channelMembers = supabase.channel(`members_${project.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_project_members', filter: `project_id=eq.${project.id}` }, () => fetchMembers())
       .subscribe();
 
     return () => {
       supabase!.removeChannel(channelTasks);
       supabase!.removeChannel(channelApps);
       supabase!.removeChannel(channelNotes);
+      supabase!.removeChannel(channelMembers);
     };
-  }, [user, project.id, project.owner_id]);
+  }, [user?.id, project.id, project.owner_id, fetchTasks, fetchApps, fetchNotes, fetchMembers]);
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -285,8 +434,126 @@ export function ProjetoDetailScreen({
   };
 
   const handleAcceptApplication = async (appId: string) => {
-    if (!supabase) return;
-    await supabase.rpc('accept_application', { p_application_id: appId });
+    if (!supabase || processingAppId) return;
+    setProcessingAppId(appId);
+
+    const appToAccept = applications.find(a => a.id === appId);
+    if (!appToAccept) {
+      setProcessingAppId(null);
+      return;
+    }
+
+    try {
+      // 1. Atualizar estado local imediatamente para resposta instantânea ao usuário
+      setApplications(prev => prev.filter(a => a.id !== appId));
+      setMembers(prev => {
+        if (prev.some(m => m.userId === appToAccept.user_id)) return prev;
+        return [
+          ...prev,
+          {
+            userId: appToAccept.user_id,
+            role: appToAccept.role || 'editor',
+            profile: {
+              id: appToAccept.user_id,
+              full_name: appToAccept.name,
+              channel: appToAccept.channel,
+              avatar_url: appToAccept.avatar_url,
+            },
+            isOwner: false,
+          }
+        ];
+      });
+
+      // 2. Executar via RPC do Supabase
+      let rpcOk = false;
+      try {
+        const { data: rpcSuccess, error: rpcError } = await supabase.rpc('accept_application', { p_application_id: appId });
+        if (!rpcError && rpcSuccess === true) {
+          rpcOk = true;
+        } else {
+          console.warn("RPC accept_application falhou ou retornou false, acionando fallback direto:", rpcError);
+        }
+      } catch (rpcErr) {
+        console.warn("Exceção na RPC accept_application:", rpcErr);
+      }
+
+      // 3. Se a RPC não foi aceita, executar fallback direto com RLS
+      if (!rpcOk) {
+        const { error: insErr } = await supabase
+          .from('studioos_project_members')
+          .upsert({
+            project_id: project.id,
+            user_id: appToAccept.user_id,
+            role: appToAccept.role || 'editor'
+          }, { onConflict: 'project_id,user_id' });
+
+        if (insErr) {
+          console.warn("Upsert studioos_project_members falhou, tentando insert direto:", insErr);
+          await supabase
+            .from('studioos_project_members')
+            .insert({
+              project_id: project.id,
+              user_id: appToAccept.user_id,
+              role: appToAccept.role || 'editor'
+            });
+        }
+
+        const { error: updErr } = await supabase
+          .from('studioos_project_applications')
+          .update({ status: 'accepted' })
+          .eq('id', appId);
+
+        if (updErr) {
+          console.warn("Update application falhou, removendo via delete:", updErr);
+          await supabase
+            .from('studioos_project_applications')
+            .delete()
+            .eq('id', appId);
+        }
+      }
+
+      // 4. Dispara sincronização global e local
+      window.dispatchEvent(new Event("studioos:projects"));
+      await Promise.allSettled([fetchMembers(), fetchApps()]);
+    } catch (err) {
+      console.error("Erro ao aceitar aplicação:", err);
+      // Re-sincroniza caso algo inesperado ocorra
+      fetchApps();
+      fetchMembers();
+    } finally {
+      setProcessingAppId(null);
+    }
+  };
+
+  const handleRejectApplication = async (appId: string) => {
+    if (!supabase || processingAppId) return;
+    setProcessingAppId(appId);
+
+    try {
+      // 1. Atualização otimista
+      setApplications(prev => prev.filter(a => a.id !== appId));
+
+      // 2. Remoção no banco de dados
+      const { error: delErr } = await supabase
+        .from('studioos_project_applications')
+        .delete()
+        .eq('id', appId);
+
+      if (delErr) {
+        console.warn("Delete application falhou, marcando como rejected:", delErr);
+        await supabase
+          .from('studioos_project_applications')
+          .update({ status: 'rejected' })
+          .eq('id', appId);
+      }
+
+      await fetchApps();
+    } catch (err) {
+      console.error("Erro ao recusar aplicação:", err);
+      fetchApps();
+    } finally {
+      setProcessingAppId(null);
+    }
   };
 
   const handleSaveNote = async () => {
@@ -301,7 +568,7 @@ export function ProjetoDetailScreen({
       return;
     }
     if (data) {
-      const { data: profile } = await supabase.from('profiles').select('id, full_name, channel, avatar_url').eq('id', user.id).single();
+      const { data: profile } = await supabase.from('profiles').select('id, full_name, channel, avatar_url, is_vip').eq('id', user.id).single();
       setNotes(prev => [{ ...data, profile }, ...prev]);
     }
     setNewNoteContent("");
@@ -336,6 +603,416 @@ export function ProjetoDetailScreen({
     onBack();
   };
 
+  const handleLeaveProject = async () => {
+    if (!user) return;
+    setIsLeaving(true);
+    try {
+      // 1. Salvar no storage local para nunca mais reaparecer na lista do usuário
+      try {
+        const leftIds: string[] = JSON.parse(localStorage.getItem(`studioos_left_projects_${user.id}`) || '[]');
+        if (!leftIds.includes(project.id)) {
+          leftIds.push(project.id);
+          localStorage.setItem(`studioos_left_projects_${user.id}`, JSON.stringify(leftIds));
+        }
+      } catch {}
+
+      // 2. Otimisticamente remover do estado de participantes
+      setMembers(prev => prev.filter(m => m.userId !== user.id));
+
+      if (supabase) {
+        // 3. Tentar RPC leave_project (se existir no banco)
+        try {
+          await supabase.rpc('leave_project', { p_project_id: project.id });
+        } catch (rpcErr) {
+          console.warn("RPC leave_project não disponível:", rpcErr);
+        }
+
+        // 4. Excluir vínculo de membro e aplicação diretamente no banco
+        try {
+          await supabase.from('studioos_project_members').delete().eq('project_id', project.id).eq('user_id', user.id);
+        } catch (memErr) {
+          console.warn("Exclusão direta studioos_project_members falhou:", memErr);
+        }
+
+        try {
+          await supabase.from('studioos_project_applications').delete().eq('project_id', project.id).eq('user_id', user.id);
+        } catch (appErr) {
+          console.warn("Exclusão direta studioos_project_applications falhou:", appErr);
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao sair do projeto:", err);
+    } finally {
+      setIsLeaving(false);
+      setShowLeaveModal(false);
+      setShowMembersModal(false);
+      onDeleteProject?.(project.id);
+      window.dispatchEvent(new Event("studioos:projects"));
+      window.dispatchEvent(new Event("studioos:history"));
+      onBack();
+    }
+  };
+
+  const handleRemoveMember = (userId: string) => {
+    const m = members.find(item => item.userId === userId);
+    setMemberToRemove({
+      userId,
+      name: m?.profile?.full_name || m?.profile?.channel || 'este participante',
+    });
+  };
+
+  const confirmRemoveMember = async () => {
+    if (!supabase || project.owner_id !== user?.id || !memberToRemove) return;
+    setIsRemovingMember(true);
+    try {
+      await supabase.from('studioos_project_members').delete().eq('project_id', project.id).eq('user_id', memberToRemove.userId);
+      await supabase.from('studioos_project_applications').delete().eq('project_id', project.id).eq('user_id', memberToRemove.userId);
+      setMembers(prev => prev.filter(m => m.userId !== memberToRemove.userId));
+    } catch (err) {
+      console.error("Erro ao remover membro:", err);
+    } finally {
+      setIsRemovingMember(false);
+      setMemberToRemove(null);
+    }
+  };
+
+  const confirmTransferOwnership = async () => {
+    if (!supabase || project.owner_id !== user?.id || !memberToTransfer) return;
+    setIsTransferring(true);
+    try {
+      const newOwnerId = memberToTransfer.userId;
+
+      // 1. Chamar RPC segura no Supabase
+      const { error: rpcError } = await supabase.rpc('transfer_project_ownership', {
+        p_project_id: project.id,
+        p_new_owner_id: newOwnerId,
+      });
+
+      // Se a RPC falhar ou não estiver disponível no Supabase remoto, executar fallback direto
+      if (rpcError) {
+        console.warn("RPC transfer_project_ownership falhou ou indisponível, aplicando fallback direto:", rpcError);
+        await supabase
+          .from('studioos_projects')
+          .update({ owner_id: newOwnerId })
+          .eq('id', project.id);
+
+        if (user?.id) {
+          await supabase
+            .from('studioos_project_members')
+            .upsert({
+              project_id: project.id,
+              user_id: user.id,
+              role: 'editor',
+            }, { onConflict: 'project_id,user_id' });
+        }
+
+        await supabase
+          .from('studioos_project_members')
+          .delete()
+          .eq('project_id', project.id)
+          .eq('user_id', newOwnerId);
+      }
+
+      // 2. Atualizar estado local
+      project.owner_id = newOwnerId;
+      onUpdateProject?.({ owner_id: newOwnerId });
+
+      // Atualiza lista de membros local para refletir a nova posse
+      setMembers(prev => {
+        return prev.map(m => {
+          if (m.userId === newOwnerId) {
+            return { ...m, isOwner: true, role: 'owner' };
+          }
+          if (m.userId === user?.id) {
+            return { ...m, isOwner: false, role: 'editor' };
+          }
+          return m;
+        });
+      });
+
+      window.dispatchEvent(new Event("studioos:projects"));
+    } catch (err) {
+      console.error("Erro ao transferir propriedade:", err);
+    } finally {
+      setIsTransferring(false);
+      setMemberToTransfer(null);
+    }
+  };
+
+  const handleAICreateTask = async (taskData: {
+    title: string;
+    description?: string;
+    status?: Task["status"];
+  }) => {
+    if (userRole === "viewer") {
+      return { success: false, message: "Você tem permissão apenas de Leitor neste projeto e não pode criar tarefas." };
+    }
+    if (!taskData.title?.trim()) {
+      return { success: false, message: "Título da tarefa inválido." };
+    }
+
+    const validStatus = (taskData.status && ["todo", "in_progress", "done"].includes(taskData.status))
+      ? taskData.status
+      : "todo";
+
+    const newTask: Task = {
+      id: `t${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      project_id: project.id,
+      title: taskData.title.trim(),
+      description: taskData.description?.trim() || undefined,
+      status: validStatus,
+      assignee: user?.id,
+    };
+
+    const nextTasks = [...tasksRef.current, newTask];
+    tasksRef.current = nextTasks;
+    setTasks(nextTasks);
+    syncProjectProgress(nextTasks);
+
+    if (supabase) {
+      const { error } = await supabase.from("studioos_tasks").insert([{
+        id: newTask.id,
+        project_id: newTask.project_id,
+        title: newTask.title,
+        description: newTask.description,
+        status: newTask.status,
+        assignee_id: user?.id,
+      }]);
+      if (error) {
+        console.error("Erro supabase ao criar tarefa:", error);
+        return { success: false, message: error.message };
+      }
+    }
+
+    const colLabel = COL_CONFIG[validStatus]?.label || validStatus;
+    return { success: true, message: `Tarefa "${newTask.title}" adicionada em "${colLabel}".` };
+  };
+
+  const handleAIUpdateTaskStatus = async (
+    taskIdOrTitle: string,
+    newStatus: Task["status"]
+  ) => {
+    if (userRole === "viewer") {
+      return { success: false, message: "Você tem permissão apenas de Leitor neste projeto e não pode alterar tarefas." };
+    }
+
+    const currentTasks = tasksRef.current;
+    const task = currentTasks.find(
+      (t) => t.id === taskIdOrTitle || t.title.toLowerCase().trim() === taskIdOrTitle.toLowerCase().trim()
+        || t.title.toLowerCase().includes(taskIdOrTitle.toLowerCase().trim())
+    );
+
+    if (!task) {
+      return { success: false, message: `Tarefa "${taskIdOrTitle}" não encontrada no quadro.` };
+    }
+
+    const nextTasks = currentTasks.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t));
+    tasksRef.current = nextTasks;
+    setTasks(nextTasks);
+    syncProjectProgress(nextTasks);
+
+    if (supabase) {
+      const { error } = await supabase.from("studioos_tasks").update({ status: newStatus }).eq("id", task.id);
+      if (error) {
+        return { success: false, message: error.message };
+      }
+    }
+
+    const colLabel = COL_CONFIG[newStatus]?.label || newStatus;
+    return { success: true, message: `Tarefa "${task.title}" movida para "${colLabel}".` };
+  };
+
+  const handleAIDeleteTask = async (taskIdOrTitle: string) => {
+    if (userRole === "viewer") {
+      return { success: false, message: "Você tem permissão apenas de Leitor neste projeto e não pode excluir tarefas." };
+    }
+
+    const currentTasks = tasksRef.current;
+    const task = currentTasks.find(
+      (t) => t.id === taskIdOrTitle || t.title.toLowerCase().trim() === taskIdOrTitle.toLowerCase().trim()
+        || t.title.toLowerCase().includes(taskIdOrTitle.toLowerCase().trim())
+    );
+
+    if (!task) {
+      return { success: false, message: `Tarefa "${taskIdOrTitle}" não encontrada.` };
+    }
+
+    const nextTasks = currentTasks.filter((t) => t.id !== task.id);
+    tasksRef.current = nextTasks;
+    setTasks(nextTasks);
+    syncProjectProgress(nextTasks);
+
+    if (supabase) {
+      const { error } = await supabase.from("studioos_tasks").delete().eq("id", task.id);
+      if (error) {
+        return { success: false, message: error.message };
+      }
+    }
+
+    return { success: true, message: `Tarefa "${task.title}" removida do projeto.` };
+  };
+
+  const handleAIAddNote = async (content: string) => {
+    if (userRole === "viewer") {
+      return { success: false, message: "Você tem permissão apenas de Leitor e não pode adicionar anotações." };
+    }
+    if (!content.trim()) {
+      return { success: false, message: "Conteúdo da anotação vazio." };
+    }
+
+    if (supabase && user) {
+      const { data, error } = await supabase.from("studioos_project_notes").insert({
+        project_id: project.id,
+        author_id: user.id,
+        content: content.trim(),
+      }).select().single();
+
+      if (error) {
+        return { success: false, message: error.message };
+      }
+      if (data) {
+        const { data: profile } = await supabase.from("profiles").select("id, full_name, channel, avatar_url, is_vip").eq("id", user.id).single();
+        setNotes((prev) => [{ ...data, profile }, ...prev]);
+      }
+    } else {
+      setNotes((prev) => [{
+        id: `note_${Date.now()}`,
+        project_id: project.id,
+        author_id: user?.id || "guest",
+        content: content.trim(),
+        created_at: new Date().toISOString(),
+        profile: user,
+      }, ...prev]);
+    }
+
+    return { success: true, message: "Nova anotação registrada no Bloco de Notas." };
+  };
+
+  const handleAIUpdateProject = async (updates: {
+    status?: string;
+    name?: string;
+    description?: string;
+  }) => {
+    if (userRole !== "owner") {
+      return { success: false, message: "Apenas o proprietário do projeto tem permissão para alterar dados do projeto." };
+    }
+
+    onUpdateProject?.(updates as any);
+
+    if (supabase) {
+      const { error } = await supabase.from("studioos_projects").update(updates).eq("id", project.id);
+      if (error) {
+        return { success: false, message: error.message };
+      }
+    }
+
+    return { success: true, message: "Informações do projeto atualizadas com sucesso." };
+  };
+
+  const handleAISaveToolItem = async (itemData: {
+    tool: string;
+    title: string;
+    summary?: string;
+    content?: string;
+    tag?: string;
+    metadata?: any;
+  }) => {
+    if (userRole === "viewer") {
+      return { success: false, message: "Você tem permissão apenas de Leitor e não pode salvar itens no projeto." };
+    }
+
+    const toolType = itemData.tool;
+    const group = TOOL_GROUP_MAP[toolType] || "Criação";
+    const toolName = TOOL_NAME_MAP[toolType] || "Ferramenta";
+
+    let finalSummary = itemData.summary || "";
+    let finalContent = itemData.content || "";
+    let finalTag = itemData.tag || "";
+    const meta = { ...(itemData.metadata || {}) };
+
+    // Auto-calcula e calibra campos se for Rank de Ideia e tiver ideia
+    if (toolType === "rank") {
+      const ideaText = meta.idea || itemData.title || "";
+      meta.idea = ideaText;
+      if (!meta.niche) meta.niche = project.name || "";
+      
+      const { crits, total } = evaluate(ideaText, meta.niche);
+      const v = verdict(total);
+      
+      if (!finalTag) finalTag = `${total.toFixed(1)}/10`;
+      if (!finalSummary) {
+        finalSummary = `Classificação: ${v.tag} (Nota ${total.toFixed(1)}/10) · Próximo passo: ${v.act}`;
+      }
+      if (!finalContent) {
+        finalContent = `RATING: ${total.toFixed(1)}/10 — ${v.tag} (${v.act})\nIDEIA: ${ideaText}\nNICHO: ${meta.niche}\n\nCRITÉRIOS\n${crits.map((c) => `${c.label.padEnd(18, " ")} ${c.score}/10 — ${c.why}`).join("\n")}\n\nPESOS\npool 26% · prova 20% · conexão 18% · fit 20% · outlier 16%`;
+      }
+    } else if (toolType === "titulos") {
+      if (!meta.tema) meta.tema = itemData.title || "";
+      if (!meta.ctr) meta.ctr = "5.0";
+      if (!meta.platform) meta.platform = "youtube";
+      if (!finalTag) finalTag = "CTR 6.8%";
+      if (!finalSummary) finalSummary = `Opções de títulos geradas para "${meta.tema}"`;
+    } else if (toolType === "hooks") {
+      if (!meta.theme) meta.theme = itemData.title || "";
+      if (!meta.tone) meta.tone = "provocador";
+      if (!meta.format) meta.format = "youtube";
+      if (!finalTag) finalTag = "Ret. 90%";
+      if (!finalSummary) finalSummary = `Ganchos de abertura gerados no tom ${meta.tone}`;
+    } else if (toolType === "roteiro") {
+      if (!meta.blocks) {
+        meta.blocks = {
+          hook: itemData.content?.slice(0, 150) || "",
+          contexto: "Contextualização para a audiência.",
+          dev: itemData.content || "",
+          cta: "Inscreva-se e deixe seu comentário.",
+        };
+      }
+      if (!finalTag) finalTag = "Roteiro";
+      if (!finalSummary) finalSummary = `Roteiro estruturado para "${itemData.title}"`;
+    } else if (toolType === "humanizador") {
+      if (!meta.draft) meta.draft = itemData.content || itemData.title || "";
+      if (!finalTag) finalTag = "88/100";
+      if (!finalSummary) finalSummary = `Texto humanizado (Score 88/100)`;
+    } else if (toolType === "score") {
+      if (!meta.draft) meta.draft = itemData.content || itemData.title || "";
+      if (!meta.format) meta.format = "texto";
+      if (!finalTag) finalTag = "44/50";
+      if (!finalSummary) finalSummary = `Avaliação de post para publicação`;
+    } else if (toolType === "thumbnail") {
+      if (!meta.tema) meta.tema = itemData.title || "";
+      if (!finalTag) finalTag = "Regra 45/45";
+      if (!finalSummary) finalSummary = `Briefing de thumbnail planejado`;
+    } else if (toolType === "receita") {
+      if (!meta.tema) meta.tema = itemData.title || "";
+      if (!finalTag) finalTag = "5 etapas";
+      if (!finalSummary) finalSummary = `Estrutura de receita viral adaptada`;
+    } else if (toolType === "mentor") {
+      if (!meta.situation) meta.situation = itemData.content || itemData.title || "";
+      if (!finalTag) finalTag = "Estratégia";
+      if (!finalSummary) finalSummary = `Diagnóstico estratégico com framework`;
+    }
+
+    const newItem: ProjectSavedItem = {
+      id: `psi_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: toolType,
+      group,
+      toolName,
+      title: itemData.title || `${toolName} - ${new Date().toLocaleDateString("pt-BR")}`,
+      summary: finalSummary,
+      content: finalContent || finalSummary,
+      tag: finalTag,
+      metadata: meta,
+      createdAt: Date.now(),
+    };
+
+    await handleSaveItemDirect(newItem);
+    return {
+      success: true,
+      item: newItem,
+      message: `Item salvo nos Itens Salvos do projeto: [${toolName}] "${newItem.title}".`,
+    };
+  };
+
   const handleSubmitShare = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!shareChannel.trim() || !supabase) return;
@@ -367,17 +1044,22 @@ export function ProjetoDetailScreen({
   };
 
   const handleSaveItemDirect = async (newItem: ProjectSavedItem) => {
-    const updated = [newItem, ...savedItems.filter(s => s.id !== newItem.id)];
+    const currentList = savedItemsRef.current;
+    const updated = [newItem, ...currentList.filter(s => s.id !== newItem.id)];
+    savedItemsRef.current = updated;
     setSavedItems(updated);
+    onUpdateProject?.({ saved_links: updated });
     if (supabase) {
       await supabase.from("studioos_projects").update({ saved_links: updated }).eq("id", project.id);
     }
   };
 
   const handleDeleteSavedItem = async (itemId: string) => {
-    const updated = savedItems.filter(item => item.id !== itemId);
+    const updated = savedItemsRef.current.filter(item => item.id !== itemId);
+    savedItemsRef.current = updated;
     setSavedItems(updated);
     if (viewingSavedItem?.id === itemId) setViewingSavedItem(null);
+    onUpdateProject?.({ saved_links: updated });
     if (supabase) {
       await supabase.from("studioos_projects").update({ saved_links: updated }).eq("id", project.id);
     }
@@ -510,18 +1192,51 @@ export function ProjetoDetailScreen({
                 </button>
               </>
             )}
+            {/* PARTICIPANTES BUTTON (AVAILABLE FOR EVERYONE) */}
+            {project.status !== "trashed" && (
+              <button 
+                onClick={() => setShowMembersModal(true)}
+                className="group relative flex h-9 items-center gap-2 rounded-lg border border-ink-800/60 bg-ink-900/40 px-3 font-mono text-[10px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-all hover:border-signal-400/40 hover:text-white cursor-pointer"
+                title="Ver participantes deste projeto"
+              >
+                {members.length > 0 && (
+                  <div className="flex -space-x-1.5 overflow-hidden py-0.5">
+                    {members.slice(0, 3).map((m, idx) => (
+                      <div
+                        key={m.userId || idx}
+                        className="relative inline-block h-4.5 w-4.5 rounded-full ring-1 ring-ink-950 bg-ink-800 overflow-hidden shrink-0"
+                      >
+                        {m.profile?.avatar_url ? (
+                          <img src={m.profile.avatar_url} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[7.5px] font-bold text-signal-400 bg-signal-400/15">
+                            {m.profile?.full_name?.charAt(0) || m.profile?.channel?.charAt(0) || 'U'}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <span>Participantes</span>
+                <span className="rounded-full bg-signal-400/15 border border-signal-400/30 px-1.5 py-0.2 text-[8.5px] text-signal-400">
+                  {members.length}
+                </span>
+              </button>
+            )}
+
+            {/* OWNER ACTIONS */}
             {user?.id === project.owner_id && project.status !== "trashed" && (
               <>
                 <button 
                   onClick={handleDeleteProject}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-ink-800/50 text-bone-300 transition-all hover:border-red-500/40 hover:bg-red-500/8 hover:text-red-400"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-ink-800/50 text-bone-300 transition-all hover:border-red-500/40 hover:bg-red-500/8 hover:text-red-400 cursor-pointer"
                   title="Mover para Lixeira"
                 >
                   <Icon name="trash" className="h-3.5 w-3.5" />
                 </button>
                 <button 
                   onClick={() => setShowShareModal(true)}
-                  className="relative flex h-9 items-center gap-2 rounded-lg border border-ink-800/50 bg-ink-900/30 px-4 font-mono text-[10px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-all hover:border-ink-600 hover:text-white"
+                  className="relative flex h-9 items-center gap-2 rounded-lg border border-ink-800/50 bg-ink-900/30 px-4 font-mono text-[10px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-all hover:border-ink-600 hover:text-white cursor-pointer"
                 >
                   {applications.length > 0 && (
                     <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-signal-400 text-[8px] font-bold text-ink-950 shadow-[0_0_8px_rgba(242,179,61,0.5)]">
@@ -532,6 +1247,18 @@ export function ProjetoDetailScreen({
                   Compartilhar
                 </button>
               </>
+            )}
+
+            {/* NON-OWNER ACTION: LEAVE PROJECT */}
+            {user?.id !== project.owner_id && project.status !== "trashed" && (
+              <button 
+                onClick={() => setShowLeaveModal(true)}
+                className="flex h-9 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 font-mono text-[10px] font-bold tracking-[0.1em] text-red-400 uppercase transition-all hover:bg-red-500/20 hover:border-red-500/50 cursor-pointer"
+                title="Sair deste projeto compartilhado"
+              >
+                <Icon name="login" className="h-3.5 w-3.5" />
+                <span>Sair do Projeto</span>
+              </button>
             )}
             {project.status !== "trashed" && (
               <>
@@ -726,7 +1453,7 @@ export function ProjetoDetailScreen({
       <div className="grid gap-4 md:grid-cols-2">
         {/* ITENS SALVOS DO PROJETO */}
         <Reveal delay={240}>
-          <div className="overflow-hidden rounded-xl border border-ink-800/40 bg-ink-900/20">
+          <div className="flex flex-col rounded-xl border border-ink-800/40 bg-ink-900/20 max-h-[500px] overflow-hidden">
             {/* Header */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-800/30 px-5 py-3.5">
               <div className="flex items-center gap-2.5">
@@ -785,7 +1512,7 @@ export function ProjetoDetailScreen({
               </div>
             )}
 
-            <div className="flex min-h-[140px] flex-col gap-3 p-4">
+            <div className="flex min-h-[140px] flex-col gap-3 p-4 flex-1 overflow-hidden">
               {showAddLink && (
                 <form onSubmit={handleSaveLink} className="flex flex-col gap-2 rounded-lg bg-ink-900/50 p-3 border border-ink-800">
                   <input 
@@ -835,7 +1562,7 @@ export function ProjetoDetailScreen({
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col gap-2.5 max-h-[420px] overflow-y-auto pr-1">
+                <div className="flex flex-col gap-2.5 max-h-[360px] overflow-y-auto pr-1.5 flex-1">
                   {savedItems
                     .filter(item => {
                       if (itemsFilter === "todos") return true;
@@ -956,14 +1683,14 @@ export function ProjetoDetailScreen({
 
         {/* NOTES */}
         <Reveal delay={300}>
-          <div className="overflow-hidden rounded-xl border border-ink-800/40 bg-ink-900/20">
+          <div className="flex flex-col rounded-xl border border-ink-800/40 bg-ink-900/20 max-h-[500px] overflow-hidden">
             <div className="flex items-center gap-2.5 border-b border-ink-800/30 px-5 py-3.5">
               <Icon name="edit" className="h-3.5 w-3.5 text-bone-300" strokeWidth={1.8} />
               <h3 className="font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase">
                 Bloco de Notas
               </h3>
             </div>
-            <div className="p-5">
+            <div className="p-5 flex flex-col flex-1 overflow-hidden">
               <textarea
                 value={newNoteContent}
                 onChange={(e) => setNewNoteContent(e.target.value)}
@@ -981,7 +1708,7 @@ export function ProjetoDetailScreen({
               </div>
               
               {notes.length > 0 && (
-                <div className="mt-4 max-h-[260px] space-y-2 overflow-y-auto pr-1">
+                <div className="mt-4 max-h-[260px] space-y-2 overflow-y-auto pr-1.5 flex-1">
                   {notes.map(note => (
                     <div key={note.id} className="group relative rounded-lg border border-ink-800/30 bg-ink-950/20 p-3.5 transition-colors hover:border-ink-700/50">
                       {editingNote === note.id ? (
@@ -1033,13 +1760,18 @@ export function ProjetoDetailScreen({
                           <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-bone-300 relative z-0">{note.content}</p>
                           <div className="mt-4 flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              {(note.profile?.avatar_url || (note.author_id === user?.id ? user?.avatarUrl : null)) ? (
-                                <img src={note.profile?.avatar_url || user?.avatarUrl} alt={note.profile?.full_name || 'Usuário'} className="h-5 w-5 rounded-full object-cover" />
-                              ) : (
-                                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-signal-400 text-[9px] font-bold text-ink-950 uppercase">
-                                  {note.profile?.full_name?.charAt(0) || note.profile?.channel?.charAt(0) || user?.name?.charAt(0) || '?'}
-                                </div>
-                              )}
+                              <div className="relative shrink-0">
+                                {(note.profile?.avatar_url || (note.author_id === user?.id ? user?.avatarUrl : null)) ? (
+                                  <img src={note.profile?.avatar_url || user?.avatarUrl} alt={note.profile?.full_name || 'Usuário'} className="h-5 w-5 rounded-full object-cover" />
+                                ) : (
+                                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-signal-400 text-[9px] font-bold text-ink-950 uppercase">
+                                    {note.profile?.full_name?.charAt(0) || note.profile?.channel?.charAt(0) || user?.name?.charAt(0) || '?'}
+                                  </div>
+                                )}
+                                {(note.profile?.is_vip || (note.author_id === user?.id && user?.is_vip)) && (
+                                  <VipBadge size="xs" />
+                                )}
+                              </div>
                               <span className="font-mono text-[9px] text-bone-400">
                                 {note.profile?.channel?.startsWith('@') ? note.profile.channel : `@${note.profile?.channel || 'usuario'}`}
                               </span>
@@ -1058,6 +1790,26 @@ export function ProjetoDetailScreen({
           </div>
         </Reveal>
       </div>
+
+      {/* AI ASSISTANT CARD */}
+      <Reveal delay={340}>
+        <div className="mt-4">
+          <ProjetoAIChat
+            project={project}
+            tasks={tasks}
+            savedItems={savedItems}
+            notes={notes}
+            userRole={userRole}
+            onGo={onGo}
+            onCreateTask={handleAICreateTask}
+            onUpdateTaskStatus={handleAIUpdateTaskStatus}
+            onDeleteTask={handleAIDeleteTask}
+            onAddNote={handleAIAddNote}
+            onUpdateProject={handleAIUpdateProject}
+            onSaveToolItem={handleAISaveToolItem}
+          />
+        </div>
+      </Reveal>
 
       {/* MODAL NOVA TAREFA */}
       {showTaskModal && (
@@ -1401,36 +2153,416 @@ export function ProjetoDetailScreen({
               )}
 
               {/* PENDING APPLICATIONS */}
-              {applications.length > 0 && user?.channel && (
+              {applications.length > 0 && isOwner && (
+                <div className="mt-5 border-t border-ink-800/40 pt-5">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="font-mono text-[9px] tracking-[0.14em] text-signal-400 uppercase">
+                      Aplicações Pendentes ({applications.length})
+                    </h3>
+                  </div>
+                  <div className="space-y-2">
+                    {applications.map(app => {
+                      const isProcessing = processingAppId === app.id;
+                      return (
+                        <div key={app.id} className="flex items-center justify-between gap-3 rounded-lg border border-ink-800/40 bg-ink-950/20 p-3">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-800/60 text-[10px] font-bold text-ink-300 overflow-hidden shrink-0 border border-ink-700/50">
+                              {app.avatar_url ? (
+                                <img src={app.avatar_url} className="h-full w-full object-cover" />
+                              ) : (
+                                app.name?.charAt(0) || app.channel?.charAt(0) || '?'
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[12px] font-medium text-bone-200 truncate">
+                                {app.name || app.channel || 'Usuário'}
+                              </div>
+                              <div className="font-mono text-[9px] text-bone-300 truncate">
+                                {app.channel && <span className="text-bone-400 mr-1">{app.channel} •</span>}
+                                quer acesso de <span className="text-signal-400 font-bold uppercase">{app.role === 'viewer' ? 'Leitor' : 'Editor'}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button 
+                              onClick={() => handleRejectApplication(app.id)}
+                              disabled={isProcessing}
+                              className="rounded-md border border-ink-800/80 bg-ink-900/60 px-2.5 py-1.5 font-mono text-[9px] font-bold tracking-[0.1em] text-bone-400 uppercase hover:bg-ink-800 hover:text-bone-200 disabled:opacity-40 transition-colors cursor-pointer"
+                              title="Recusar solicitação"
+                            >
+                              Recusar
+                            </button>
+                            <button 
+                              onClick={() => handleAcceptApplication(app.id)}
+                              disabled={isProcessing}
+                              className="flex items-center gap-1.5 rounded-md bg-signal-400 px-3 py-1.5 font-mono text-[9px] font-bold tracking-[0.1em] text-ink-950 uppercase hover:bg-signal-300 disabled:opacity-50 transition-all cursor-pointer shadow-[0_4px_12px_-2px_rgba(242,179,61,0.3)]"
+                            >
+                              {isProcessing ? (
+                                <>
+                                  <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-ink-950 border-t-transparent" />
+                                  <span>Aceitando...</span>
+                                </>
+                              ) : (
+                                "Aceitar"
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* CURRENT MEMBERS */}
+              {members.length > 0 && (
                 <div className="mt-5 border-t border-ink-800/40 pt-5">
                   <h3 className="mb-3 font-mono text-[9px] tracking-[0.14em] text-signal-400 uppercase">
-                    Aplicações Pendentes ({applications.length})
+                    Membros Atuais ({members.length})
                   </h3>
-                  <div className="space-y-2">
-                    {applications.map(app => (
-                      <div key={app.id} className="flex items-center justify-between rounded-lg border border-ink-800/40 bg-ink-950/20 p-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-800/60 text-[10px] font-bold text-ink-300 overflow-hidden">
-                            {app.avatar_url ? <img src={app.avatar_url} className="h-full w-full object-cover" /> : app.name?.charAt(0) || '?'}
+                  <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                    {members.map((m) => (
+                      <div key={m.userId} className="flex items-center justify-between rounded-lg border border-ink-800/40 bg-ink-950/20 p-2.5">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-800/60 text-[10px] font-bold text-ink-300 overflow-hidden shrink-0">
+                            {m.profile?.avatar_url ? (
+                              <img src={m.profile.avatar_url} className="h-full w-full object-cover" />
+                            ) : (
+                              m.profile?.full_name?.charAt(0) || m.profile?.channel?.charAt(0) || 'U'
+                            )}
                           </div>
-                          <div>
-                            <div className="text-[12px] font-medium text-bone-200">{app.name}</div>
-                            <div className="font-mono text-[9px] text-bone-300">
-                              quer acesso de <span className="text-signal-400">{app.role}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[12px] font-medium text-bone-200 truncate">
+                              {m.profile?.full_name || m.profile?.channel || 'Membro'}
+                              {m.userId === user?.id && <span className="ml-1 text-[9px] text-signal-400 font-bold">(Você)</span>}
+                            </div>
+                            <div className="font-mono text-[8.5px] text-bone-400">
+                              {m.isOwner ? '👑 Proprietário' : (m.role === 'viewer' ? 'Leitor' : 'Editor')}
                             </div>
                           </div>
                         </div>
-                        <button 
-                          onClick={() => handleAcceptApplication(app.id)}
-                          className="rounded-md bg-signal-400 px-3 py-1.5 font-mono text-[9px] font-bold tracking-[0.1em] text-ink-950 uppercase hover:bg-signal-300"
-                        >
-                          Aceitar
-                        </button>
+                        {user?.id === project.owner_id && !m.isOwner && (
+                          <button
+                            onClick={() => handleRemoveMember(m.userId)}
+                            className="text-ink-500 hover:text-red-400 p-1 transition-colors cursor-pointer"
+                            title="Remover membro"
+                          >
+                            <Icon name="trash" className="h-3 w-3" />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE PARTICIPANTES */}
+      {showMembersModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/85 p-4 backdrop-blur-md"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowMembersModal(false); }}
+        >
+          <div className="relative w-full max-w-[500px] overflow-hidden rounded-2xl border border-ink-700/50 bg-ink-900 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)]">
+            {/* Header */}
+            <div className="border-b border-ink-800/60 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-signal-400/30 bg-signal-400/10 text-signal-400">
+                  <Icon name="user" className="h-4 w-4" />
+                </div>
+                <div>
+                  <h2 className="font-display text-lg font-bold text-bone-50">Participantes do Projeto</h2>
+                  <p className="font-mono text-[9px] tracking-[0.12em] text-bone-300 uppercase">
+                    {members.length} {members.length === 1 ? 'pessoa participando' : 'pessoas participando'}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowMembersModal(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-bone-300 transition-colors hover:bg-ink-800 hover:text-bone-200 cursor-pointer"
+              >
+                <Icon name="close" className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* List */}
+            <div className="p-6 max-h-[380px] overflow-y-auto space-y-2.5">
+              {members.length === 0 ? (
+                <div className="py-8 text-center text-ink-400 font-mono text-[11px]">
+                  Nenhum participante encontrado.
+                </div>
+              ) : (
+                members.map((m) => {
+                  const isCurrentUser = m.userId === user?.id;
+                  const isOwner = m.isOwner;
+
+                  return (
+                    <div 
+                      key={m.userId}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-ink-800/60 bg-ink-950/40 p-3.5 transition-all hover:border-ink-700/60"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="relative shrink-0">
+                          {m.profile?.avatar_url ? (
+                            <img 
+                              src={m.profile.avatar_url} 
+                              alt={m.profile.full_name || 'Usuário'} 
+                              className="h-9 w-9 rounded-full object-cover border border-ink-700"
+                            />
+                          ) : (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-signal-400/15 border border-signal-400/30 text-signal-400 text-[11px] font-bold uppercase">
+                              {m.profile?.full_name?.charAt(0) || m.profile?.channel?.charAt(0) || 'U'}
+                            </div>
+                          )}
+                          {m.profile?.is_vip && (
+                            <div className="absolute -bottom-1 -right-1">
+                              <VipBadge size="xs" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[13px] font-semibold text-bone-100 truncate">
+                              {m.profile?.full_name || m.profile?.channel || (isOwner ? 'Proprietário' : 'Colaborador')}
+                            </span>
+                            {isCurrentUser && (
+                              <span className="rounded bg-signal-400/15 border border-signal-400/30 px-1 py-0.2 font-mono text-[8px] font-bold text-signal-400">
+                                VOCÊ
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 font-mono text-[9px] text-ink-400">
+                            {m.profile?.channel && (
+                              <span>{m.profile.channel.startsWith('@') ? m.profile.channel : `@${m.profile.channel}`}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Role & Action */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isOwner ? (
+                          <span className="flex items-center gap-1 rounded-md border border-signal-400/30 bg-signal-400/10 px-2 py-1 font-mono text-[9px] font-bold text-signal-400 uppercase">
+                            <Icon name="crown" className="h-3 w-3" />
+                            Proprietário
+                          </span>
+                        ) : (
+                          <span className="rounded-md border border-ink-800 bg-ink-900 px-2 py-1 font-mono text-[9px] font-bold text-bone-400 uppercase">
+                            {m.role === 'viewer' ? 'Leitor' : 'Editor'}
+                          </span>
+                        )}
+
+                        {/* Owner can transfer ownership or remove collaborator */}
+                        {user?.id === project.owner_id && !isOwner && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                setMemberToTransfer({
+                                  userId: m.userId,
+                                  name: m.profile?.full_name || m.profile?.channel || 'este participante',
+                                });
+                              }}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-400 hover:text-signal-400 hover:bg-signal-400/10 transition-colors cursor-pointer"
+                              title="Transferir propriedade do projeto"
+                            >
+                              <Icon name="crown" className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setMemberToRemove({
+                                  userId: m.userId,
+                                  name: m.profile?.full_name || m.profile?.channel || 'este participante',
+                                });
+                              }}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-400 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                              title="Remover do projeto"
+                            >
+                              <Icon name="trash" className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Current user non-owner can leave */}
+                        {isCurrentUser && !isOwner && (
+                          <button
+                            onClick={() => {
+                              setShowMembersModal(false);
+                              setShowLeaveModal(true);
+                            }}
+                            className="flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 font-mono text-[9px] font-bold text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
+                            title="Sair do projeto"
+                          >
+                            <Icon name="login" className="h-3 w-3" />
+                            Sair
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-ink-800/60 bg-ink-950/40 px-6 py-3.5 flex items-center justify-between">
+              {user?.id === project.owner_id ? (
+                <button
+                  onClick={() => {
+                    setShowMembersModal(false);
+                    setShowShareModal(true);
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg bg-signal-400/10 border border-signal-400/30 px-3 py-1.5 font-mono text-[9px] font-bold text-signal-400 uppercase hover:bg-signal-400 hover:text-ink-950 transition-all cursor-pointer"
+                >
+                  <Icon name="plus" className="h-3 w-3" />
+                  Convidar pessoas
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setShowMembersModal(false);
+                    setShowLeaveModal(true);
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-1.5 font-mono text-[9px] font-bold text-red-400 uppercase hover:bg-red-500/20 transition-all cursor-pointer"
+                >
+                  <Icon name="login" className="h-3 w-3" />
+                  Sair deste projeto
+                </button>
+              )}
+
+              <button
+                onClick={() => setShowMembersModal(false)}
+                className="rounded-lg px-4 py-1.5 font-mono text-[10px] uppercase text-bone-400 hover:text-bone-200 cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REMOVER PARTICIPANTE (APENAS DONO) */}
+      {memberToRemove && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div 
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-red-500/20 bg-ink-950 shadow-[0_32px_64px_-12px_rgba(239,68,68,0.15)]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center justify-center p-8 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+                <Icon name="trash" className="h-6 w-6" strokeWidth={1.5} />
+              </div>
+              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Remover Participante</h2>
+              <p className="text-[13px] leading-relaxed text-bone-300">
+                Tem certeza que deseja remover <strong className="text-bone-100">{memberToRemove.name}</strong> deste projeto? 
+                Essa pessoa não terá mais acesso às tarefas, ferramentas salvas e anotações.
+              </p>
+            </div>
+            
+            <div className="flex gap-3 border-t border-ink-800/50 bg-ink-900/30 p-5">
+              <button 
+                onClick={() => setMemberToRemove(null)}
+                disabled={isRemovingMember}
+                className="flex-1 rounded-xl border border-ink-800 bg-ink-900 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-100 disabled:opacity-40 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={confirmRemoveMember}
+                disabled={isRemovingMember}
+                className="flex-1 rounded-xl bg-red-500 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-white uppercase shadow-[0_8px_20px_-6px_rgba(239,68,68,0.5)] transition-all hover:bg-red-600 disabled:opacity-40 cursor-pointer"
+              >
+                {isRemovingMember ? "Removendo..." : "Confirmar e Remover"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TRANSFERIR PROPRIEDADE (APENAS DONO) */}
+      {memberToTransfer && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div 
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-signal-400/30 bg-ink-950 shadow-[0_32px_64px_-12px_rgba(242,179,61,0.2)]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center justify-center p-8 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-signal-400/10 text-signal-400 border border-signal-400/20">
+                <Icon name="crown" className="h-6 w-6" strokeWidth={1.5} />
+              </div>
+              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Transferir Propriedade</h2>
+              <p className="text-[13px] leading-relaxed text-bone-300">
+                Deseja transferir a propriedade de <strong className="text-bone-100">{project.name}</strong> para <strong className="text-signal-400">{memberToTransfer.name}</strong>?
+              </p>
+              <div className="mt-4 rounded-xl border border-ink-800/80 bg-ink-900/60 p-3.5 text-left text-[11.5px] leading-relaxed text-bone-400">
+                <p className="flex items-start gap-2">
+                  <span className="text-signal-400 font-bold shrink-0 mt-0.5">•</span>
+                  <span>O novo proprietário terá controle total do projeto, incluindo exclusão e gestão de participantes.</span>
+                </p>
+                <p className="flex items-start gap-2 mt-2">
+                  <span className="text-signal-400 font-bold shrink-0 mt-0.5">•</span>
+                  <span>Você continuará participando do projeto como <strong className="text-bone-200">Editor</strong>.</span>
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 border-t border-ink-800/50 bg-ink-900/30 p-5">
+              <button 
+                onClick={() => setMemberToTransfer(null)}
+                disabled={isTransferring}
+                className="flex-1 rounded-xl border border-ink-800 bg-ink-900 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-100 disabled:opacity-40 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={confirmTransferOwnership}
+                disabled={isTransferring}
+                className="flex-1 rounded-xl bg-signal-400 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-ink-950 uppercase shadow-[0_8px_20px_-6px_rgba(242,179,61,0.5)] transition-all hover:bg-signal-300 disabled:opacity-40 cursor-pointer"
+              >
+                {isTransferring ? "Transferindo..." : "Transferir Posse"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL SAIR DO PROJETO (QUANDO NÃO FOR DONO) */}
+      {showLeaveModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
+          <div 
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-red-500/20 bg-ink-950 shadow-[0_32px_64px_-12px_rgba(239,68,68,0.15)]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center justify-center p-8 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+                <Icon name="login" className="h-6 w-6" strokeWidth={1.5} />
+              </div>
+              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Sair do Projeto</h2>
+              <p className="text-[13px] leading-relaxed text-bone-300">
+                Tem certeza que deseja sair de <strong className="text-bone-100">{project.name}</strong>? 
+                Você deixará de ser participante deste projeto e não terá mais acesso às tarefas, ferramentas salvas e anotações.
+              </p>
+            </div>
+            
+            <div className="flex gap-3 border-t border-ink-800/50 bg-ink-900/30 p-5">
+              <button 
+                onClick={() => setShowLeaveModal(false)}
+                disabled={isLeaving}
+                className="flex-1 rounded-xl border border-ink-800 bg-ink-900 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-100 disabled:opacity-40 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleLeaveProject}
+                disabled={isLeaving}
+                className="flex-1 rounded-xl bg-red-500 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-white uppercase shadow-[0_8px_20px_-6px_rgba(239,68,68,0.5)] transition-all hover:bg-red-600 disabled:opacity-40 cursor-pointer"
+              >
+                {isLeaving ? "Saindo..." : "Confirmar e Sair"}
+              </button>
             </div>
           </div>
         </div>
@@ -1463,12 +2595,16 @@ export function ProjetoDetailScreen({
               </button>
               <button 
                 onClick={async () => {
-                  if (supabase) {
-                    await supabase.from("studioos_projects").update({ status: "trashed" }).eq("id", project.id);
-                  }
-                  window.dispatchEvent(new Event("studioos:history"));
+                  const idToDelete = project.id;
+                  onDeleteProject?.(idToDelete);
                   setShowDeleteModal(false);
                   onBack();
+
+                  if (supabase) {
+                    await supabase.from("studioos_projects").update({ status: "trashed" }).eq("id", idToDelete);
+                  }
+                  window.dispatchEvent(new Event("studioos:history"));
+                  window.dispatchEvent(new Event("studioos:projects"));
                 }}
                 className="flex-1 rounded-lg bg-red-500/10 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-red-500 uppercase transition-colors hover:bg-red-500 hover:text-white"
               >
@@ -1542,13 +2678,17 @@ export function ProjetoDetailScreen({
               </button>
               <button 
                 onClick={async () => {
-                  if (supabase) {
-                    await supabase.from("studioos_projects").delete().eq("id", project.id);
-                    await supabase.from("studioos_saved_items").delete().filter("metadata->>id", "eq", String(project.id));
-                  }
-                  window.dispatchEvent(new Event("studioos:history"));
+                  const idToDelete = project.id;
+                  onDeleteProject?.(idToDelete);
                   setShowDeleteForeverModal(false);
                   onBack();
+
+                  if (supabase) {
+                    await supabase.from("studioos_projects").delete().eq("id", idToDelete);
+                    await supabase.from("studioos_saved_items").delete().filter("metadata->>id", "eq", String(idToDelete));
+                  }
+                  window.dispatchEvent(new Event("studioos:history"));
+                  window.dispatchEvent(new Event("studioos:projects"));
                 }}
                 className="flex-1 rounded-lg bg-red-600 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-white uppercase transition-colors hover:bg-red-700"
               >

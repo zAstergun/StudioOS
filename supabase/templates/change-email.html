@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aster Account &bull; StudioOS — Alteração de E-mail</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #08080a;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #e2e2e8;
+    }
+    table { border-collapse: separate; }
+    .btn-shield:hover {
+      background-color: #27b889 !important;
+      box-shadow: 0 0 25px rgba(47, 212, 160, 0.45) !important;
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 40px 15px; background-color: #08080a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td align="center">
+        
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 560px; background-color: #0e0e12; border: 1px solid #232328; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.7);">
+          
+          <!-- LINHA VERDE DE SEGURANÇA -->
+          <tr>
+            <td height="3" style="background: linear-gradient(90deg, #2FD4A0 0%, #6E93F5 100%); font-size: 1px; line-height: 1px;">&nbsp;</td>
+          </tr>
+
+          <!-- HEADER CO-BRANDING -->
+          <tr>
+            <td style="padding: 36px 40px 20px 40px; text-align: center;">
+              
+              <!-- BADGE HÍBRIDO -->
+              <div style="display: inline-block; background-color: rgba(47, 212, 160, 0.08); border: 1px solid rgba(47, 212, 160, 0.3); border-radius: 20px; padding: 5px 14px; margin-bottom: 14px;">
+                <span style="font-family: 'SF Mono', Consolas, Monaco, monospace; font-size: 10px; font-weight: 700; color: #2FD4A0; letter-spacing: 0.14em; text-transform: uppercase;">
+                  ASTER ACCOUNT &bull; SEGURANÇA
+                </span>
+              </div>
+
+              <div>
+                <div style="display: inline-block; width: 44px; height: 44px; background-color: rgba(47, 212, 160, 0.12); border: 1px solid rgba(47, 212, 160, 0.35); border-radius: 14px; line-height: 44px; font-size: 20px; margin-bottom: 12px;">
+                  🛡️
+                </div>
+              </div>
+
+              <div style="font-family: monospace; font-size: 10px; color: #2FD4A0; text-transform: uppercase; letter-spacing: 0.18em; font-weight: 700;">
+                PROTOCOLO DE SEGURANÇA CENTRAL ASTERDEV
+              </div>
+              <h1 style="margin: 10px 0 0 0; font-size: 23px; font-weight: 800; color: #ffffff; letter-spacing: -0.6px;">
+                Confirmar alteração de e-mail
+              </h1>
+            </td>
+          </tr>
+
+          <!-- CONTEÚDO -->
+          <tr>
+            <td style="padding: 0 40px 36px 40px;">
+              
+              <p style="margin: 0 0 24px 0; font-size: 14.5px; line-height: 1.6; color: #9d9da6; text-align: center;">
+                Recebemos uma solicitação para atualizar o e-mail principal da sua <strong style="color: #ffffff;">Aster Account</strong> vinculada ao <strong style="color: #2FD4A0;">StudioOS</strong>.
+              </p>
+
+              <!-- CARD DE TRANSIÇÃO DE E-MAIL -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #121216; border: 1px solid #24242d; border-radius: 14px; margin-bottom: 28px;">
+                <tr>
+                  <td style="padding: 20px 22px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td width="45%" style="vertical-align: top;">
+                          <div style="font-size: 10.5px; color: #71717a; text-transform: uppercase; font-family: monospace; letter-spacing: 0.1em;">
+                            E-MAIL ATUAL
+                          </div>
+                          <div style="font-size: 13.5px; color: #d4d4d8; font-weight: 600; margin-top: 4px; word-break: break-all;">
+                            {{ .Email }}
+                          </div>
+                        </td>
+                        <td width="10%" align="center" style="vertical-align: middle;">
+                          <span style="font-size: 18px; color: #2FD4A0;">&rarr;</span>
+                        </td>
+                        <td width="45%" style="vertical-align: top; text-align: right;">
+                          <div style="font-size: 10.5px; color: #2FD4A0; text-transform: uppercase; font-family: monospace; letter-spacing: 0.1em; font-weight: 700;">
+                            NOVO E-MAIL
+                          </div>
+                          <div style="font-size: 13.5px; color: #ffffff; font-weight: 700; margin-top: 4px; word-break: break-all;">
+                            {{ .NewEmail }}
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- BOTÃO DE CONFIRMAÇÃO (CTA VERDE ESMERALDA) -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 28px;">
+                <tr>
+                  <td align="center">
+                    <a href="{{ .ConfirmationURL }}" class="btn-shield" style="display: inline-block; background: linear-gradient(135deg, #2FD4A0 0%, #20B384 100%); color: #070709; font-size: 14.5px; font-weight: 800; text-align: center; padding: 15px 36px; border-radius: 12px; letter-spacing: 0.02em; box-shadow: 0 4px 20px rgba(47, 212, 160, 0.35); text-decoration: none;">
+                      Confirmar e Atualizar E-mail &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CÓDIGO TOKEN -->
+              <div style="background-color: #121217; border: 1px dashed #282832; border-radius: 12px; padding: 14px 20px; text-align: center; margin-bottom: 26px;">
+                <div style="font-size: 10.5px; color: #7f7f88; text-transform: uppercase; letter-spacing: 0.12em; font-family: monospace; margin-bottom: 6px;">
+                  Ou confirme com o código de segurança:
+                </div>
+                <div style="font-family: monospace; font-size: 22px; font-weight: 800; letter-spacing: 0.3em; color: #2FD4A0;">
+                  {{ .Token }}
+                </div>
+              </div>
+
+              <!-- ALERTA DE SEGURANÇA -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: rgba(242,96,76,0.06); border: 1px solid rgba(242,96,76,0.25); border-radius: 12px;">
+                <tr>
+                  <td style="padding: 14px 18px; font-size: 12px; color: #fca5a5; line-height: 1.55;">
+                    <strong style="color: #F2604C;">Não reconhece esta solicitação?</strong><br>
+                    Se você não solicitou esta alteração, não clique no link. Altere a senha da sua Aster Account imediatamente para proteger seus dados em todos os serviços.
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="background-color: #0a0a0d; border-top: 1px solid #18181e; padding: 22px 40px; text-align: center; font-size: 10.5px; color: #52525b; font-family: monospace;">
+              Aster Account &bull; StudioOS Security Guard &bull; Link válido por 24 horas
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

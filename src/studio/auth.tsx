@@ -30,6 +30,7 @@ export type StudioUser = {
   name: string;
   channel?: string;
   avatarUrl?: string;
+  coverUrl?: string;
   bio?: string;
   links?: Record<string, string>;
   card_visibility?: {
@@ -41,6 +42,9 @@ export type StudioUser = {
   provider: "email" | "google" | "discord" | "demo";
   createdAt: string;
   email_confirmed_at?: string;
+  is_temporary?: boolean;
+  expires_at?: string;
+  is_vip?: boolean;
 };
 
 export type OAuthProvider = "google" | "discord";
@@ -50,7 +54,7 @@ export const OAUTH_LABEL: Record<OAuthProvider, string> = {
   discord: "Discord",
 };
 
-type Result = { ok: true; message?: string; needsConfirmation?: boolean } | { ok: false; error: string };
+type Result = { ok: true; message?: string; needsConfirmation?: boolean; coverUrl?: string } | { ok: false; error: string };
 
 type AuthCtx = {
   user: StudioUser | null;
@@ -58,8 +62,9 @@ type AuthCtx = {
   demo: boolean;
   recovering: boolean;
   signIn: (email: string, password: string) => Promise<Result>;
-  signUp: (input: { email: string; password: string; name: string; channel?: string }) => Promise<Result>;
+  signUp: (input: { email?: string; password: string; name: string; channel?: string }) => Promise<Result>;
   signInWithOAuth: (provider: OAuthProvider) => Promise<Result>;
+  signInWithTestAccount: () => Promise<Result>;
   sendMagicLink: (email: string) => Promise<Result>;
   resetPassword: (email: string) => Promise<Result>;
   updatePassword: (password: string) => Promise<Result>;
@@ -68,6 +73,7 @@ type AuthCtx = {
     channel: string,
     extra?: {
       bio?: string;
+      cover_url?: string | null;
       links?: Record<string, string>;
       card_visibility?: {
         stats?: boolean;
@@ -80,6 +86,7 @@ type AuthCtx = {
   ) => Promise<Result>;
   updateEmail: (email: string) => Promise<Result>;
   updateAvatar: (file: File) => Promise<Result>;
+  updateCover: (file: File | string | null) => Promise<Result>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<Result>;
   linkIdentity: (provider: OAuthProvider) => Promise<Result>;
@@ -117,7 +124,7 @@ type SbUser = {
   email?: string;
   created_at: string;
   email_confirmed_at?: string;
-  app_metadata?: { provider?: string };
+  app_metadata?: { provider?: string; is_vip?: boolean; [key: string]: unknown };
   user_metadata?: Record<string, unknown>;
 };
 
@@ -143,18 +150,22 @@ function mapUser(u: SbUser): StudioUser {
       (meta.channel as string) ||
       (provider === "discord" ? ((meta.user_name as string) ? `@${meta.user_name as string}` : undefined) : undefined),
     avatarUrl: (meta.avatar_url as string) || (meta.picture as string) || undefined,
+    coverUrl: (meta.cover_url as string) || (meta.banner_url as string) || undefined,
     bio: (meta.bio as string) || undefined,
     links: (meta.links as Record<string, string>) || undefined,
     card_visibility: (meta.card_visibility as any) || undefined,
     provider,
     createdAt: u.created_at,
     email_confirmed_at: u.email_confirmed_at,
+    is_temporary: Boolean(meta.is_temporary),
+    expires_at: (meta.expires_at as string) || undefined,
+    is_vip: Boolean(meta.is_vip || u.app_metadata?.is_vip),
   };
 }
 
 /* -------------------------------------------------------- demo store */
 
-type DemoRecord = { email: string; password: string; name: string; channel?: string; createdAt: string };
+type DemoRecord = { email: string; password: string; name: string; channel?: string; createdAt: string; is_temporary?: boolean; expires_at?: string; is_vip?: boolean };
 
 function demoUsers(): DemoRecord[] {
   try {
@@ -172,6 +183,9 @@ function demoUserFrom(r: DemoRecord, provider: StudioUser["provider"] = "demo"):
     channel: r.channel,
     provider,
     createdAt: r.createdAt,
+    is_temporary: r.is_temporary,
+    expires_at: r.expires_at,
+    is_vip: Boolean(r.is_vip),
   };
 }
 
@@ -185,11 +199,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [recovering, setRecovering] = useState(false);
   const demo = !isSupabaseConfigured;
 
+  const syncUserWithProfile = useCallback(async (baseUser: StudioUser | null): Promise<StudioUser | null> => {
+    if (!baseUser || !supabase) return baseUser;
+    try {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("is_vip, avatar_url, cover_url, channel, full_name")
+        .eq("id", baseUser.id)
+        .maybeSingle();
+      if (prof) {
+        return {
+          ...baseUser,
+          is_vip: typeof prof.is_vip === "boolean" ? prof.is_vip : baseUser.is_vip,
+          avatarUrl: prof.avatar_url || baseUser.avatarUrl,
+          coverUrl: prof.cover_url || baseUser.coverUrl,
+          channel: prof.channel || baseUser.channel,
+          name: prof.full_name || baseUser.name,
+        };
+      }
+    } catch {
+      // ignore
+    }
+    return baseUser;
+  }, []);
+
   useEffect(() => {
     if (!supabase) {
       try {
         const raw = localStorage.getItem(DEMO_KEY);
-        if (raw) setUser(JSON.parse(raw) as StudioUser);
+        if (raw) {
+          const parsed = JSON.parse(raw) as StudioUser;
+          if (parsed.is_temporary && parsed.expires_at && new Date(parsed.expires_at).getTime() < Date.now()) {
+            localStorage.removeItem(DEMO_KEY);
+            setUser(null);
+          } else {
+            setUser(parsed);
+          }
+        }
       } catch {
         /* ignore */
       }
@@ -197,14 +243,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ? mapUser(data.session.user as SbUser) : null);
+    const client = supabase;
+
+    client.auth.getSession().then(async ({ data }) => {
+      let u = data.session?.user ? mapUser(data.session.user as SbUser) : null;
+      if (u) {
+        u = await syncUserWithProfile(u);
+      }
+      if (u?.is_temporary && u.expires_at && new Date(u.expires_at).getTime() < Date.now()) {
+        client.auth.signOut();
+        setUser(null);
+      } else {
+        setUser(u);
+      }
       setLoading(false);
     });
 
-    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data } = client.auth.onAuthStateChange(async (event, session) => {
       if (event === "PASSWORD_RECOVERY") setRecovering(true);
-      setUser(session?.user ? mapUser(session.user as SbUser) : null);
+      let u = session?.user ? mapUser(session.user as SbUser) : null;
+      if (u) {
+        u = await syncUserWithProfile(u);
+      }
+      if (u?.is_temporary && u.expires_at && new Date(u.expires_at).getTime() < Date.now()) {
+        client.auth.signOut();
+        setUser(null);
+      } else {
+        setUser(u);
+      }
     });
     return () => data.subscription.unsubscribe();
   }, []);
@@ -245,12 +311,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback<AuthCtx["signUp"]>(
     async ({ email, password, name, channel }) => {
+      const cleanChannel = channel ? channel.replace(/^@/, "").trim().toLowerCase() : "";
+      const isUsernameOnly = !email || !email.trim();
+      const targetEmail = isUsernameOnly
+        ? `${cleanChannel}@user.asterdev.me`
+        : email.trim();
+
+      if (!cleanChannel && isUsernameOnly) {
+        return { ok: false, error: "Informe seu e-mail ou seu nome de usuário." };
+      }
+
       if (!supabase) {
         await wait(800);
         const users = demoUsers();
-        if (users.some((u) => u.email.toLowerCase() === email.toLowerCase()))
-          return { ok: false, error: "Já existe uma conta com esse e-mail. Tente entrar." };
-        const rec: DemoRecord = { email, password, name, channel, createdAt: new Date().toISOString() };
+        if (users.some((u) => u.email.toLowerCase() === targetEmail.toLowerCase() || (cleanChannel && (u.channel || "").replace(/^@/, "").toLowerCase() === cleanChannel)))
+          return { ok: false, error: "Já existe uma conta com esse e-mail ou nome de usuário. Tente entrar." };
+        const rec: DemoRecord = { 
+          email: targetEmail, 
+          password, 
+          name, 
+          channel: cleanChannel ? `@${cleanChannel}` : undefined, 
+          createdAt: new Date().toISOString() 
+        };
         localStorage.setItem(DEMO_USERS, JSON.stringify([...users, rec]));
         const u = demoUserFrom(rec);
         localStorage.setItem(DEMO_KEY, JSON.stringify(u));
@@ -258,22 +340,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: true };
       }
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: targetEmail,
         password,
         options: {
           emailRedirectTo: redirectTo,
-          data: { full_name: name, channel: channel || null },
+          data: { 
+            full_name: name, 
+            channel: cleanChannel ? `@${cleanChannel}` : null,
+            registered_with_username: isUsernameOnly
+          },
         },
       });
       if (error) return { ok: false, error: translate(error.message) };
       // Supabase devolve um usuário sem identities quando o e-mail já existe (proteção anti-enumeração)
       if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0)
-        return { ok: false, error: "Já existe uma conta com esse e-mail. Tente entrar." };
+        return { ok: false, error: "Já existe uma conta com esse e-mail ou usuário. Tente entrar." };
+
+      if (isUsernameOnly && !data.session) {
+        const loginRes = await supabase.auth.signInWithPassword({
+          email: targetEmail,
+          password
+        });
+        if (loginRes.error) return { ok: false, error: translate(loginRes.error.message) };
+        return { ok: true };
+      }
+
       if (!data.session)
         return {
           ok: true,
           needsConfirmation: true,
-          message: `Enviamos um link de confirmação para ${email}.`,
+          message: `Enviamos um link de confirmação para ${targetEmail}.`,
         };
       return { ok: true };
     },
@@ -318,6 +414,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [redirectTo]
   );
+
+  const signInWithTestAccount = useCallback<AuthCtx["signInWithTestAccount"]>(async () => {
+    const randSuffix = Math.random().toString(36).substring(2, 6) + Date.now().toString(36).slice(-4);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const tempEmail = `teste_${randSuffix}@temp.asterdev.me`;
+    const tempName = `Conta Teste #${randSuffix.slice(0, 5)}`;
+    const tempChannel = `@teste_${randSuffix}`;
+
+    if (!supabase) {
+      await wait(500);
+      const u: StudioUser = {
+        id: `demo-temp-${randSuffix}`,
+        email: tempEmail,
+        name: tempName,
+        channel: tempChannel,
+        provider: "demo",
+        createdAt: new Date().toISOString(),
+        is_temporary: true,
+        expires_at: expiresAt,
+      };
+      localStorage.setItem(DEMO_KEY, JSON.stringify(u));
+      setUser(u);
+      return { ok: true };
+    }
+
+    const tempPassword = `${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}!A9`;
+
+    const { data, error } = await supabase.auth.signUp({
+      email: tempEmail,
+      password: tempPassword,
+      options: {
+        data: {
+          full_name: tempName,
+          channel: tempChannel,
+          is_temporary: true,
+          expires_at: expiresAt,
+        },
+      },
+    });
+
+    if (error) return { ok: false, error: translate(error.message) };
+
+    if (!data.session) {
+      const loginRes = await supabase.auth.signInWithPassword({
+        email: tempEmail,
+        password: tempPassword,
+      });
+      if (loginRes.error) return { ok: false, error: translate(loginRes.error.message) };
+    }
+
+    return { ok: true };
+  }, []);
 
   const sendMagicLink = useCallback<AuthCtx["sendMagicLink"]>(
     async (email) => {
@@ -368,6 +516,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (extra?.bio !== undefined) u.bio = extra.bio;
         if (extra?.links !== undefined) u.links = extra.links;
         if (extra?.card_visibility !== undefined) u.card_visibility = extra.card_visibility;
+        if (extra?.cover_url !== undefined) {
+          if (u.is_vip || extra.cover_url === null) {
+            u.coverUrl = extra.cover_url || undefined;
+          }
+        }
         localStorage.setItem(DEMO_KEY, JSON.stringify(u));
         setUser(u);
       }
@@ -375,6 +528,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (!user) return { ok: false, error: "Não autenticado." };
+
+    const currentChannel = (user.channel || "").replace(/^@/, "").toLowerCase().trim();
+    const newChannel = cleanChannel.toLowerCase().trim();
+    if (currentChannel && newChannel !== currentChannel && !user.email_confirmed_at) {
+      return {
+        ok: false,
+        error: "Você só pode alterar seu nome de usuário após confirmar o seu e-mail.",
+      };
+    }
 
     const upsertData: Record<string, any> = {
       id: user.id,
@@ -387,6 +549,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (extra?.links !== undefined) upsertData.links = extra.links;
     if (extra?.card_visibility !== undefined) upsertData.card_visibility = extra.card_visibility;
     if (extra?.featured_video !== undefined) upsertData.featured_video = extra.featured_video;
+    if (extra?.cover_url !== undefined) {
+      if (user.is_vip || extra.cover_url === null) {
+        upsertData.cover_url = extra.cover_url;
+      }
+    }
 
     // Atualiza primeiro no DB para checar restrição de unicidade do @
     const { error: dbError } = await supabase
@@ -404,10 +571,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const authMeta: Record<string, any> = {
       full_name: name,
       channel: cleanChannel || null,
+      is_vip: user.is_vip,
     };
     if (extra?.bio !== undefined) authMeta.bio = extra.bio;
     if (extra?.links !== undefined) authMeta.links = extra.links;
     if (extra?.card_visibility !== undefined) authMeta.card_visibility = extra.card_visibility;
+    if (extra?.cover_url !== undefined) {
+      if (user.is_vip || extra.cover_url === null) {
+        authMeta.cover_url = extra.cover_url;
+      }
+    }
 
     const { data, error } = await supabase.auth.updateUser({
       data: authMeta,
@@ -415,10 +588,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     if (error) return { ok: false, error: translate(error.message) };
     if (data.user) {
-      setUser(mapUser(data.user as SbUser));
+      const mapped = await syncUserWithProfile(mapUser(data.user as SbUser));
+      setUser(mapped);
     }
     return { ok: true, message: "Perfil atualizado com sucesso." };
-  }, [user]);
+  }, [user, syncUserWithProfile]);
 
   const updateEmail = useCallback<AuthCtx["updateEmail"]>(async (newEmail) => {
     if (!supabase) {
@@ -465,14 +639,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [signOut]);
 
   const updateAvatar = useCallback<AuthCtx["updateAvatar"]>(async (file) => {
-    if (!supabase || !user) return { ok: false, error: "Não autenticado." };
+    if (!user) return { ok: false, error: "Não autenticado." };
+
+    const isGif = file.type === "image/gif" || file.name.toLowerCase().endsWith(".gif");
+    if (isGif && !user.is_vip) {
+      return {
+        ok: false,
+        error: "Apenas membros VIP podem usar GIFs na foto de perfil. Torne-se VIP para desbloquear avatares animados!",
+      };
+    }
+
+    if (!supabase) {
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      setUser((prev) => (prev ? { ...prev, avatarUrl: dataUrl } : null));
+      return { ok: true, message: "Foto atualizada!" };
+    }
     
-    const fileExt = file.name.split('.').pop();
+    const fileExt = file.name.split('.').pop() || (isGif ? "gif" : "jpg");
     const fileName = `${user.id}-${Math.random()}.${fileExt}`;
     
     const { error: uploadError } = await supabase.storage
       .from("avatars")
-      .upload(fileName, file, { upsert: true });
+      .upload(fileName, file, { 
+        upsert: true,
+        contentType: isGif ? "image/gif" : undefined
+      });
       
     if (uploadError) return { ok: false, error: "Falha ao enviar a imagem." };
     
@@ -489,6 +684,110 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     setUser(prev => prev ? { ...prev, avatarUrl: data.publicUrl } : null);
     return { ok: true, message: "Foto atualizada!" };
+  }, [user]);
+
+  const updateCover = useCallback<AuthCtx["updateCover"]>(async (input) => {
+    if (!user) return { ok: false, error: "Não autenticado." };
+
+    if (input !== null && !user.is_vip) {
+      return {
+        ok: false,
+        error: "Apenas membros VIP podem personalizar a capa do perfil.",
+      };
+    }
+
+    // Remoção da capa
+    if (input === null) {
+      if (!supabase) {
+        const raw = localStorage.getItem(DEMO_KEY);
+        if (raw) {
+          const u = JSON.parse(raw) as StudioUser;
+          delete u.coverUrl;
+          localStorage.setItem(DEMO_KEY, JSON.stringify(u));
+          setUser(u);
+        } else {
+          setUser(prev => prev ? { ...prev, coverUrl: undefined } : null);
+        }
+        return { ok: true, message: "Capa removida com sucesso!" };
+      }
+
+      await supabase.from("profiles").upsert({ id: user.id, cover_url: null, updated_at: new Date().toISOString() });
+      await supabase.auth.updateUser({ data: { cover_url: null } });
+      setUser(prev => prev ? { ...prev, coverUrl: undefined } : null);
+      return { ok: true, message: "Capa removida com sucesso!" };
+    }
+
+    // URL direta (presets ou links)
+    if (typeof input === "string") {
+      if (!supabase) {
+        const raw = localStorage.getItem(DEMO_KEY);
+        if (raw) {
+          const u = JSON.parse(raw) as StudioUser;
+          u.coverUrl = input;
+          localStorage.setItem(DEMO_KEY, JSON.stringify(u));
+          setUser(u);
+        } else {
+          setUser(prev => prev ? { ...prev, coverUrl: input } : null);
+        }
+        return { ok: true, coverUrl: input, message: "Capa atualizada com sucesso!" };
+      }
+
+      await supabase.from("profiles").upsert({ id: user.id, cover_url: input, updated_at: new Date().toISOString() });
+      await supabase.auth.updateUser({ data: { cover_url: input } });
+      setUser(prev => prev ? { ...prev, coverUrl: input } : null);
+      return { ok: true, coverUrl: input, message: "Capa atualizada com sucesso!" };
+    }
+
+    // Upload de arquivo File
+    const file = input;
+    const isGif = file.type === "image/gif" || file.name.toLowerCase().endsWith(".gif");
+
+    if (!supabase) {
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      const raw = localStorage.getItem(DEMO_KEY);
+      if (raw) {
+        const u = JSON.parse(raw) as StudioUser;
+        u.coverUrl = dataUrl;
+        localStorage.setItem(DEMO_KEY, JSON.stringify(u));
+        setUser(u);
+      } else {
+        setUser(prev => prev ? { ...prev, coverUrl: dataUrl } : null);
+      }
+      return { ok: true, coverUrl: dataUrl, message: "Capa atualizada com sucesso!" };
+    }
+
+    const fileExt = file.name.split('.').pop() || (isGif ? "gif" : "jpg");
+    const fileName = `cover-${user.id}-${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(fileName, file, {
+        upsert: true,
+        contentType: isGif ? "image/gif" : undefined
+      });
+
+    if (uploadError) return { ok: false, error: "Falha ao enviar a imagem de capa: " + uploadError.message };
+
+    const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      data: { cover_url: data.publicUrl }
+    });
+
+    await supabase.from("profiles").upsert({
+      id: user.id,
+      cover_url: data.publicUrl,
+      updated_at: new Date().toISOString()
+    });
+
+    if (updateError) return { ok: false, error: translate(updateError.message) };
+
+    setUser(prev => prev ? { ...prev, coverUrl: data.publicUrl } : null);
+    return { ok: true, coverUrl: data.publicUrl, message: "Capa atualizada com sucesso!" };
   }, [user]);
 
   const linkIdentity = useCallback<AuthCtx["linkIdentity"]>(async (provider) => {
@@ -541,19 +840,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signInWithOAuth,
+      signInWithTestAccount,
       sendMagicLink,
       resetPassword,
       updatePassword,
       updateProfile,
       updateEmail,
       updateAvatar,
+      updateCover,
       signOut,
       deleteAccount,
       linkIdentity,
       unlinkIdentity,
       getIdentities,
     }),
-    [user, loading, demo, recovering, signIn, signUp, signInWithOAuth, sendMagicLink, resetPassword, updatePassword, updateProfile, updateEmail, updateAvatar, signOut, deleteAccount, linkIdentity, unlinkIdentity, getIdentities]
+    [user, loading, demo, recovering, signIn, signUp, signInWithOAuth, signInWithTestAccount, sendMagicLink, resetPassword, updatePassword, updateProfile, updateEmail, updateAvatar, updateCover, signOut, deleteAccount, linkIdentity, unlinkIdentity, getIdentities]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -303,7 +303,7 @@ export function Titulos({
           </div>
           <div>
             <Label>Plataforma</Label>
-            <Select value={platform} onChange={(e) => setPlatform(e.target.value)}>
+            <Select value={platform} onChange={(e) => setPlatform(e.target.value)} headerTitle="Plataformas disponíveis">
               {PLATFORMS.map((p) => (
                 <option key={p.id} value={p.id}>{p.label}</option>
               ))}

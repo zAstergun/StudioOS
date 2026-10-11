@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { cn } from "../utils/cn";
 import { Icon } from "./ui";
+import { openVipModal } from "./VipModal";
+import { useAuth } from "../auth";
 
 function Clock() {
   const [now, setNow] = useState(() => new Date());
@@ -17,11 +19,21 @@ function Clock() {
   );
 }
 
+function formatRemaining(expiresAt: string) {
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if (diff <= 0) return "expirada";
+  const h = Math.floor(diff / (1000 * 60 * 60));
+  const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  return `${h}h ${m}m restantes`;
+}
+
 export function StatusBar({
   onGo,
   calibrated,
   demo,
   userName,
+  isTemporary,
+  expiresAt,
   onSignOut,
   profileName,
   profileColor,
@@ -30,10 +42,15 @@ export function StatusBar({
   calibrated: boolean;
   demo?: boolean;
   userName?: string;
+  isTemporary?: boolean;
+  expiresAt?: string;
   onSignOut?: () => void;
   profileName?: string;
   profileColor?: string;
 }) {
+  const { user } = useAuth();
+  const isVip = Boolean(user?.is_vip);
+
   return (
     <div className="relative z-30 flex items-center gap-x-4 sm:gap-x-5 border-b border-ink-700/70 bg-ink-950/90 px-4 py-2 backdrop-blur-sm sm:px-6 lg:px-8 overflow-x-auto scrollbar-hide whitespace-nowrap">
       <div className="flex shrink-0 items-center gap-2.5">
@@ -44,13 +61,29 @@ export function StatusBar({
       <span className="shrink-0 font-mono text-[10px] tracking-[0.18em] text-bone-400 uppercase">
         StudioOS <span className="text-ink-400">/</span> build 2.5.0
       </span>
+      {isTemporary && (
+        <span
+          className="flex shrink-0 items-center gap-1.5 rounded-full border border-signal-400/40 bg-signal-400/10 px-2.5 py-0.5 font-mono text-[9px] tracking-[0.1em] text-signal-300 uppercase shadow-[0_0_10px_rgba(247,183,51,0.15)]"
+          title="Conta temporária de teste. Todos os dados serão apagados automaticamente após 24h."
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-signal-400 animate-pulse" />
+          Conta teste {expiresAt ? `· ${formatRemaining(expiresAt)}` : "(24h)"}
+        </span>
+      )}
       <button
-        onClick={() => onGo("historico")}
-        className="group hidden shrink-0 items-center gap-1.5 rounded-full border border-mint-400/30 bg-mint-400/10 px-2.5 py-0.5 font-mono text-[9px] tracking-[0.12em] text-mint-300 uppercase transition-colors hover:border-mint-400/60 hover:bg-mint-400/20 md:flex"
+        type="button"
+        onClick={openVipModal}
+        className={cn(
+          "group flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 sm:px-3 py-0.5 font-mono text-[9px] font-bold tracking-[0.14em] uppercase transition-all cursor-pointer",
+          isVip
+            ? "border-signal-400/50 bg-gradient-to-r from-signal-400/20 via-amber-500/15 to-yellow-400/20 text-signal-300 shadow-[0_0_12px_rgba(242,179,61,0.25)] hover:border-signal-400 hover:shadow-[0_0_18px_rgba(242,179,61,0.4)]"
+            : "border-signal-400/40 bg-gradient-to-r from-signal-400/15 via-amber-500/10 to-yellow-400/15 text-signal-300 shadow-[0_0_10px_rgba(242,179,61,0.15)] hover:border-signal-400 hover:bg-signal-400/25 hover:shadow-[0_0_20px_rgba(242,179,61,0.35)]"
+        )}
+        title={isVip ? "Você é um membro VIP! Clique para ver seus privilégios." : "Torne-se VIP agora e apoie os projetos do Aster!"}
       >
-        <span className="h-1 w-1 rounded-full bg-mint-400" />
-        novo: histórico & lixeira
-        <Icon name="arrow" className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" strokeWidth={2.6} />
+        <span className={cn("h-1.5 w-1.5 rounded-full bg-signal-400 shadow-[0_0_6px_#f59e0b]", !isVip && "animate-pulse")} />
+        <span>{isVip ? "VIP Ativo" : "Se torne VIP agora"}</span>
+        <Icon name="arrow" className="h-2.5 w-2.5 text-signal-400 transition-transform group-hover:translate-x-0.5" strokeWidth={2.6} />
       </button>
       <span className="hidden shrink-0 h-3 w-px bg-ink-600 sm:block" />
       <button

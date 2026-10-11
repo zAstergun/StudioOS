@@ -172,18 +172,54 @@ export async function listAvailableModels(settings: AISettings): Promise<string[
   }
 }
 
-export async function requestAI(settings: AISettings, systemPrompt: string, prompt: string) {
+export type AIChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+export type RequestAIOptions = {
+  maxTokens?: number;
+  messages?: AIChatMessage[];
+};
+
+export async function requestAI(
+  settings: AISettings,
+  systemPrompt: string,
+  prompt: string,
+  options?: RequestAIOptions
+) {
   if (!settings.model.trim()) throw new Error("Informe o modelo que deseja usar.");
   if (!settings.apiKey.trim() && settings.provider !== "custom") {
     throw new Error("Informe a chave de API deste provedor.");
   }
 
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 30_000);
+  const timeout = window.setTimeout(() => controller.abort(), 60_000);
 
   try {
+    const maxTokens = options?.maxTokens ?? 2048;
+
     if (settings.provider === "google") {
       const model = encodeURIComponent(settings.model.trim());
+      let contents: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }> = [];
+
+      if (options?.messages && options.messages.length > 0) {
+        for (const m of options.messages) {
+          const role = m.role === "assistant" ? "model" : "user";
+          const last = contents[contents.length - 1];
+          if (last && last.role === role) {
+            last.parts[0].text += `\n\n${m.content}`;
+          } else {
+            contents.push({ role, parts: [{ text: m.content }] });
+          }
+        }
+        if (contents.length > 0 && contents[0].role !== "user") {
+          contents.unshift({ role: "user", parts: [{ text: "Contexto inicial." }] });
+        }
+      } else {
+        contents = [{ role: "user", parts: [{ text: prompt }] }];
+      }
+
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(settings.apiKey.trim())}`,
         {
@@ -192,8 +228,8 @@ export async function requestAI(settings: AISettings, systemPrompt: string, prom
           signal: controller.signal,
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: settings.temperature, maxOutputTokens: 24 },
+            contents,
+            generationConfig: { temperature: settings.temperature, maxOutputTokens: maxTokens },
           }),
         }
       );
@@ -204,6 +240,25 @@ export async function requestAI(settings: AISettings, systemPrompt: string, prom
     }
 
     if (settings.provider === "anthropic") {
+      let anthropicMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
+
+      if (options?.messages && options.messages.length > 0) {
+        for (const m of options.messages) {
+          if (m.role !== "user" && m.role !== "assistant") continue;
+          const last = anthropicMessages[anthropicMessages.length - 1];
+          if (last && last.role === m.role) {
+            last.content += `\n\n${m.content}`;
+          } else {
+            anthropicMessages.push({ role: m.role, content: m.content });
+          }
+        }
+        if (anthropicMessages.length > 0 && anthropicMessages[0].role !== "user") {
+          anthropicMessages.unshift({ role: "user", content: "Contexto inicial." });
+        }
+      } else {
+        anthropicMessages = [{ role: "user", content: prompt }];
+      }
+
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -215,9 +270,9 @@ export async function requestAI(settings: AISettings, systemPrompt: string, prom
         signal: controller.signal,
         body: JSON.stringify({
           model: settings.model.trim(),
-          max_tokens: 24,
+          max_tokens: maxTokens,
           system: systemPrompt,
-          messages: [{ role: "user", content: prompt }],
+          messages: anthropicMessages,
           temperature: settings.temperature,
         }),
       });
@@ -234,18 +289,25 @@ export async function requestAI(settings: AISettings, systemPrompt: string, prom
       headers["X-Title"] = "StudioOS";
     }
 
+    const chatMessages = (options?.messages && options.messages.length > 0)
+      ? [
+          { role: "system", content: systemPrompt },
+          ...options.messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role, content: m.content })),
+        ]
+      : [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
+        ];
+
     const response = await fetch(chatCompletionsUrl(settings), {
       method: "POST",
       headers,
       signal: controller.signal,
       body: JSON.stringify({
         model: settings.model.trim(),
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
-        ],
+        messages: chatMessages,
         temperature: settings.temperature,
-        max_tokens: 24,
+        max_tokens: maxTokens,
       }),
     });
     const data = await responseJson(response);
@@ -262,7 +324,7 @@ export async function requestAI(settings: AISettings, systemPrompt: string, prom
       }
     }
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("A conexão excedeu 30 segundos. Confira o modelo e tente novamente.");
+      throw new Error("A conexão excedeu 60 segundos. Confira o modelo e tente novamente.");
     }
     if (error instanceof TypeError) {
       throw new Error("Falha de rede ou CORS. Confira a URL do provedor e se ele aceita chamadas no navegador.");

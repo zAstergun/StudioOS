@@ -5,10 +5,12 @@ import { cn } from "../utils/cn";
 import { ProjetoDetailScreen } from "./ProjetoDetailScreen";
 import { useAuth, supabase } from "../auth";
 import { SaveToSalvosModal } from "../components/SaveToSalvosModal";
+import { VipRgbColorPicker } from "../components/VipRgbColorPicker";
 
 export interface Project {
   id: string;
   name: string;
+  description?: string;
   status: "active" | "planning" | "completed" | "archived" | "trashed";
   progress: number;
   lastUpdate: string;
@@ -17,8 +19,11 @@ export interface Project {
   color: string;
   owner_id?: string;
   isShared?: boolean;
-  saved_links?: Array<{ title: string, url: string }>;
+  memberRole?: "owner" | "editor" | "viewer" | string;
+  saved_links?: any[];
   external_link?: string;
+  tags?: string[];
+  target_date?: string;
 }
 
 export const STATUS_MAP: Record<string, { label: string; dot: string }> = {
@@ -63,28 +68,98 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
   const [showModal, setShowModal] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectColor, setNewProjectColor] = useState("#F2604C");
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editProjectName, setEditProjectName] = useState("");
+  const [editProjectColor, setEditProjectColor] = useState("");
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [projectToLeave, setProjectToLeave] = useState<Project | null>(null);
+  const [isLeaving, setIsLeaving] = useState(false);
   const [savingProject, setSavingProject] = useState<Project | null>(null);
   const [projectToRemoveFromSalvos, setProjectToRemoveFromSalvos] = useState<Project | null>(null);
   const [savedProjectIds, setSavedProjectIds] = useState<Record<string, string>>({});
 
   const fetchProjects = useCallback(async () => {
     if (!supabase || !user) return;
-    const { data, error } = await supabase
-      .from("studioos_projects")
-      .select("*, studioos_project_members(user_id), saved_links, external_link, studioos_tasks(id, status)")
-      .order("created_at", { ascending: false });
-      
-    if (!error && data) {
-      const mapped = data.map((d: any) => {
+
+    try {
+      // 1. Buscar projetos onde o usuário é o proprietário
+      const { data: ownData, error: ownErr } = await supabase
+        .from("studioos_projects")
+        .select("*, saved_links, external_link, studioos_tasks(id, status)")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (ownErr) console.warn("Erro ao buscar projetos próprios:", ownErr);
+
+      // 2. Buscar projetos onde o usuário é participante registrado
+      const { data: memberRows, error: memErr } = await supabase
+        .from("studioos_project_members")
+        .select("project_id, role")
+        .eq("user_id", user.id);
+
+      if (memErr) console.warn("Erro ao buscar vínculos de membro:", memErr);
+
+      const memberProjectIds = Array.from(new Set(
+        (memberRows || []).map((r: any) => r.project_id).filter(Boolean)
+      ));
+
+      // 3. Buscar projetos compartilhados (onde o usuário é membro e não é o dono)
+      let sharedData: any[] = [];
+      const nonOwnedMemberProjectIds = memberProjectIds.filter(
+        (pid: string) => !(ownData || []).some((p: any) => p.id === pid)
+      );
+
+      if (nonOwnedMemberProjectIds.length > 0) {
+        const { data: sharedRes, error: sharedErr } = await supabase
+          .from("studioos_projects")
+          .select("*, saved_links, external_link, studioos_tasks(id, status)")
+          .in("id", nonOwnedMemberProjectIds);
+
+        if (sharedErr) console.warn("Erro ao buscar projetos compartilhados:", sharedErr);
+        if (sharedRes) sharedData = sharedRes;
+      }
+
+      // 4. Unir todos os projetos encontrados
+      const allFound = [...(ownData || []), ...sharedData];
+      const foundIds = new Set(allFound.map(p => p.id));
+
+      // 5. Busca geral como contingência para projetos visíveis via RLS
+      const { data: generalData } = await supabase
+        .from("studioos_projects")
+        .select("*, saved_links, external_link, studioos_tasks(id, status)")
+        .order("created_at", { ascending: false });
+
+      if (generalData) {
+        generalData.forEach((p: any) => {
+          if (!foundIds.has(p.id) && (p.owner_id === user.id || memberProjectIds.includes(p.id))) {
+            allFound.push(p);
+            foundIds.add(p.id);
+          }
+        });
+      }
+
+      // 6. Respeitar projetos dos quais o usuário saiu (nunca limpar automaticamente)
+      const leftIds: string[] = (() => {
+        try {
+          return JSON.parse(localStorage.getItem(`studioos_left_projects_${user.id}`) || '[]');
+        } catch {
+          return [];
+        }
+      })();
+
+      const userProjectsData = allFound.filter((d: any) => !leftIds.includes(d.id));
+      const memberRoleMap = new Map((memberRows || []).map((r: any) => [r.project_id, r.role]));
+
+      const mapped = userProjectsData.map((d: any) => {
         const tasks = d.studioos_tasks || [];
         const tasksCount = tasks.length;
         const completedTasks = tasks.filter((t: any) => t.status === "done").length;
         const progress = tasksCount > 0 ? Math.round((completedTasks / tasksCount) * 100) : (d.progress || 0);
         const derivedStatus = computeProjectStatus(tasks, d.status);
+        const isOwner = d.owner_id === user.id;
 
-        // Auto-heal database status if desynchronized
-        if (derivedStatus !== d.status && d.status !== "trashed" && d.status !== "archived") {
+        // Auto-heal database status se desincronizado (apenas para dono)
+        if (isOwner && derivedStatus !== d.status && d.status !== "trashed" && d.status !== "archived") {
           supabase!.from("studioos_projects").update({ status: derivedStatus, progress }).eq("id", d.id).then();
         }
 
@@ -98,24 +173,62 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
           completedTasks: completedTasks,
           color: d.color,
           owner_id: d.owner_id,
-          isShared: d.owner_id !== user.id || (d.studioos_project_members && d.studioos_project_members.length > 0),
+          isShared: !isOwner || memberProjectIds.includes(d.id),
+          memberRole: isOwner ? 'owner' : (memberRoleMap.get(d.id) || 'editor'),
           saved_links: d.saved_links || [],
           external_link: d.external_link || ""
         };
       });
+
       setProjects(mapped);
 
+      // Auto-abrir projeto vindo de convite ou parâmetro
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const openId = urlParams.get("project") || sessionStorage.getItem("studioos_open_project_id");
         if (openId) {
-          const found = mapped.find(p => String(p.id) === String(openId));
-          if (found) {
-            setSelectedProject(found);
+          let targetProj = mapped.find(p => String(p.id) === String(openId));
+          if (!targetProj) {
+            // Busca diretamente pelo ID caso não estivesse na listagem inicial
+            const { data: directP } = await supabase
+              .from("studioos_projects")
+              .select("*, saved_links, external_link, studioos_tasks(id, status)")
+              .eq("id", openId)
+              .maybeSingle();
+
+            if (directP) {
+              const dTasks = directP.studioos_tasks || [];
+              const dTasksCount = dTasks.length;
+              const dDone = dTasks.filter((t: any) => t.status === "done").length;
+              const dProgress = dTasksCount > 0 ? Math.round((dDone / dTasksCount) * 100) : (directP.progress || 0);
+              targetProj = {
+                id: directP.id,
+                name: directP.name,
+                status: computeProjectStatus(dTasks, directP.status),
+                progress: dProgress,
+                lastUpdate: directP.last_update,
+                tasksCount: dTasksCount,
+                completedTasks: dDone,
+                color: directP.color,
+                owner_id: directP.owner_id,
+                isShared: directP.owner_id !== user.id,
+                memberRole: directP.owner_id === user.id ? 'owner' : 'editor',
+                saved_links: directP.saved_links || [],
+                external_link: directP.external_link || ""
+              };
+            }
+          }
+
+          if (targetProj) {
+            setSelectedProject(targetProj);
             sessionStorage.removeItem("studioos_open_project_id");
           }
         }
-      } catch {}
+      } catch (openErr) {
+        console.error("Erro ao abrir projeto por ID:", openErr);
+      }
+    } catch (err) {
+      console.error("Erro geral em fetchProjects:", err);
     }
   }, [user]);
 
@@ -155,6 +268,9 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_projects' }, () => {
         fetchProjects();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_project_members', filter: `user_id=eq.${user.id}` }, () => {
+        fetchProjects();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'studioos_tasks' }, () => {
         fetchProjects();
       })
@@ -163,21 +279,29 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
       })
       .subscribe();
 
+    const handleSync = () => {
+      fetchProjects();
+    };
+    window.addEventListener("studioos:history", handleSync);
+    window.addEventListener("studioos:projects", handleSync);
+
     return () => {
       supabase!.removeChannel(channel);
+      window.removeEventListener("studioos:history", handleSync);
+      window.removeEventListener("studioos:projects", handleSync);
     };
   }, [user, fetchProjects, fetchSavedItems]);
 
   const filtered = projects.filter(p => {
     if (showSharedOnly && !p.isShared) return false;
-    if (filter === "active") return p.status === "active";
+    if (filter === "active") return p.status === "active" || p.status === "planning";
     if (filter === "completed") return p.status === "completed";
     return p.status !== "trashed";
   });
 
   const stats = useMemo(() => ({
     total: projects.filter(p => p.status !== "trashed").length,
-    active: projects.filter(p => p.status === "active").length,
+    active: projects.filter(p => p.status === "active" || p.status === "planning").length,
     completed: projects.filter(p => p.status === "completed").length,
     avgProgress: projects.filter(p => p.status !== "trashed").length > 0
       ? Math.round(projects.filter(p => p.status !== "trashed").reduce((a, p) => a + p.progress, 0) / projects.filter(p => p.status !== "trashed").length)
@@ -234,6 +358,9 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
       <ProjetoDetailScreen 
         project={selectedProject} 
         onBack={() => handleSelectProject(null)} 
+        onDeleteProject={(id) => {
+          setProjects(prev => prev.filter(p => p.id !== id));
+        }}
         onUpdateProject={(updated) => {
           setProjects(prev => prev.map(p => p.id === selectedProject.id ? { ...p, ...updated } : p));
           setSelectedProject(prev => prev ? { ...prev, ...updated } : null);
@@ -282,6 +409,36 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
         console.error("Erro ao criar projeto:", error);
         alert("Erro ao criar projeto: " + error.message);
       }
+    }
+  };
+
+  const handleEditProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProject || !editProjectName.trim()) return;
+
+    try {
+      if (supabase) {
+        const { error } = await supabase
+          .from("studioos_projects")
+          .update({
+            name: editProjectName.trim(),
+            color: editProjectColor
+          })
+          .eq("id", editingProject.id);
+
+        if (error) throw error;
+      }
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === editingProject.id
+            ? { ...p, name: editProjectName.trim(), color: editProjectColor }
+            : p
+        )
+      );
+      setEditingProject(null);
+    } catch (err) {
+      console.error("Erro ao editar projeto", err);
+      alert("Erro ao editar projeto");
     }
   };
 
@@ -472,6 +629,22 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                           );
                         })()}
                         
+                        {/* EDIT BUTTON */}
+                        {user?.id === proj.owner_id && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingProject(proj);
+                              setEditProjectName(proj.name);
+                              setEditProjectColor(proj.color || "#F2604C");
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-ink-400 opacity-0 transition-all duration-200 hover:bg-ink-800 hover:text-bone-200 group-hover:opacity-100"
+                            title="Editar Projeto"
+                          >
+                            <Icon name="edit" className="h-3 w-3" strokeWidth={1.8} />
+                          </button>
+                        )}
+                        
                         {/* TRASH BUTTON */}
                       {user?.id === proj.owner_id && (
                         <button
@@ -479,10 +652,24 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                             e.stopPropagation();
                             setProjectToDelete(proj);
                           }}
-                          className="flex h-7 w-7 items-center justify-center rounded-md text-ink-400 opacity-0 transition-all duration-200 hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-ink-400 opacity-0 transition-all duration-200 hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100 cursor-pointer"
                           title="Mover para Lixeira"
                         >
                           <Icon name="trash" className="h-3 w-3" strokeWidth={1.8} />
+                        </button>
+                      )}
+
+                      {/* LEAVE BUTTON */}
+                      {user?.id !== proj.owner_id && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProjectToLeave(proj);
+                          }}
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-red-400/80 transition-all duration-200 hover:bg-red-500/15 hover:text-red-300 cursor-pointer"
+                          title="Sair deste projeto compartilhado"
+                        >
+                          <Icon name="login" className="h-3 w-3" strokeWidth={1.8} />
                         </button>
                       )}
                       </div>
@@ -602,30 +789,13 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                 />
               </div>
 
-              <div className="mb-8">
-                <label className="mb-3 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Cor de Destaque
-                </label>
-                <div className="flex gap-2.5">
-                  {PALETTE.map(c => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setNewProjectColor(c)}
-                      className={cn(
-                        "relative flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200",
-                        newProjectColor === c 
-                          ? "scale-110 ring-2 ring-bone-300/60 ring-offset-2 ring-offset-ink-900" 
-                          : "hover:scale-110"
-                      )}
-                      style={{ backgroundColor: c }}
-                    >
-                      {newProjectColor === c && (
-                        <Icon name="check" className="h-3 w-3 text-ink-950" strokeWidth={3} />
-                      )}
-                    </button>
-                  ))}
-                </div>
+              <div className="mb-6">
+                <VipRgbColorPicker
+                  value={newProjectColor}
+                  onChange={(color) => setNewProjectColor(color)}
+                  label="Cor de Destaque"
+                  palette={PALETTE}
+                />
               </div>
 
               {/* MODAL PREVIEW */}
@@ -671,6 +841,102 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
         </div>
       )}
 
+      {/* MODAL EDITAR PROJETO */}
+      {editingProject && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/85 p-4 backdrop-blur-md"
+          onClick={(e) => { if (e.target === e.currentTarget) setEditingProject(null); }}
+        >
+          <div className="relative w-full max-w-[440px] overflow-hidden rounded-2xl border border-ink-700/50 bg-ink-900 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)]">
+            {/* MODAL HEADER */}
+            <div className="border-b border-ink-800/60 bg-ink-900/80 px-6 py-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-signal-400/10">
+                    <Icon name="edit" className="h-3.5 w-3.5 text-signal-400" strokeWidth={2} />
+                  </div>
+                  <div>
+                    <h2 className="font-display text-lg font-bold text-bone-50">Editar Projeto</h2>
+                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">Atualizar configurações</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setEditingProject(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-bone-300 transition-colors hover:bg-ink-800 hover:text-bone-200"
+                >
+                  <Icon name="close" className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            
+            {/* MODAL BODY */}
+            <form onSubmit={handleEditProject} className="p-6">
+              <div className="mb-6">
+                <label className="mb-2 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
+                  Nome do Projeto
+                </label>
+                <input 
+                  type="text" 
+                  value={editProjectName}
+                  onChange={(e) => setEditProjectName(e.target.value)}
+                  autoFocus
+                  className="w-full rounded-lg border border-ink-800/60 bg-ink-950/50 px-4 py-3 text-[14px] text-bone-100 transition-colors focus:border-signal-400/60 focus:outline-none focus:ring-1 focus:ring-signal-400/20"
+                  required
+                />
+              </div>
+
+              <div className="mb-6">
+                <VipRgbColorPicker
+                  value={editProjectColor}
+                  onChange={(color) => setEditProjectColor(color)}
+                  label="Cor de Destaque"
+                  palette={PALETTE}
+                />
+              </div>
+
+              {/* MODAL PREVIEW */}
+              {editProjectName.trim() && (
+                <div className="mb-6 overflow-hidden rounded-lg border border-ink-800/40 bg-ink-950/30">
+                  <div className="flex items-center gap-3 p-3">
+                    <div 
+                      className="h-1.5 w-1.5 rounded-full" 
+                      style={{ backgroundColor: editProjectColor }} 
+                    />
+                    <span className="font-mono text-[9px] tracking-[0.12em] text-bone-300 uppercase">Preview</span>
+                  </div>
+                  <div className="flex items-center gap-3 border-t border-ink-800/30 px-3 py-3">
+                    <div 
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
+                      style={{ backgroundColor: `${editProjectColor}15`, color: editProjectColor }}
+                    >
+                      <Icon name="layers" className="h-3.5 w-3.5" />
+                    </div>
+                    <span className="truncate font-display text-[14px] font-bold text-bone-200">{editProjectName}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setEditingProject(null)}
+                  className="rounded-lg px-4 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-300 uppercase transition-colors hover:text-bone-200"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  disabled={!editProjectName.trim()}
+                  className="rounded-lg bg-signal-400 px-6 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-950 uppercase shadow-[0_6px_20px_-8px_rgba(242,179,61,0.6)] transition-all duration-200 disabled:opacity-40 disabled:shadow-none hover:bg-signal-300 hover:shadow-[0_8px_25px_-8px_rgba(242,179,61,0.7)]"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL EXCLUIR PROJETO */}
       {projectToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
@@ -698,15 +964,117 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
               </button>
               <button 
                 onClick={async () => {
+                  if (!projectToDelete) return;
+                  const idToDelete = projectToDelete.id;
+
+                  // Atualização otimista imediata na interface
+                  setProjects((prev) => prev.filter((p) => p.id !== idToDelete));
+                  setProjectToDelete(null);
+
                   if (supabase) {
-                    await supabase.from("studioos_projects").update({ status: "trashed" }).eq("id", projectToDelete.id);
+                    try {
+                      const { error } = await supabase
+                        .from("studioos_projects")
+                        .update({ status: "trashed" })
+                        .eq("id", idToDelete);
+
+                      if (error) {
+                        console.error("Erro ao mover projeto para a lixeira:", error);
+                        fetchProjects();
+                        return;
+                      }
+                    } catch (err) {
+                      console.error("Erro ao mover projeto para a lixeira:", err);
+                      fetchProjects();
+                      return;
+                    }
                   }
                   window.dispatchEvent(new Event("studioos:history"));
-                  setProjectToDelete(null);
+                  window.dispatchEvent(new Event("studioos:projects"));
                 }}
                 className="flex-1 rounded-lg bg-red-500/10 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-red-500 uppercase transition-colors hover:bg-red-500 hover:text-white"
               >
                 Mover p/ Lixeira
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL SAIR DO PROJETO COMPARTILHADO */}
+      {projectToLeave && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div 
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-red-500/20 bg-ink-950 shadow-[0_32px_64px_-12px_rgba(239,68,68,0.15)]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center justify-center p-8 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+                <Icon name="login" className="h-6 w-6" strokeWidth={1.5} />
+              </div>
+              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Sair do Projeto</h2>
+              <p className="text-[13px] leading-relaxed text-bone-300">
+                Tem certeza que deseja sair do projeto <strong className="text-bone-100">{projectToLeave.name}</strong>? 
+                Você deixará de ser participante deste projeto e não terá mais acesso às tarefas, ferramentas salvas e anotações.
+              </p>
+            </div>
+            
+            <div className="flex gap-3 border-t border-ink-800/50 bg-ink-900/30 p-5">
+              <button 
+                onClick={() => setProjectToLeave(null)}
+                disabled={isLeaving}
+                className="flex-1 rounded-xl border border-ink-800 bg-ink-900 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-100 disabled:opacity-40 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={async () => {
+                  if (!projectToLeave || !user) return;
+                  const idToLeave = projectToLeave.id;
+                  setIsLeaving(true);
+                  try {
+                    // 1. Salvar no storage local para nunca mais reaparecer nesta sessão/usuário
+                    try {
+                      const leftIds: string[] = JSON.parse(localStorage.getItem(`studioos_left_projects_${user.id}`) || '[]');
+                      if (!leftIds.includes(idToLeave)) {
+                        leftIds.push(idToLeave);
+                        localStorage.setItem(`studioos_left_projects_${user.id}`, JSON.stringify(leftIds));
+                      }
+                    } catch {}
+
+                    // 2. Remover do estado imediatamente
+                    setProjects(prev => prev.filter(p => p.id !== idToLeave));
+                    setProjectToLeave(null);
+
+                    // 3. Tentar RPC leave_project (se existir no banco)
+                    if (supabase) {
+                      try {
+                        await supabase.rpc('leave_project', { p_project_id: idToLeave });
+                      } catch (rpcErr) {
+                        console.warn("RPC leave_project falhou:", rpcErr);
+                      }
+
+                      // 4. Excluir vínculo diretamente no banco de dados
+                      try {
+                        await supabase.from('studioos_project_members').delete().eq('project_id', idToLeave).eq('user_id', user.id);
+                      } catch {}
+
+                      try {
+                        await supabase.from('studioos_project_applications').delete().eq('project_id', idToLeave).eq('user_id', user.id);
+                      } catch {}
+                    }
+                  } catch (err) {
+                    console.error("Erro ao sair do projeto:", err);
+                  } finally {
+                    setIsLeaving(false);
+                    window.dispatchEvent(new Event("studioos:projects"));
+                    window.dispatchEvent(new Event("studioos:history"));
+                  }
+                }}
+                disabled={isLeaving}
+                className="flex-1 rounded-xl bg-red-500 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-white uppercase shadow-[0_8px_20px_-6px_rgba(239,68,68,0.5)] transition-all hover:bg-red-600 disabled:opacity-40 cursor-pointer"
+              >
+                {isLeaving ? "Saindo..." : "Confirmar e Sair"}
               </button>
             </div>
           </div>
