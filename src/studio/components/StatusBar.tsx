@@ -74,37 +74,72 @@ export function StatusBar({
         type="button"
         onClick={openVipModal}
         className={cn(
-          "group flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 sm:px-3 py-0.5 font-mono text-[9px] font-bold tracking-[0.14em] uppercase transition-all cursor-pointer",
+          "group relative overflow-hidden flex shrink-0 items-center gap-2 rounded-full border px-2.5 sm:px-3 py-1 font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase transition-all duration-300 cursor-pointer select-none active:scale-95",
           isVip
-            ? "border-signal-400/50 bg-gradient-to-r from-signal-400/20 via-amber-500/15 to-yellow-400/20 text-signal-300 shadow-[0_0_12px_rgba(242,179,61,0.25)] hover:border-signal-400 hover:shadow-[0_0_18px_rgba(242,179,61,0.4)]"
-            : "border-signal-400/40 bg-gradient-to-r from-signal-400/15 via-amber-500/10 to-yellow-400/15 text-signal-300 shadow-[0_0_10px_rgba(242,179,61,0.15)] hover:border-signal-400 hover:bg-signal-400/25 hover:shadow-[0_0_20px_rgba(242,179,61,0.35)]"
+            ? "border-amber-400/60 bg-gradient-to-r from-amber-500/25 via-yellow-400/15 to-amber-500/25 text-amber-100 shadow-[0_0_16px_rgba(245,158,11,0.3),inset_0_1px_1px_rgba(255,255,255,0.25)] hover:border-amber-300 hover:shadow-[0_0_24px_rgba(245,158,11,0.45)]"
+            : "border-amber-400/60 bg-gradient-to-r from-amber-500/20 via-yellow-400/15 to-amber-500/25 text-amber-100 shadow-[0_0_16px_rgba(245,158,11,0.25),inset_0_1px_1px_rgba(255,255,255,0.2)] hover:border-amber-300 hover:from-amber-500/35 hover:via-yellow-300/25 hover:to-amber-500/40 hover:text-white hover:shadow-[0_0_24px_rgba(245,158,11,0.5)]"
         )}
         title={isVip ? "Você é um membro VIP! Clique para ver seus privilégios." : "Torne-se VIP agora e apoie os projetos do Aster!"}
       >
-        <span className={cn("h-1.5 w-1.5 rounded-full bg-signal-400 shadow-[0_0_6px_#f59e0b]", !isVip && "animate-pulse")} />
-        <span>{isVip ? "VIP Ativo" : "Se torne VIP agora"}</span>
-        <Icon name="arrow" className="h-2.5 w-2.5 text-signal-400 transition-transform group-hover:translate-x-0.5" strokeWidth={2.6} />
+        {/* Shimmer sweep effect */}
+        <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
+
+        <span className="relative flex items-center justify-center">
+          <Icon
+            name="crown"
+            className="h-3 w-3 text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.85)] shrink-0 transition-transform duration-300 group-hover:scale-115 group-hover:-rotate-6"
+            strokeWidth={2.4}
+          />
+        </span>
+        <span className="relative drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+          {isVip ? "VIP Ativo" : "Se torne VIP agora"}
+        </span>
+        <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-amber-400/20 text-amber-200 transition-all duration-200 group-hover:bg-amber-300 group-hover:text-ink-950 group-hover:translate-x-0.5">
+          <Icon name="arrow" className="h-2 w-2" strokeWidth={2.8} />
+        </span>
       </button>
       <span className="hidden shrink-0 h-3 w-px bg-ink-600 sm:block" />
       <button
         type="button"
         onClick={() => onGo("calibracao")}
         className={cn(
-          "flex shrink-0 items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] uppercase transition-colors hover:opacity-80",
-          demo ? "text-signal-400" : calibrated ? "text-mint-400" : "text-signal-400"
+          "group flex shrink-0 items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] uppercase transition-colors cursor-pointer",
+          demo
+            ? "text-sky-400/90 hover:text-sky-300"
+            : calibrated
+            ? "text-mint-400 hover:text-mint-300"
+            : "text-oxide-400 hover:text-oxide-300"
         )}
         title="Ver ou trocar perfil de calibração"
       >
-        {profileColor ? (
-          <span className="h-2 w-2 rounded-full shrink-0 shadow-[0_0_6px_currentColor]" style={{ backgroundColor: profileColor }} />
+        {!demo && calibrated && profileColor ? (
+          <span
+            className="h-2 w-2 rounded-full shrink-0 shadow-[0_0_6px_currentColor] transition-transform group-hover:scale-110"
+            style={{ backgroundColor: profileColor }}
+          />
+        ) : !demo && !calibrated ? (
+          <span className="h-2 w-2 rounded-full shrink-0 bg-oxide-400 shadow-[0_0_6px_currentColor] transition-transform group-hover:scale-110" />
         ) : (
-          <Icon name={demo ? "eye" : calibrated ? "check" : "dial"} className="h-3.5 w-3.5" strokeWidth={2} />
+          <Icon
+            name={demo ? "eye" : calibrated ? "check" : "dial"}
+            className={cn(
+              "h-3.5 w-3.5 transition-transform duration-200 group-hover:scale-110",
+              demo
+                ? "text-sky-400"
+                : calibrated
+                ? "text-mint-400"
+                : "text-oxide-400"
+            )}
+            strokeWidth={1.8}
+          />
         )}
-        {demo
-          ? "Dados de exemplo"
-          : calibrated
-          ? (profileName ? `Perfil: ${profileName}` : "Canal calibrado")
-          : "Calibração pendente"}
+        <span>
+          {demo
+            ? "Dados de exemplo"
+            : calibrated
+            ? (profileName ? `Perfil: ${profileName}` : "Canal calibrado")
+            : "Calibração pendente"}
+        </span>
       </button>
       <div className="ml-auto flex shrink-0 items-center gap-4 pl-4 sm:pl-0">
         <Clock />
