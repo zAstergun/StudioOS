@@ -8,6 +8,8 @@ import { useExampleMode } from "../auth";
 import { useToolRestore } from "../utils/toolStateRestore";
 import { isCalibrated, type Calib } from "../calibration";
 import { CalibrationNotice } from "../components/CalibrationNotice";
+import { useI18n } from "../i18n";
+import { getLocalizedToolExamples } from "../i18n/examples";
 
 function cap(s: string) {
   const t = s.trim();
@@ -24,8 +26,14 @@ type Out = {
   retention: number;
 };
 
-function build(theme: string, tone: string, promise: string): Out[] {
-  const t = cap(theme.trim() || "esse assunto");
+function build(
+  theme: string,
+  tone: string,
+  promise: string,
+  tFn?: (k: string, p?: any, fb?: string) => string
+): Out[] {
+  const tLocal = tFn || ((_k: string, _p?: any, fb?: string) => fb || "");
+  const t = cap(theme.trim() || tLocal("tools.hooks.default_theme", {}, "esse assunto"));
   const low = t.toLowerCase();
   const year = new Date().getFullYear() + 1;
   const aggressive = tone === "provocador";
@@ -33,44 +41,61 @@ function build(theme: string, tone: string, promise: string): Out[] {
   const p = promise.trim();
   const pLow = p.toLowerCase();
 
-  const raw: Record<string, [string, string, number]> = {
+  const raw: Record<string, [string, string, number, string, string]> = {
     numero: [
-      `2 anos investindo ${low.startsWith("investir") ? low.replace("investir", "") : low}.`,
-      p ? `${cap(p)} — com o número na tela.` : `O resultado? Menos que a poupança.`,
+      tLocal("tools.hooks.numero_l1", { low: low.startsWith("investir") ? low.replace("investir", "").trim() : low }, `2 anos investindo ${low.startsWith("investir") ? low.replace("investir", "") : low}.`),
+      p ? tLocal("tools.hooks.numero_l2_p", { p: cap(p) }, `${cap(p)} — com o número na tela.`) : tLocal("tools.hooks.numero_l2_def", {}, `O resultado? Menos que a poupança.`),
       88,
+      tLocal("tools.hooks.angle_numero", {}, "Número na frente"),
+      tLocal("tools.hooks.angle_numero_desc", {}, "Dado cru primeiro, contexto depois."),
     ],
     contrario: [
-      `${t} é o melhor caminho.`,
-      soft ? `Até você olhar o rendimento real.` : `Até você ver o extrato de verdade.`,
+      tLocal("tools.hooks.contrario_l1", { t }, `${t} é o melhor caminho.`),
+      soft ? tLocal("tools.hooks.contrario_l2_soft", {}, `Até você olhar o rendimento real.`) : tLocal("tools.hooks.contrario_l2_agg", {}, `Até você ver o extrato de verdade.`),
       82,
+      tLocal("tools.hooks.angle_contrario", {}, "Contrário"),
+      tLocal("tools.hooks.angle_contrario_desc", {}, "Afirma o senso comum e quebra em seguida."),
     ],
     transformacao: [
-      `De R$100 por mês para R$0 em ${low}.`,
-      p ? `Mudei uma coisa: ${pLow}.` : `Mudei tudo e triplicou em 6 meses.`,
+      tLocal("tools.hooks.transf_l1", { low }, `De R$100 por mês para R$0 em ${low}.`),
+      p ? tLocal("tools.hooks.transf_l2_p", { pLow }, `Mudei uma coisa: ${pLow}.`) : tLocal("tools.hooks.transf_l2_def", {}, `Mudei tudo e triplicou em 6 meses.`),
       86,
+      tLocal("tools.hooks.angle_transf", {}, "Transformação"),
+      tLocal("tools.hooks.angle_transf_desc", {}, "De um estado para outro, com prazo."),
     ],
     autoridade: [
-      `O maior investidor do mundo nunca compraria isso.`,
-      p ? `O motivo: ${pLow}.` : `E eu descobri da pior forma.`,
+      tLocal("tools.hooks.autoridade_l1", {}, `O maior investidor do mundo nunca compraria isso.`),
+      p ? tLocal("tools.hooks.autoridade_l2_p", { pLow }, `O motivo: ${pLow}.`) : tLocal("tools.hooks.autoridade_l2_def", {}, `E eu descobri da pior forma.`),
       74,
+      tLocal("tools.hooks.angle_autoridade", {}, "Autoridade emprestada"),
+      tLocal("tools.hooks.angle_autoridade_desc", {}, "Nome grande + descoberta pessoal."),
     ],
     confissao: [
-      `Eu perdi dinheiro com ${low}.`,
-      aggressive ? `E a culpa foi minha, não do mercado.` : `E não foi o mercado o problema.`,
+      tLocal("tools.hooks.confissao_l1", { low }, `Eu perdi dinheiro com ${low}.`),
+      aggressive ? tLocal("tools.hooks.confissao_l2_agg", {}, `E a culpa foi minha, não do mercado.`) : tLocal("tools.hooks.confissao_l2_soft", {}, `E não foi o mercado o problema.`),
       90,
+      tLocal("tools.hooks.angle_confissao", {}, "Confissão"),
+      tLocal("tools.hooks.angle_confissao_desc", {}, "Erro próprio como prova de honestidade."),
     ],
     futuro: [
-      `${t} vai mudar completamente em ${year}.`,
-      p ? `Quem entender ${pLow} sai na frente.` : `Quem tem pouco dinheiro vai sentir primeiro.`,
+      tLocal("tools.hooks.futuro_l1", { t, year }, `${t} vai mudar completamente em ${year}.`),
+      p ? tLocal("tools.hooks.futuro_l2_p", { pLow }, `Quem entender ${pLow} sai na frente.`) : tLocal("tools.hooks.futuro_l2_def", {}, `Quem tem pouco dinheiro vai sentir primeiro.`),
       79,
+      tLocal("tools.hooks.angle_futuro", {}, "Choque de futuro"),
+      tLocal("tools.hooks.angle_futuro_desc", {}, "Mudança próxima + quem sente primeiro."),
     ],
   };
 
   return HOOK_ANGLES.map((a) => {
-    const [l1, l2, retentionBase] = raw[a.id];
+    const item = raw[a.id];
+    const l1 = item ? item[0] : "";
+    const l2 = item ? item[1] : "";
+    const retentionBase = item ? item[2] : 80;
+    const angleName = item ? item[3] : a.name;
+    const angleDesc = item ? item[4] : a.desc;
     const words = (l1 + " " + l2).split(/\s+/).filter(Boolean).length;
     const retention = Math.min(96, retentionBase + (p ? 3 : 0));
-    return { ...a, angle: a.name, id: a.id, l1, l2, seconds: Math.round((words / 2.7) * 10) / 10, retention };
+    return { angle: angleName, id: a.id, desc: angleDesc, l1, l2, seconds: Math.round((words / 2.7) * 10) / 10, retention };
   }).sort((x, y) => y.retention - x.retention);
 }
 
@@ -87,13 +112,16 @@ export function Hooks({
   profileName?: string;
   profileColor?: string;
 }) {
+  const { t, resolvedLanguage } = useI18n();
   const examples = useExampleMode();
   const calibrated = isCalibrated(calib);
+  const toolExamples = getLocalizedToolExamples(resolvedLanguage);
+
   const [theme, setTheme] = useState(
-    examples ? "investir R$100 por mês em FIIs" : calib?.niche ? calib.niche.slice(0, 50) : ""
+    examples ? toolExamples.hooksTheme : calib?.niche ? calib.niche.slice(0, 50) : ""
   );
   const [promise, setPromise] = useState(
-    examples ? "o rendimento real com o extrato na tela" : calib?.prova ? calib.prova.slice(0, 50) : ""
+    examples ? toolExamples.hooksPromise : calib?.prova ? calib.prova.slice(0, 50) : ""
   );
   const [tone, setTone] = useState<"provocador" | "didático" | "neutro">("provocador");
   const [format, setFormat] = useState("shorts");
@@ -127,37 +155,52 @@ export function Hooks({
     }
   });
 
-  const outs = useMemo(() => theme.trim() || promise.trim() ? build(theme, tone, promise) : [], [theme, tone, promise]);
+  const outs = useMemo(() => theme.trim() || promise.trim() ? build(theme, tone, promise, t) : [], [theme, tone, promise, t]);
   const selected = outs.find((o) => o.id === picked);
 
-  const friendlySummary = `6 opções de ganchos criadas no tom ${tone} · Gancho recomendado: ${outs[0]?.angle ?? "—"} (${outs[0]?.retention ?? 0}% retenção estimada)`;
+  const toneLabel =
+    tone === "provocador"
+      ? t("tools.hooks.tone_provocative", {}, "Provocador")
+      : tone === "didático"
+      ? t("tools.hooks.tone_didactic", {}, "Didático")
+      : t("tools.hooks.tone_neutral", {}, "Neutro");
+
+  const friendlySummary = t(
+    "tools.hooks.friendly_summary",
+    {
+      count: 6,
+      tone: toneLabel,
+      angle: outs[0]?.angle ?? "—",
+      retention: outs[0]?.retention ?? 0,
+    },
+    `6 opções de ganchos criadas no tom ${toneLabel} · Gancho recomendado: ${outs[0]?.angle ?? "—"} (${outs[0]?.retention ?? 0}% retenção estimada)`
+  );
 
   useAutosave(
     () => ({
       tool: "hooks",
-      toolName: "Gerador de Hooks",
-      title: theme.trim() || promise.trim() ? `Hooks — ${theme}` : "",
+      toolName: t("tools.hooks.title", {}, "Gerador de Hooks"),
+      title: theme.trim() || promise.trim() ? t("tools.hooks.save_title", { theme }, `Hooks — ${theme}`) : "",
       summary: friendlySummary,
       tag: `${outs[0]?.retention ?? 0}%`,
       content: `TEMA: ${theme}\nPROMESSA: ${promise}\nTOM: ${tone} · DESTINO: ${format}\n\n${outs
         .map((o, i) => `${String(i + 1).padStart(2, "0")}. ${o.angle} · ${o.seconds.toFixed(1)}s · ret. ${o.retention}%\n    ${o.l1}\n    ${o.l2}`)
         .join("\n")}`,
     }),
-    [outs, theme, promise, tone, format, friendlySummary],
-    6
+    [outs, theme, promise, tone, format, friendlySummary, t]
   );
 
   return (
     <ToolShell
       id="hooks"
-      title="Gerador de Hooks"
+      title={t("tools.hooks.title", {}, "Gerador de Hooks")}
       accent="mint"
-      lede="Duas linhas, seis ângulos. O hook não é introdução: é a entrega imediata do ouro nos primeiros segundos, com número cru, tensão e segunda pessoa."
+      lede={t("tools.hooks.lede", {}, "Duas linhas, seis ângulos. O hook não é introdução: é a entrega imediata do ouro nos primeiros segundos, com número cru, tensão e segunda pessoa.")}
       meta={[
-        { k: "Ângulos", v: "6" },
-        { k: "Linhas", v: "2" },
-        { k: "Duração alvo", v: format === "shorts" ? "≤ 8s" : "≤ 15s" },
-        { k: "Tom", v: cap(tone) },
+        { k: t("tools.hooks.angles", {}, "Ângulos"), v: "6" },
+        { k: t("tools.hooks.lines", {}, "Linhas"), v: "2" },
+        { k: t("tools.hooks.target_duration", {}, "Duração alvo"), v: format === "shorts" ? "≤ 8s" : "≤ 15s" },
+        { k: t("tools.hooks.tone", {}, "Tom"), v: cap(toneLabel) },
       ]}
       onBack={onBack}
       onGo={onGo}
@@ -165,9 +208,9 @@ export function Hooks({
         theme.trim() || promise.trim()
           ? {
               type: "hooks",
-              group: "Criação",
-              toolName: "Gerador de Hooks",
-              title: theme.trim() ? `Hooks — ${theme}` : "Hooks de Conteúdo",
+              group: "Criação" as const,
+              toolName: t("tools.hooks.title", {}, "Gerador de Hooks"),
+              title: theme.trim() ? t("tools.hooks.save_title", { theme }, `Hooks — ${theme}`) : t("tools.hooks.generic_title", {}, "Hooks de Conteúdo"),
               summary: friendlySummary,
               tag: `${outs[0]?.retention ?? 0}%`,
               content: `TEMA: ${theme}\nPROMESSA: ${promise}\nTOM: ${tone} · DESTINO: ${format}\n\n${outs
@@ -185,7 +228,7 @@ export function Hooks({
       }
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
-          <Card title="Hook selecionado" note="pronto pro teleprompter" accent="mint">
+          <Card title={t("tools.hooks.selected_hook", {}, "Hook selecionado")} note={t("tools.hooks.teleprompter_ready", {}, "pronto pro teleprompter")} accent="mint">
             {selected ? (
               <>
                 <div className="rounded-md border border-mint-400/25 bg-ink-950/70 p-4">
@@ -199,7 +242,7 @@ export function Hooks({
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <div className="rounded border border-ink-800 bg-ink-950/50 px-3 py-2">
                     <div className="font-mono text-[9px] tracking-[0.16em] text-ink-400 uppercase">
-                      Falado em
+                      {t("tools.hooks.spoken_in", {}, "Falado em")}
                     </div>
                     <div className="font-display text-lg font-bold text-bone-100 tabular-nums">
                       {selected.seconds.toFixed(1)}s
@@ -207,7 +250,7 @@ export function Hooks({
                   </div>
                   <div className="rounded border border-ink-800 bg-ink-950/50 px-3 py-2">
                     <div className="font-mono text-[9px] tracking-[0.16em] text-ink-400 uppercase">
-                      Retenção est.
+                      {t("tools.hooks.est_retention", {}, "Retenção est.")}
                     </div>
                     <div className="font-display text-lg font-bold text-mint-300 tabular-nums">
                       {selected.retention}%
@@ -217,23 +260,23 @@ export function Hooks({
                 <div className="mt-3 flex gap-2">
                   <CopyButton text={`${selected.l1}\n${selected.l2}`} />
                   <Button size="sm" variant="outline" icon="mic" onClick={() => onGo("roteiro")}>
-                    Abrir teleprompter
+                    {t("tools.hooks.open_teleprompter", {}, "Abrir teleprompter")}
                   </Button>
                 </div>
               </>
             ) : (
               <p className="py-4 text-center font-mono text-[11px] tracking-[0.16em] text-ink-400 uppercase">
-                selecione um ângulo
+                {t("tools.hooks.select_angle", {}, "selecione um ângulo")}
               </p>
             )}
           </Card>
 
-          <Card title="Anatomia do hook" note="framework 15" accent="signal">
+          <Card title={t("tools.hooks.anatomy_title", {}, "Anatomia do hook")} note={t("tools.hooks.framework_15", {}, "framework 15")} accent="signal">
             <ol className="space-y-2.5">
               {[
-                ["Tese", "afirmação forte, sem contexto prévio"],
-                ["Número cru", "dado real, não arredondado"],
-                ["Tensão", "algo que só se resolve assistindo"],
+                [t("tools.hooks.anatomy_thesis", {}, "Tese"), t("tools.hooks.anatomy_thesis_desc", {}, "afirmação forte, sem contexto prévio")],
+                [t("tools.hooks.anatomy_raw_num", {}, "Número cru"), t("tools.hooks.anatomy_raw_num_desc", {}, "dado real, não arredondado")],
+                [t("tools.hooks.anatomy_tension", {}, "Tensão"), t("tools.hooks.anatomy_tension_desc", {}, "algo que só se resolve assistindo")],
               ].map(([k, v], i) => (
                 <li key={k} className="flex gap-3">
                   <span className="mt-0.5 font-mono text-[10px] text-signal-400 tabular-nums">
@@ -254,46 +297,54 @@ export function Hooks({
         calib={calib}
         profileName={profileName}
         profileColor={profileColor}
-        toolName="Gerador de Hooks"
+        toolName={t("tools.hooks.title", {}, "Gerador de Hooks")}
         onGo={onGo}
         onGoCalib={() => onGo("calibracao")}
       />
 
-      <Card title="Sobre o que é o conteúdo?" note="entrada" accent="mint">
+      <Card title={t("tools.hooks.input_title", {}, "Sobre o que é o conteúdo?")} note={t("tools.hooks.input_note", {}, "entrada")} accent="mint">
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto_auto]">
           <div className="md:col-span-1">
-            <Label hint="tema do vídeo">Assunto</Label>
-            <Input value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="Ex.: investir R$100 por mês em FIIs" />
+            <Label hint={t("tools.hooks.theme_hint", {}, "tema do vídeo")}>
+              {t("tools.hooks.subject", {}, "Assunto")}
+            </Label>
+            <Input
+              value={theme}
+              onChange={(e) => setTheme(e.target.value)}
+              placeholder={t("tools.hooks.theme_placeholder", {}, "Ex.: investir R$100 por mês em FIIs")}
+            />
           </div>
           <div className="md:col-span-3">
-            <Label hint="o que o hook promete entregar">Promessa principal</Label>
+            <Label hint={t("tools.hooks.promise_hint", {}, "o que o hook promete entregar")}>
+              {t("tools.hooks.main_promise", {}, "Promessa principal")}
+            </Label>
             <Input
               value={promise}
               onChange={(e) => setPromise(e.target.value)}
-              placeholder="Ex.: o rendimento real com o extrato na tela"
+              placeholder={t("tools.hooks.promise_placeholder", {}, "Ex.: o rendimento real com o extrato na tela")}
             />
             <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-400">
-              A promessa entra na segunda linha dos ângulos de número, transformação, autoridade e futuro.
+              {t("tools.hooks.promise_desc", {}, "A promessa entra na segunda linha dos ângulos de número, transformação, autoridade e futuro.")}
             </p>
           </div>
           <div>
-            <Label>Tom</Label>
+            <Label>{t("tools.hooks.tone", {}, "Tom")}</Label>
             <Segmented
               value={tone}
               onChange={(v) => setTone(v)}
               options={[
-                { id: "provocador", label: "Provocador" },
-                { id: "neutro", label: "Neutro" },
-                { id: "didático", label: "Didático" },
+                { id: "provocador", label: t("tools.hooks.tone_provocative", {}, "Provocador") },
+                { id: "neutro", label: t("tools.hooks.tone_neutral", {}, "Neutro") },
+                { id: "didático", label: t("tools.hooks.tone_didactic", {}, "Didático") },
               ]}
             />
           </div>
           <div>
-            <Label>Destino</Label>
-            <Select value={format} onChange={(e) => setFormat(e.target.value)} headerTitle="Destinos sugeridos" className="min-w-[10rem]">
-              <option value="shorts">Shorts / Reels / TikTok</option>
-              <option value="long">Abertura de vídeo longo</option>
-              <option value="post">Primeira linha de post</option>
+            <Label>{t("tools.hooks.destination", {}, "Destino")}</Label>
+            <Select value={format} onChange={(e) => setFormat(e.target.value)} headerTitle={t("tools.hooks.dest_suggested", {}, "Destinos sugeridos")} className="min-w-[10rem]">
+              <option value="shorts">{t("tools.hooks.dest_shorts", {}, "Shorts / Reels / TikTok")}</option>
+              <option value="long">{t("tools.hooks.dest_long", {}, "Abertura de vídeo longo")}</option>
+              <option value="post">{t("tools.hooks.dest_post", {}, "Primeira linha de post")}</option>
             </Select>
           </div>
         </div>
@@ -365,11 +416,11 @@ export function Hooks({
       <div className="mt-6 flex flex-wrap items-center gap-3 rounded-lg border border-ink-700/70 bg-ink-900/50 p-4">
         <Icon name="spark" className="h-4 w-4 text-signal-400" />
         <p className="flex-1 text-[12.5px] leading-relaxed text-bone-400">
-          <strong className="text-bone-100">Regra de ouro:</strong> nunca comece com contexto.
-          Se a primeira frase puder ser cortada sem perder informação, ela já nasceu errada.
+          <strong className="text-bone-100">{t("tools.hooks.golden_rule", {}, "Regra de ouro:")}</strong>{" "}
+          {t("tools.hooks.golden_rule_desc", {}, "nunca comece com contexto. Se a primeira frase puder ser cortada sem perder informação, ela já nasceu errada.")}
         </p>
         <Button size="sm" variant="outline" icon="type" onClick={() => onGo("titulos")}>
-          Casar com o título
+          {t("tools.hooks.match_title", {}, "Casar com o título")}
         </Button>
       </div>
     </ToolShell>

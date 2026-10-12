@@ -8,12 +8,14 @@ import { useExampleMode } from "../auth";
 import { useToolRestore } from "../utils/toolStateRestore";
 import { type Calib } from "../calibration";
 import { CalibrationNotice } from "../components/CalibrationNotice";
+import { useI18n } from "../i18n";
+import { getLocalizedToolExamples } from "../i18n/examples";
 
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
 
 type Crit = { id: string; label: string; score: number; ev: string; fix: string; accent: "signal" | "sky" | "mint" | "plum" | "oxide" };
 
-function scorePost(t: string, format: string): Crit[] {
+function scorePost(t: string, format: string, tFn: (k: string, p?: any, fb?: string) => string): Crit[] {
   const sents = sentences(t);
   const paras = paragraphs(t);
   const w = words(t).length;
@@ -22,7 +24,7 @@ function scorePost(t: string, format: string): Crit[] {
   const b = burstiness(t);
   const cliches = findCliches(t).length;
   const nums = (t.match(/\b\d+(?:[.,]\d+)?\b/g) ?? []).length;
-  const second = (t.match(/\b(você|voce|seu|sua)\b/gi) ?? []).length;
+  const second = (t.match(/\b(você|voce|seu|sua|you|your|tu|toi|vous|dein|du)\b/gi) ?? []).length;
   const longest = paras.reduce((m, p) => Math.max(m, words(p).length), 0);
 
   const ideal = format === "carrossel" ? 90 : format === "thread" ? 220 : 160;
@@ -32,8 +34,8 @@ function scorePost(t: string, format: string): Crit[] {
       (first ? 3 : 0) +
       (first.length > 0 && first.length <= 95 ? 2.5 : 0) +
       (/\d/.test(first) ? 2 : 0) +
-      (/(nunca|parei|erro|ninguém|ninguem|perdi|verdade|não|nao|pior|melhor|risco)/i.test(first) ? 1.5 : 0) +
-      (/^(oi|olá|ola|e aí|eai)/i.test(first) ? -3 : 0)
+      (/(nunca|parei|erro|ninguém|ninguem|perdi|verdade|não|nao|pior|melhor|risco|never|stopped|error|nobody|lost|truth|no|worst|best|risk)/i.test(first) ? 1.5 : 0) +
+      (/^(oi|olá|ola|e aí|eai|hi|hello|hey)/i.test(first) ? -3 : 0)
     )
   );
 
@@ -61,52 +63,85 @@ function scorePost(t: string, format: string): Crit[] {
   return [
     {
       id: "hook",
-      label: "Hook",
+      label: tFn("tools.score.crit_hook", {}, "Hook"),
       score: Math.max(0, hook),
       accent: "signal",
-      ev: first ? `“${first.slice(0, 70)}${first.length > 70 ? "…" : ""}” · ${words(first).length} palavras` : "post vazio",
-      fix: /\d/.test(first) ? "Número presente na abertura — segure essa régua." : "Coloque um número cru na primeira linha.",
+      ev: first
+        ? tFn("tools.score.ev_hook_first", { quote: `${first.slice(0, 70)}${first.length > 70 ? "…" : ""}`, words: words(first).length }, `“${first.slice(0, 70)}${first.length > 70 ? "…" : ""}” · ${words(first).length} palavras`)
+        : tFn("tools.score.ev_empty_post", {}, "post vazio"),
+      fix: /\d/.test(first)
+        ? tFn("tools.score.fix_hook_has_num", {}, "Número presente na abertura — segure essa régua.")
+        : tFn("tools.score.fix_hook_no_num", {}, "Coloque um número cru na primeira linha."),
     },
     {
       id: "voz",
-      label: "Voz",
+      label: tFn("tools.score.crit_voice", {}, "Voz"),
       score: voz,
       accent: "sky",
-      ev: `burstiness ${b.toFixed(1)} · ${second} menção(ões) em 2ª pessoa`,
-      fix: b < 4 ? "Frases todas do mesmo tamanho. Alterne: uma curta depois de uma longa." : "Ritmo variado, leitura de fala.",
+      ev: tFn("tools.score.ev_voice", { burst: b.toFixed(1), second }, `burstiness ${b.toFixed(1)} · ${second} menção(ões) em 2ª pessoa`),
+      fix: b < 4
+        ? tFn("tools.score.fix_voice_monotone", {}, "Frases todas do mesmo tamanho. Alterne: uma curta depois de uma longa.")
+        : tFn("tools.score.fix_voice_rhythm", {}, "Ritmo variado, leitura de fala."),
     },
     {
       id: "valor",
-      label: "Valor",
+      label: tFn("tools.score.crit_value", {}, "Valor"),
       score: valor,
       accent: "mint",
-      ev: `${w} palavras · ${nums} dado(s) numérico(s) · ideal p/ ${format}: ~${ideal}`,
-      fix: w < ideal * 0.6 ? "Denso demais para o formato. Acrescente um exemplo concreto." : w > ideal * 2.2 ? "Gordura sobrando. Corte um parágrafo." : "Densidade adequada ao formato.",
+      ev: tFn("tools.score.ev_value", { words: w, nums, format, ideal }, `${w} palavras · ${nums} dado(s) numérico(s) · ideal p/ ${format}: ~${ideal}`),
+      fix: w < ideal * 0.6
+        ? tFn("tools.score.fix_value_short", {}, "Denso demais para o formato. Acrescente um exemplo concreto.")
+        : w > ideal * 2.2
+        ? tFn("tools.score.fix_value_long", {}, "Gordura sobrando. Corte um parágrafo.")
+        : tFn("tools.score.fix_value_ok", {}, "Densidade adequada ao formato."),
     },
     {
       id: "estrutura",
-      label: "Estrutura",
+      label: tFn("tools.score.crit_structure", {}, "Estrutura"),
       score: estrutura,
       accent: "plum",
-      ev: `${lines.length} linhas · ${paras.length} parágrafo(s) · maior bloco com ${longest} palavras`,
-      fix: longest > 45 ? "Quebre o parágrafo mais longo: escaneabilidade cai no mobile." : "Blocos curtos, escaneáveis.",
+      ev: tFn("tools.score.ev_structure", { lines: lines.length, paras: paras.length, longest }, `${lines.length} linhas · ${paras.length} parágrafo(s) · maior bloco com ${longest} palavras`),
+      fix: longest > 45
+        ? tFn("tools.score.fix_structure_break", {}, "Quebre o parágrafo mais longo: escaneabilidade cai no mobile.")
+        : tFn("tools.score.fix_structure_ok", {}, "Blocos curtos, escaneáveis."),
     },
     {
       id: "prontidao",
-      label: "Prontidão",
+      label: tFn("tools.score.crit_readiness", {}, "Prontidão"),
       score: prontidao,
       accent: "oxide",
-      ev: `${cliches} marca(s) de IA${EMOJI.test(t) ? " · emoji encontrado" : ""}`,
-      fix: cliches ? "Passe no Humanizador antes de publicar." : "Sem clichê de IA. Pode apertar publicar.",
+      ev: tFn("tools.score.ev_readiness", { cliches, emoji: EMOJI.test(t) ? ` · ${tFn("tools.score.emoji_found", {}, "emoji encontrado")}` : "" }, `${cliches} marca(s) de IA${EMOJI.test(t) ? " · emoji encontrado" : ""}`),
+      fix: cliches
+        ? tFn("tools.score.fix_readiness_humanize", {}, "Passe no Humanizador antes de publicar.")
+        : tFn("tools.score.fix_readiness_clean", {}, "Sem clichê de IA. Pode apertar publicar."),
     },
   ];
 }
 
-function verdict(total: number) {
-  if (total >= 40) return { tag: "Pronto para publicar", tone: "mint", note: "Acima do corte de 40. Publique e meça em 48h." };
-  if (total >= 30) return { tag: "Quase lá", tone: "signal", note: "Um ou dois critérios seguram a nota. Corrija o de menor score." };
-  if (total >= 18) return { tag: "Reescrever", tone: "oxide", note: "Estrutura fraca. Volte ao hook e reorganize em blocos." };
-  return { tag: "Não publique", tone: "oxide", note: "Ainda é rascunho. Falta tese, prova e ritmo." };
+function verdict(total: number, tFn: (k: string, p?: any, fb?: string) => string) {
+  if (total >= 40)
+    return {
+      tag: tFn("tools.score.verdict_ready_tag", {}, "Pronto para publicar"),
+      tone: "mint",
+      note: tFn("tools.score.verdict_ready_note", {}, "Acima do corte de 40. Publique e meça em 48h."),
+    };
+  if (total >= 30)
+    return {
+      tag: tFn("tools.score.verdict_almost_tag", {}, "Quase lá"),
+      tone: "signal",
+      note: tFn("tools.score.verdict_almost_note", {}, "Um ou dois critérios seguram a nota. Corrija o de menor score."),
+    };
+  if (total >= 18)
+    return {
+      tag: tFn("tools.score.verdict_rewrite_tag", {}, "Reescrever"),
+      tone: "oxide",
+      note: tFn("tools.score.verdict_rewrite_note", {}, "Estrutura fraca. Volte ao hook e reorganize em blocos."),
+    };
+  return {
+    tag: tFn("tools.score.verdict_dont_publish_tag", {}, "Não publique"),
+    tone: "oxide",
+    note: tFn("tools.score.verdict_dont_publish_note", {}, "Ainda é rascunho. Falta tese, prova e ritmo."),
+  };
 }
 
 export function ScorePost({
@@ -122,9 +157,12 @@ export function ScorePost({
   profileName?: string;
   profileColor?: string;
 }) {
+  const { t, resolvedLanguage } = useI18n();
   const examples = useExampleMode();
+  const toolExamples = getLocalizedToolExamples(resolvedLanguage);
+
   const [draft, setDraft] = useState(
-    examples ? "Parei de aportar R$100 por mês em FIIs.\n\nO resultado em 2 anos: R$2.400 colocados, R$2.311 de saldo. Menos que a poupança.\n\nEu escolhi fundo pelo dividend yield e ignorei a vacância. Você não precisa repetir.\n\nHoje eu divido assim: 60% tesouro, 30% um FII de tijolo com vacância abaixo de 10%, 10% caixa.\n\nSe você aporta R$100 por mês, faça essa conta antes do próximo aporte." : ""
+    examples ? toolExamples.scorePostCopy : ""
   );
   const [format, setFormat] = useState<"carrossel" | "texto" | "thread" | "legenda">("texto");
 
@@ -142,37 +180,48 @@ export function ScorePost({
     }
   });
 
-  const crits = useMemo(() => scorePost(draft, format), [draft, format]);
+  const crits = useMemo(() => scorePost(draft, format, t), [draft, format, t]);
   const total = crits.reduce((s, c) => s + c.score, 0);
-  const v = verdict(total);
+  const v = useMemo(() => verdict(total, t), [total, t]);
   const worst = [...crits].sort((a, b) => a.score - b.score)[0];
 
-  const friendlySummary = `Avaliação: ${total}/50 (${v.tag}) para post em ${format} · ${total >= 40 ? "Pronto para publicar!" : "Dica de melhoria: " + worst.fix}`;
+  const friendlySummary = t(
+    "tools.score.friendly_summary",
+    {
+      total,
+      tag: v.tag,
+      format,
+      detail: total >= 40
+        ? t("tools.score.summary_ready", {}, "Pronto para publicar!")
+        : `${t("tools.score.summary_tip", {}, "Dica de melhoria:")} ${worst.fix}`,
+    },
+    `Avaliação: ${total}/50 (${v.tag}) para post em ${format} · ${total >= 40 ? "Pronto para publicar!" : "Dica de melhoria: " + worst.fix}`
+  );
 
   useAutosave(
     () => ({
       tool: "score",
-      toolName: "Score de Post",
-      title: draft.trim() ? `Score ${total}/50 — ${draft.split("\n")[0].slice(0, 64)}` : "",
+      toolName: t("tools.score.title", {}, "Score de Post"),
+      title: draft.trim() ? `${t("tools.score.title", {}, "Score de Post")} ${total}/50 — ${draft.split("\n")[0].slice(0, 64)}` : "",
       summary: friendlySummary,
       tag: `${total}/50`,
       content: `SCORE DE POST — ${total}/50 · ${v.tag.toUpperCase()}\nformato: ${format} · ${words(draft).length} palavras · burstiness ${burstiness(draft).toFixed(1)}\n\n${crits.map((c) => `${c.label.padEnd(11, " ")} ${String(c.score).padStart(2)}/10 — ${c.ev}`).join("\n")}\n\ncorreção prioritária: ${worst.fix}\n\nRASCUNHO\n${draft}`,
     }),
-    [draft, format, total, friendlySummary],
+    [draft, format, total, friendlySummary, t] as const,
     16
   );
 
   return (
     <ToolShell
       id="score"
-      title="Score de Post"
+      title={t("tools.score.title", {}, "Score de Post")}
       accent="mint"
-      lede="Nota de 0 a 50 em cinco critérios, calculada sobre o texto que você colou — não sobre uma impressão. Acima de 40 publica. Abaixo disso, o painel aponta exatamente qual critério derrubou a nota."
+      lede={t("tools.score.lede", {}, "Nota de 0 a 50 em cinco critérios, calculada sobre o texto que você colou — não sobre uma impressão. Acima de 40 publica. Abaixo disso, o painel aponta exatamente qual critério derrubou a nota.")}
       meta={[
-        { k: "Critérios", v: "5" },
-        { k: "Escala", v: "0–50" },
-        { k: "Corte", v: "≥ 40" },
-        { k: "Avaliados", v: "312" },
+        { k: t("tools.score.meta_crits", {}, "Critérios"), v: "5" },
+        { k: t("tools.score.meta_scale", {}, "Escala"), v: "0–50" },
+        { k: t("tools.score.meta_cutoff", {}, "Corte"), v: "≥ 40" },
+        { k: t("tools.score.meta_evaluated", {}, "Avaliados"), v: "312" },
       ]}
       onBack={onBack}
       onGo={onGo}
@@ -180,9 +229,9 @@ export function ScorePost({
         draft.trim()
           ? {
               type: "score",
-              group: "Publicação",
-              toolName: "Score de Post",
-              title: `Score ${total}/50 — ${draft.split("\n")[0].slice(0, 50)}`,
+              group: "Publicação" as const,
+              toolName: t("tools.score.title", {}, "Score de Post"),
+              title: `${t("tools.score.title", {}, "Score de Post")} ${total}/50 — ${draft.split("\n")[0].slice(0, 50)}`,
               summary: friendlySummary,
               tag: `${total}/50`,
               content: `SCORE DE POST — ${total}/50 · ${v.tag.toUpperCase()}\nformato: ${format} · ${words(draft).length} palavras · burstiness ${burstiness(draft).toFixed(1)}\n\n${crits.map((c) => `${c.label.padEnd(11, " ")} ${String(c.score).padStart(2)}/10 — ${c.ev}`).join("\n")}\n\ncorreção prioritária: ${worst.fix}\n\nRASCUNHO\n${draft}`,
@@ -195,7 +244,7 @@ export function ScorePost({
       }
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
-          <Card title="Placar" note="tempo real" accent="mint">
+          <Card title={t("tools.score.scoreboard_title", {}, "Placar")} note={t("tools.score.realtime", {}, "tempo real")} accent="mint">
             <div className="mb-4 flex items-end gap-3">
               <span
                 className={cn(
@@ -246,15 +295,15 @@ export function ScorePost({
             </div>
           </Card>
 
-          <Card title="Correção prioritária" note={worst.label} accent="oxide">
+          <Card title={t("tools.score.priority_fix", {}, "Correção prioritária")} note={worst.label} accent="oxide">
             <p className="font-display text-[15px] leading-snug font-bold text-bone-100">{worst.fix}</p>
             <p className="mt-2 font-mono text-[10.5px] text-ink-400">{worst.ev}</p>
             <div className="mt-4 flex gap-2">
               <Button size="sm" variant="outline" icon="wave" onClick={() => onGo("humanizador")}>
-                Humanizador
+                {t("tools.score.btn_humanizador", {}, "Humanizador")}
               </Button>
               <Button size="sm" variant="ghost" icon="flask" onClick={() => onGo("receita")}>
-                Receita viral
+                {t("tools.score.btn_receita", {}, "Receita viral")}
               </Button>
             </div>
           </Card>
@@ -265,22 +314,22 @@ export function ScorePost({
         calib={calib}
         profileName={profileName}
         profileColor={profileColor}
-        toolName="Score de Post"
+        toolName={t("tools.score.title", {}, "Score de Post")}
         onGo={onGo}
         onGoCalib={() => onGo("calibracao")}
       />
 
-      <Card title="Cole o rascunho completo" note="avaliação ao digitar" accent="mint">
+      <Card title={t("tools.score.paste_draft_title", {}, "Cole o rascunho completo")} note={t("tools.score.eval_as_type", {}, "avaliação ao digitar")} accent="mint">
         <div className="mb-3 flex flex-wrap items-center gap-3">
-          <Label>Formato do post</Label>
+          <Label>{t("tools.score.format_label", {}, "Formato do post")}</Label>
           <Segmented
             value={format}
             onChange={setFormat}
             options={[
-              { id: "carrossel", label: "Carrossel" },
-              { id: "texto", label: "Texto longo" },
-              { id: "thread", label: "Thread" },
-              { id: "legenda", label: "Legenda" },
+              { id: "carrossel", label: t("tools.score.fmt_carousel", {}, "Carrossel") },
+              { id: "texto", label: t("tools.score.fmt_text", {}, "Texto longo") },
+              { id: "thread", label: t("tools.score.fmt_thread", {}, "Thread") },
+              { id: "legenda", label: t("tools.score.fmt_caption", {}, "Legenda") },
             ]}
           />
         </div>
@@ -288,18 +337,18 @@ export function ScorePost({
           rows={12}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Cole o post inteiro, com as quebras de linha como ele vai publicado"
+          placeholder={t("tools.score.placeholder", {}, "Cole o post inteiro, com as quebras de linha como ele vai publicado")}
         />
         <div className="mt-3 flex flex-wrap items-center gap-4 font-mono text-[10px] tracking-[0.14em] text-ink-400 uppercase">
-          <span>{words(draft).length} palavras</span>
+          <span>{words(draft).length} {t("common.words", {}, "palavras")}</span>
           <span className="h-3 w-px bg-ink-700" />
-          <span>{sentences(draft).length} frases</span>
+          <span>{sentences(draft).length} {t("common.sentences", {}, "frases")}</span>
           <span className="h-3 w-px bg-ink-700" />
-          <span>{paragraphs(draft).length} blocos</span>
+          <span>{paragraphs(draft).length} {t("common.blocks", {}, "blocos")}</span>
           <span className="h-3 w-px bg-ink-700" />
-          <span>{findCliches(draft).length} marcas de IA</span>
+          <span>{findCliches(draft).length} {t("tools.score.ai_marks", {}, "marcas de IA")}</span>
           <span className="ml-auto flex items-center gap-1.5 text-mint-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-mint-400" /> avaliado
+            <span className="h-1.5 w-1.5 rounded-full bg-mint-400" /> {t("tools.score.evaluated_status", {}, "avaliado")}
           </span>
         </div>
       </Card>
@@ -328,7 +377,7 @@ export function ScorePost({
         ))}
       </div>
 
-      <Card title="Laudo para copiar" accent="bone" className="mt-6">
+      <Card title={t("tools.score.report_title", {}, "Laudo para copiar")} accent="bone" className="mt-6">
         <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-ink-800 bg-ink-950/70 p-4 font-mono text-[11.5px] leading-relaxed text-bone-300">
 {`SCORE DE POST — ${total}/50 · ${v.tag.toUpperCase()}
 formato: ${format} · ${words(draft).length} palavras · burstiness ${burstiness(draft).toFixed(1)}
@@ -342,7 +391,7 @@ correção prioritária: ${worst.fix}`}
             text={`SCORE DE POST — ${total}/50 · ${v.tag}\n\n${crits.map((c) => `${c.label}: ${c.score}/10 — ${c.ev}`).join("\n")}\n\nCorreção prioritária: ${worst.fix}`}
           />
           <span className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.12em] text-ink-400 uppercase">
-            <Icon name="clock" className="h-3 w-3" /> reavalie 48h depois de publicar
+            <Icon name="clock" className="h-3 w-3" /> {t("tools.score.reevaluate_hint", {}, "reavalie 48h depois de publicar")}
           </span>
         </div>
       </Card>

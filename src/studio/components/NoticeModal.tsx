@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Icon, Button } from "./ui";
 import { cn } from "../utils/cn";
+import { useI18n } from "../i18n";
 
 export type NoticeType = "success" | "error" | "warning" | "info";
 
@@ -23,11 +24,13 @@ export function NoticeModal({
   title,
   message,
   type = "info",
-  actionText = "Entendido",
+  actionText,
   cancelText,
   onAction,
   customIcon,
 }: NoticeModalProps) {
+  const { t } = useI18n();
+  const effectiveActionText = actionText || t("common.understood", undefined, "Entendido");
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -126,7 +129,7 @@ export function NoticeModal({
         <button
           onClick={onClose}
           className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-xl border border-ink-700/60 bg-ink-900/70 text-ink-300 hover:text-white hover:border-ink-500 hover:bg-ink-800 transition-all cursor-pointer z-10 active:scale-95"
-          title="Fechar"
+          title={t("common.close", undefined, "Fechar")}
         >
           <Icon name="close" className="h-3.5 w-3.5" />
         </button>
@@ -169,7 +172,7 @@ export function NoticeModal({
                 cfg.buttonClass
               )}
             >
-              {actionText}
+              {effectiveActionText}
             </Button>
           </div>
         </div>

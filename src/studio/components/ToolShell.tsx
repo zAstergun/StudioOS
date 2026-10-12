@@ -4,6 +4,7 @@ import { TOOL_BY_ID, accentSoft, type Accent } from "../data";
 import { Icon } from "./ui";
 import { SaveToProjectModal, type SaveToProjectPayload } from "./SaveToProjectModal";
 import { useStudioOS } from "../history";
+import { useI18n } from "../i18n";
 
 export function ToolShell({
   id,
@@ -30,6 +31,7 @@ export function ToolShell({
   onGo?: (view: string) => void;
   canSaveToProject?: boolean;
 }) {
+  const { t } = useI18n();
   const tool = TOOL_BY_ID[id];
   const os = useStudioOS();
   const [openSaveModal, setOpenSaveModal] = useState(false);
@@ -57,7 +59,7 @@ export function ToolShell({
       });
       setOpenSaveModal(true);
     } else {
-      alert("Preencha ou execute a ferramenta primeiro para gerar um conteúdo e salvar no projeto.");
+      alert(t("common.save_to_project_empty_warn", undefined, "Preencha ou execute a ferramenta primeiro para gerar um conteúdo e salvar no projeto."));
     }
   };
 
@@ -73,7 +75,7 @@ export function ToolShell({
             className="h-3.5 w-3.5 rotate-180 transition-transform duration-300 group-hover:-translate-x-1"
             strokeWidth={2}
           />
-          Visão geral
+          {t("nav.overview", undefined, "Visão geral")}
         </button>
 
         {/* Botão de Salvar no Projeto no Topo */}
@@ -82,10 +84,10 @@ export function ToolShell({
             type="button"
             onClick={handleOpenSaveToProject}
             className="flex items-center gap-2 rounded-lg border border-signal-400/40 bg-signal-400/10 px-3.5 py-1.5 font-mono text-[10.5px] font-bold tracking-[0.1em] text-signal-400 uppercase transition-all duration-200 hover:bg-signal-400 hover:text-ink-950 hover:shadow-[0_0_20px_rgba(242,179,61,0.25)] cursor-pointer"
-            title="Salvar o resultado desta ferramenta nos Itens Salvos de um projeto"
+            title={t("common.save_to_project_tooltip", undefined, "Salvar o resultado desta ferramenta nos Itens Salvos de um projeto")}
           >
             <Icon name="bookmark" className="h-3.5 w-3.5" />
-            <span>Salvar no Projeto</span>
+            <span>{t("common.save_to_project", undefined, "Salvar no Projeto")}</span>
           </button>
         )}
       </div>
@@ -200,6 +202,7 @@ export function Card({
 }
 
 export function CopyButton({ text, className }: { text: string; className?: string }) {
+  const { t } = useI18n();
   return (
     <button
       onClick={() => {
@@ -211,7 +214,7 @@ export function CopyButton({ text, className }: { text: string; className?: stri
       )}
     >
       <Icon name="copy" className="h-3 w-3" strokeWidth={1.8} />
-      copiar
+      {t("common.copy", undefined, "copiar").toLowerCase()}
     </button>
   );
 }

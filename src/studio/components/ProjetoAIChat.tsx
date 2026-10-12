@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Icon } from "./ui";
 import { cn } from "../utils/cn";
 import { type Project } from "../views/ProjetosScreen";
 import { useAuth } from "../auth";
 import { useStudioOS } from "../history";
+import { useI18n, getAILanguageDirective } from "../i18n";
 import { type ProjectSavedItem, TOOL_NAME_MAP, TOOL_ICON_MAP } from "../types/projectSavedItem";
 import { prepareToolRestore } from "../utils/toolStateRestore";
 import { requestAI, AIModelUnavailableError, type AIChatMessage } from "../ai";
@@ -422,7 +423,50 @@ export function ProjetoAIChat({
 }: ProjetoAIChatProps) {
   const { user } = useAuth();
   const os = useStudioOS();
+  const { t } = useI18n();
   const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  const presetPrompts = useMemo(
+    () => [
+      {
+        id: "rank_ideia",
+        label: t("ai_chat.preset_rank_label", undefined, "💡 Ideia no Rank de Ideias"),
+        icon: "target",
+        prompt: t("ai_chat.preset_rank_prompt", undefined, "Acesse a ferramenta Rank de Ideia, crie uma ideia inédita de alto impacto calibrada para este projeto, avalie os 5 critérios e salve diretamente nos itens salvos do projeto."),
+      },
+      {
+        id: "titulos",
+        label: t("ai_chat.preset_titulos_label", undefined, "🎯 Gerar 5 Títulos"),
+        icon: "type",
+        prompt: t("ai_chat.preset_titulos_prompt", undefined, "Use a ferramenta Gerador de Títulos para criar 5 variações magnéticas de títulos com projeção de CTR para este projeto e salve nos itens salvos."),
+      },
+      {
+        id: "hooks",
+        label: t("ai_chat.preset_hooks_label", undefined, "⚡ Criar Hooks"),
+        icon: "bolt",
+        prompt: t("ai_chat.preset_hooks_prompt", undefined, "Use a ferramenta Gerador de Hooks para criar 6 ganchos de abertura de alta retenção para este projeto e salve nos itens salvos."),
+      },
+      {
+        id: "roteiro",
+        label: t("ai_chat.preset_roteiro_label", undefined, "📜 Estruturar Roteiro"),
+        icon: "mic",
+        prompt: t("ai_chat.preset_roteiro_prompt", undefined, "Use a ferramenta Roteiro & Gravação para estruturar um roteiro completo em 4 blocos (Hook, Contexto, Desenvolvimento, CTA) e salve nos itens salvos."),
+      },
+      {
+        id: "resumir",
+        label: t("ai_chat.preset_summary_label", undefined, "Resumir este projeto"),
+        icon: "fileText",
+        prompt: t("ai_chat.preset_summary_prompt", undefined, "Faça um resumo executivo completo e estruturado deste projeto com base nas tarefas do kanban, anotações do bloco de notas e ferramentas/itens salvos."),
+      },
+      {
+        id: "proximos_passos",
+        label: t("ai_chat.preset_next_steps_label", undefined, "Próximos passos"),
+        icon: "listCheck",
+        prompt: t("ai_chat.preset_next_steps_prompt", undefined, "Com base no status atual das tarefas do kanban e nas últimas anotações, quais devem ser os próximos passos e prioridades estratégicas? Se achar adequado, sugira a criação de tarefas no kanban."),
+      },
+    ],
+    [t]
+  );
 
   // Storage key is strictly per-project and per-user
   const storageKey = `studioos_project_ai_chat_p_${project.id}_u_${user?.id || "guest"}`;
@@ -610,7 +654,7 @@ ESCOPO CIRÚRGICO E PRINCÍPIO DA NÃO-REPETIÇÃO (MUITO IMPORTANTE):
    - Fazer coisas que o usuário NÃO pediu ou repetir trabalho já concluído anteriormente confunde e frustra o usuário. Seja cirúrgico, objetivo e direto ao ponto.
 
 DIRETRIZES DE FORMATAÇÃO E TEXTO:
-1. Responda em Português do Brasil com tom estratégico, amigável e profissional.
+1. ${getAILanguageDirective()}
 2. Formate sua resposta em Markdown limpo e estruturado:
    - Use títulos com \`### Título da Seção\` para dividir o texto. NUNCA coloque \`###\` isolado em uma linha sem texto. Escreva sempre na mesma linha: \`### 1. Planejamento de Thumbnail\`.
    - Use tópicos com marcadores (\`- Item\`) para listas e pontos acionáveis.
@@ -788,7 +832,7 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-mono text-[10.5px] font-bold tracking-[0.14em] text-bone-100 uppercase">
-                Assistente IA do Projeto
+                {t("ai_chat.title", undefined, "Assistente IA do Projeto")}
               </h3>
               <span className="flex items-center gap-1 rounded bg-signal-400/10 border border-signal-400/25 px-1.5 py-0.5 font-mono text-[8px] font-bold text-signal-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-signal-400 animate-pulse" />
@@ -796,13 +840,13 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
               </span>
               <span
                 className="hidden sm:inline-flex items-center gap-1 rounded bg-ink-800/60 border border-ink-700/50 px-1.5 py-0.5 font-mono text-[8px] text-bone-400"
-                title="Histórico isolado apenas para você neste navegador"
+                title={t("ai_chat.isolated_history_title", undefined, "Histórico isolado apenas para você neste navegador")}
               >
-                PRIVADO & LOCAL
+                {t("ai_chat.private_local", undefined, "PRIVADO & LOCAL")}
               </span>
             </div>
             <p className="font-mono text-[9px] text-ink-400 mt-0.5">
-              Contexto sincronizado: {tasks.length} tarefas • {savedItems.length} itens salvos • {notes.length} notas
+              {t("ai_chat.context_synced", undefined, "Contexto sincronizado")}: {tasks.length} {t("ai_chat.tasks_count", undefined, "tarefas")} • {savedItems.length} {t("ai_chat.saved_count", undefined, "itens salvos")} • {notes.length} {t("ai_chat.notes_count", undefined, "notas")}
             </p>
           </div>
         </div>
@@ -815,7 +859,7 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
               type="button"
               onClick={handleNavigateToConfig}
               className="group flex items-center gap-1.5 rounded-md border border-ink-800 bg-ink-900/60 px-2.5 py-1 font-mono text-[9px] text-bone-400 hover:text-signal-300 hover:border-signal-400/40 hover:bg-ink-800/80 transition-all cursor-pointer"
-              title="Clique para escolher outro modelo de IA ou provedor em Configurações (?view=config)"
+              title={t("ai_chat.change_provider_title", undefined, "Clique para escolher outro modelo de IA ou provedor em Configurações (?view=config)")}
             >
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 group-hover:scale-125 transition-transform" />
               <span className="uppercase font-bold">{os.config.provider || "google"}</span>
@@ -827,10 +871,10 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
               type="button"
               onClick={handleNavigateToConfig}
               className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 font-mono text-[9px] font-bold text-amber-300 hover:bg-amber-500/20 transition-all cursor-pointer"
-              title="Clique para cadastrar sua chave de API em Configurações (?view=config)"
+              title={t("ai_chat.configure_key_title", undefined, "Clique para cadastrar sua chave de API em Configurações (?view=config)")}
             >
               <Icon name="alert" className="h-3 w-3" />
-              CONFIGURAR CHAVE
+              {t("ai_chat.configure_key_btn", undefined, "CONFIGURAR CHAVE")}
             </button>
           )}
 
@@ -839,28 +883,28 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
             <div className="relative">
               {showClearConfirm ? (
                 <div className="flex items-center gap-1.5 rounded-md bg-ink-950/95 border border-red-500/30 p-1 shadow-lg">
-                  <span className="font-mono text-[8.5px] text-red-300 px-1">Limpar?</span>
+                  <span className="font-mono text-[8.5px] text-red-300 px-1">{t("ai_chat.clear_confirm_q", undefined, "Limpar?")}</span>
                   <button
                     onClick={handleClearChat}
                     className="rounded bg-red-500/20 px-2 py-0.5 font-mono text-[8.5px] font-bold text-red-300 hover:bg-red-500 hover:text-white transition-colors cursor-pointer"
                   >
-                    Sim
+                    {t("ai_chat.yes", undefined, "Sim")}
                   </button>
                   <button
                     onClick={() => setShowClearConfirm(false)}
                     className="rounded px-1.5 py-0.5 font-mono text-[8.5px] text-bone-400 hover:text-bone-200 transition-colors cursor-pointer"
                   >
-                    Não
+                    {t("ai_chat.no", undefined, "Não")}
                   </button>
                 </div>
               ) : (
                 <button
                   onClick={() => setShowClearConfirm(true)}
                   className="flex items-center gap-1 rounded-md border border-ink-800 bg-ink-900/60 px-2.5 py-1 font-mono text-[9px] text-ink-400 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/5 transition-all cursor-pointer"
-                  title="Limpar histórico de chat deste projeto (ação local manual)"
+                  title={t("ai_chat.clear_chat_title", undefined, "Limpar histórico de chat deste projeto (ação local manual)")}
                 >
                   <Icon name="trash" className="h-3 w-3" />
-                  <span className="hidden sm:inline">Limpar chat</span>
+                  <span className="hidden sm:inline">{t("ai_chat.clear_chat_btn", undefined, "Limpar chat")}</span>
                 </button>
               )}
             </div>
@@ -871,9 +915,9 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
       {/* QUICK PRESET PROMPTS (CHIPS BAR) */}
       <div className="flex items-center gap-1.5 overflow-x-auto border-b border-ink-800/25 bg-ink-950/30 px-4 py-2 scrollbar-none">
         <span className="shrink-0 font-mono text-[8.5px] uppercase tracking-wider text-ink-500 mr-1">
-          Perguntas rápidas:
+          {t("ai_chat.quick_questions", undefined, "Perguntas rápidas:")}
         </span>
-        {PRESET_PROMPTS.map((preset) => (
+        {presetPrompts.map((preset) => (
           <button
             key={preset.id}
             onClick={() => handleSendMessage(preset.prompt)}
@@ -895,10 +939,10 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
             </div>
             <div className="max-w-md">
               <h4 className="font-display text-sm font-bold text-bone-100 mb-1">
-                Como posso ajudar com o projeto "{project.name}"?
+                {t("ai_chat.empty_title", { project: project.name }, `Como posso ajudar com o projeto "${project.name}"?`)}
               </h4>
               <p className="text-[12px] text-ink-400 leading-relaxed">
-                Posso analisar seu Kanban, anotações e ferramentas salvas, além de <strong>criar tarefas</strong>, mover itens ou registrar notas diretamente quando você me pedir!
+                {t("ai_chat.empty_desc", undefined, "Posso analisar seu Kanban, anotações e ferramentas salvas, além de criar tarefas, mover itens ou registrar notas diretamente quando você me pedir!")}
               </p>
             </div>
 
@@ -910,9 +954,9 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
                     <Icon name="alert" className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="text-[12px] font-bold text-amber-200">Nenhuma chave de IA configurada</div>
+                    <div className="text-[12px] font-bold text-amber-200">{t("ai_chat.no_key_title", undefined, "Nenhuma chave de IA configurada")}</div>
                     <div className="text-[11px] text-amber-300/80 leading-snug">
-                      Insira sua chave gratuita (Google Gemini, Groq, OpenAI, etc.) para conversar com o projeto.
+                      {t("ai_chat.no_key_desc", undefined, "Insira sua chave gratuita (Google Gemini, Groq, OpenAI, etc.) para conversar com o projeto.")}
                     </div>
                   </div>
                 </div>
@@ -920,7 +964,7 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
                   onClick={handleNavigateToConfig}
                   className="flex items-center gap-1 rounded-lg bg-amber-400 px-3 py-1.5 font-mono text-[9px] font-bold text-ink-950 uppercase hover:bg-amber-300 transition-colors shrink-0 cursor-pointer shadow-sm"
                 >
-                  <span>Configurar</span>
+                  <span>{t("ai_chat.configure_btn", undefined, "Configurar")}</span>
                   <Icon name="arrowRight" className="h-3 w-3" />
                 </button>
               </div>
@@ -928,7 +972,7 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
 
             {/* Quick Actions Grid for Empty State */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg mt-2">
-              {PRESET_PROMPTS.slice(0, 4).map((preset) => (
+              {presetPrompts.slice(0, 4).map((preset) => (
                 <button
                   key={preset.id}
                   onClick={() => handleSendMessage(preset.prompt)}
@@ -972,7 +1016,7 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
                 >
                   <div className="flex items-center justify-between gap-3 mb-1.5 pb-1 border-b border-ink-800/30 font-mono text-[8.5px] uppercase tracking-wider text-ink-500">
                     <span className={cn(isUser ? "text-signal-300 font-bold" : "text-signal-400 font-bold")}>
-                      {isUser ? (user?.name || "Você") : "Copiloto IA"}
+                      {isUser ? (user?.name || t("common.you", undefined, "Você")) : "Copiloto IA"}
                     </span>
                     <div className="flex items-center gap-2">
                       <span>
@@ -988,7 +1032,7 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
                           setTimeout(() => setCopiedId(null), 2000);
                         }}
                         className="opacity-0 group-hover:opacity-100 transition-opacity text-ink-400 hover:text-signal-300 p-0.5"
-                        title="Copiar mensagem"
+                        title={t("ai_chat.copy_message_title", undefined, "Copiar mensagem")}
                       >
                         <Icon
                           name={copiedId === msg.id ? "check" : "copy"}
@@ -1012,7 +1056,7 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
                             className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400/15 border border-amber-500/30 px-3 py-1.5 font-mono text-[10px] font-bold text-amber-300 hover:bg-amber-400 hover:text-ink-950 transition-all cursor-pointer"
                           >
                             <Icon name="alert" className="h-3.5 w-3.5" />
-                            <span>Configurar Chave / Modelo →</span>
+                            <span>{t("ai_chat.configure_key_model", undefined, "Configurar Chave / Modelo →")}</span>
                           </button>
                         </div>
                       )}
@@ -1024,7 +1068,7 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
                     <div className="mt-3.5 space-y-2 border-t border-ink-800/60 pt-2.5">
                       <div className="flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-wider text-signal-400">
                         <Icon name="bolt" className="h-3 w-3" />
-                        <span>Ações do Projeto</span>
+                        <span>{t("ai_chat.project_actions_title", undefined, "Ações do Projeto")}</span>
                       </div>
                       <div className="space-y-1.5">
                         {msg.executedActions.map((exec) => {
@@ -1083,10 +1127,10 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
                                         type="button"
                                         onClick={handleOpenTool}
                                         className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-signal-400 px-2.5 py-1 font-mono text-[10px] font-bold text-ink-950 transition-all hover:bg-signal-300 hover:shadow-md cursor-pointer active:scale-95"
-                                        title={`Abrir e carregar dados na ferramenta ${toolName}`}
+                                        title={t("ai_chat.open_tool_title", { tool: toolName }, `Abrir e carregar dados na ferramenta ${toolName}`)}
                                       >
                                         <Icon name="restore" className="h-3 w-3" />
-                                        <span>Abrir na Ferramenta →</span>
+                                        <span>{t("ai_chat.open_in_tool", undefined, "Abrir na Ferramenta →")}</span>
                                       </button>
                                     </div>
                                   )}
@@ -1120,7 +1164,7 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-signal-400 animate-ping" />
                 <span className="font-mono text-[10px] tracking-wider text-signal-300 uppercase">
-                  Avaliando contexto e executando ações solicitadas...
+                  {t("ai_chat.evaluating_context", undefined, "Avaliando contexto e executando ações solicitadas...")}
                 </span>
               </div>
             </div>
@@ -1136,7 +1180,7 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={loading}
-            placeholder={`Pergunte algo ou peça para a IA: "Crie uma tarefa...", "Mova a tarefa...", "Adicione uma anotação..."`}
+            placeholder={t("ai_chat.input_placeholder", undefined, 'Pergunte algo ou peça para a IA: "Crie uma tarefa...", "Mova a tarefa...", "Adicione uma anotação..."')}
             rows={2}
             className="w-full resize-none bg-transparent px-2 py-1 text-[13px] text-bone-100 placeholder:text-ink-500 focus:outline-none"
           />
@@ -1144,17 +1188,17 @@ DIRETRIZES DE FORMATAÇÃO E TEXTO:
             onClick={() => handleSendMessage()}
             disabled={!input.trim() || loading}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-signal-400 text-ink-950 shadow-[0_4px_14px_-6px_rgba(242,179,61,0.5)] transition-all hover:bg-signal-300 disabled:opacity-30 disabled:shadow-none cursor-pointer"
-            title="Enviar mensagem (Enter)"
+            title={t("ai_chat.send_title", undefined, "Enviar mensagem (Enter)")}
           >
             <Icon name="send" className="h-4 w-4" />
           </button>
         </div>
         <div className="mt-2 flex items-center justify-between text-[10px] text-ink-500 font-mono">
           <span>
-            Pressione <strong>Enter</strong> para enviar • <strong>Shift + Enter</strong> para quebra de linha
+            {t("ai_chat.press_enter_hint", undefined, "Pressione Enter para enviar • Shift + Enter para quebra de linha")}
           </span>
           <span className="hidden sm:inline">
-            {userRole === "owner" ? "👑 Você é Proprietário (Acesso Total)" : userRole === "editor" ? "✏️ Você é Editor" : "👁️ Você é Leitor (Sem edição)"}
+            {userRole === "owner" ? t("ai_chat.role_owner", undefined, "👑 Você é Proprietário (Acesso Total)") : userRole === "editor" ? t("ai_chat.role_editor", undefined, "✏️ Você é Editor") : t("ai_chat.role_viewer", undefined, "👁️ Você é Leitor (Sem edição)")}
           </span>
         </div>
       </div>

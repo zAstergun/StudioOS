@@ -4,6 +4,7 @@ import { Icon, Button } from "./ui";
 import { VipBadge } from "./VipBadge";
 import { cn } from "../utils/cn";
 import { supabase, useAuth } from "../auth";
+import { useI18n } from "../i18n";
 
 export interface ProjectInviteModalProps {
   inviteId: string;
@@ -39,6 +40,7 @@ export function ProjectInviteModal({
   onGoToProjects,
 }: ProjectInviteModalProps) {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -227,11 +229,11 @@ export function ProjectInviteModal({
     }
   };
 
-  const roleLabel = role === "viewer" ? "Visualizador" : "Editor";
+  const roleLabel = role === "viewer" ? t("project_invite.role_viewer", undefined, "Visualizador") : t("project_invite.role_editor", undefined, "Editor");
   const roleDesc =
     role === "viewer"
-      ? "Acesso somente leitura para acompanhar tarefas e andamento."
-      : "Permissão para criar, alterar e gerenciar tarefas e roteiros.";
+      ? t("project_invite.role_viewer_desc", undefined, "Acesso somente leitura para acompanhar tarefas e andamento.")
+      : t("project_invite.role_editor_desc", undefined, "Permissão para criar, alterar e gerenciar tarefas e roteiros.");
 
   const ownerChannel = owner?.channel ? (owner.channel.startsWith("@") ? owner.channel : `@${owner.channel}`) : "@criador";
   const ownerName = owner?.full_name || ownerChannel;
@@ -258,10 +260,10 @@ export function ProjectInviteModal({
             </div>
             <div>
               <h3 className="font-display text-sm font-bold text-bone-100 tracking-wide">
-                Convite para Projeto
+                {t("project_invite.header_title", undefined, "Convite para Projeto")}
               </h3>
               <p className="font-mono text-[9.5px] uppercase tracking-widest text-ink-400">
-                StudioOS · Colaboração
+                StudioOS · {t("project_invite.collaboration", undefined, "Colaboração")}
               </p>
             </div>
           </div>
@@ -280,7 +282,7 @@ export function ProjectInviteModal({
             <div className="py-12 text-center space-y-3">
               <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-signal-400 border-t-transparent" />
               <p className="font-mono text-xs text-ink-400 tracking-wide">
-                Carregando detalhes do convite...
+                {t("project_invite.loading", undefined, "Carregando detalhes do convite...")}
               </p>
             </div>
           ) : userStatus === "not_found" ? (
@@ -291,15 +293,15 @@ export function ProjectInviteModal({
               </div>
               <div>
                 <h4 className="font-display text-lg font-bold text-bone-50">
-                  Projeto não encontrado
+                  {t("project_invite.not_found_title", undefined, "Projeto não encontrado")}
                 </h4>
                 <p className="mt-1.5 text-xs text-ink-300 max-w-sm mx-auto leading-relaxed">
-                  O link de convite pode ter expirado ou o projeto foi removido pelo proprietário.
+                  {t("project_invite.not_found_desc", undefined, "O link de convite pode ter expirado ou o projeto foi removido pelo proprietário.")}
                 </p>
               </div>
               <div className="pt-2">
                 <Button variant="outline" onClick={onClose} className="font-mono text-xs uppercase tracking-wider">
-                  Fechar
+                  {t("common.close", undefined, "Fechar")}
                 </Button>
               </div>
             </div>
@@ -311,15 +313,15 @@ export function ProjectInviteModal({
               </div>
               <div className="space-y-2">
                 <h4 className="font-display text-xl font-bold text-bone-50">
-                  Acesso solicitado com sucesso!
+                  {t("project_invite.submitted_title", undefined, "Acesso solicitado com sucesso!")}
                 </h4>
                 <p className="text-[13px] text-ink-300 max-w-md mx-auto leading-relaxed">
-                  Sua solicitação para entrar em <strong className="text-bone-100">{project?.name}</strong> foi enviada para o proprietário (<span className="text-signal-400 font-medium">{ownerChannel}</span>).
+                  {t("project_invite.submitted_desc_1", undefined, "Sua solicitação para entrar em")} <strong className="text-bone-100">{project?.name}</strong> {t("project_invite.submitted_desc_2", undefined, "foi enviada para o proprietário")} (<span className="text-signal-400 font-medium">{ownerChannel}</span>).
                 </p>
                 <div className="mt-3 rounded-lg border border-ink-800 bg-ink-950/60 p-3 text-left">
                   <div className="flex items-center gap-2 text-[11.5px] text-bone-300 font-mono">
                     <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>Aguarde a aprovação do proprietário para acessar o projeto.</span>
+                    <span>{t("project_invite.submitted_wait", undefined, "Aguarde a aprovação do proprietário para acessar o projeto.")}</span>
                   </div>
                 </div>
               </div>
@@ -332,7 +334,7 @@ export function ProjectInviteModal({
                   }}
                   className="font-mono text-xs uppercase tracking-wider px-6 py-2.5 gap-2 shadow-[0_0_20px_rgba(242,179,61,0.3)]"
                 >
-                  Ir para Meus Projetos
+                  {t("project_invite.go_to_projects", undefined, "Ir para Meus Projetos")}
                   <Icon name="arrow" className="h-3.5 w-3.5" />
                 </Button>
               </div>
@@ -345,15 +347,15 @@ export function ProjectInviteModal({
               </div>
               <div className="space-y-1.5">
                 <h4 className="font-display text-lg font-bold text-bone-50">
-                  Você é o proprietário deste projeto!
+                  {t("project_invite.owner_title", undefined, "Você é o proprietário deste projeto!")}
                 </h4>
                 <p className="text-xs text-ink-300 max-w-sm mx-auto">
-                  Você já possui controle total sobre o projeto <strong className="text-bone-100">{project?.name}</strong>.
+                  {t("project_invite.owner_desc_1", undefined, "Você já possui controle total sobre o projeto")} <strong className="text-bone-100">{project?.name}</strong>.
                 </p>
               </div>
               <div className="pt-3 flex items-center justify-center gap-3">
                 <Button variant="outline" onClick={onClose} className="font-mono text-xs uppercase tracking-wider">
-                  Fechar
+                  {t("common.close", undefined, "Fechar")}
                 </Button>
                 {project && onGoToProject && (
                   <Button
@@ -364,7 +366,7 @@ export function ProjectInviteModal({
                     }}
                     className="font-mono text-xs uppercase tracking-wider gap-2 shadow-[0_0_15px_rgba(242,179,61,0.25)]"
                   >
-                    Abrir Projeto
+                    {t("save_modal.open_project", undefined, "Abrir Projeto")}
                     <Icon name="arrow" className="h-3 w-3" />
                   </Button>
                 )}
@@ -378,15 +380,15 @@ export function ProjectInviteModal({
               </div>
               <div className="space-y-1.5">
                 <h4 className="font-display text-lg font-bold text-bone-50">
-                  Você já faz parte deste projeto!
+                  {t("project_invite.member_title", undefined, "Você já faz parte deste projeto!")}
                 </h4>
                 <p className="text-xs text-ink-300 max-w-sm mx-auto">
-                  Você já é um participante ativo do projeto <strong className="text-bone-100">{project?.name}</strong>.
+                  {t("project_invite.member_desc_1", undefined, "Você já é um participante ativo do projeto")} <strong className="text-bone-100">{project?.name}</strong>.
                 </p>
               </div>
               <div className="pt-3 flex items-center justify-center gap-3">
                 <Button variant="outline" onClick={onClose} className="font-mono text-xs uppercase tracking-wider">
-                  Fechar
+                  {t("common.close", undefined, "Fechar")}
                 </Button>
                 {project && onGoToProject && (
                   <Button
@@ -397,7 +399,7 @@ export function ProjectInviteModal({
                     }}
                     className="font-mono text-xs uppercase tracking-wider gap-2 shadow-[0_0_15px_rgba(242,179,61,0.25)]"
                   >
-                    Abrir Projeto
+                    {t("save_modal.open_project", undefined, "Abrir Projeto")}
                     <Icon name="arrow" className="h-3 w-3" />
                   </Button>
                 )}
@@ -411,15 +413,15 @@ export function ProjectInviteModal({
               </div>
               <div className="space-y-1.5">
                 <h4 className="font-display text-lg font-bold text-bone-50">
-                  Solicitação já enviada
+                  {t("project_invite.pending_title", undefined, "Solicitação já enviada")}
                 </h4>
                 <p className="text-xs text-ink-300 max-w-sm mx-auto leading-relaxed">
-                  Você já solicitou acesso ao projeto <strong className="text-bone-100">{project?.name}</strong> anteriormente. Aguarde o proprietário (<span className="text-signal-400 font-medium">{ownerChannel}</span>) aprovar.
+                  {t("project_invite.pending_desc_1", undefined, "Você já solicitou acesso ao projeto")} <strong className="text-bone-100">{project?.name}</strong> {t("project_invite.pending_desc_2", undefined, "anteriormente. Aguarde o proprietário")} (<span className="text-signal-400 font-medium">{ownerChannel}</span>) {t("project_invite.pending_desc_3", undefined, "aprovar.")}
                 </p>
               </div>
               <div className="pt-3 flex items-center justify-center gap-3">
                 <Button variant="solid" onClick={onClose} className="font-mono text-xs uppercase tracking-wider px-6">
-                  Entendido
+                  {t("common.understood", undefined, "Entendido")}
                 </Button>
               </div>
             </div>
@@ -428,13 +430,13 @@ export function ProjectInviteModal({
             <div className="space-y-5">
               <div className="text-center space-y-1">
                 <span className="inline-block rounded-full bg-signal-400/10 border border-signal-400/25 px-2.5 py-0.5 font-mono text-[9.5px] font-bold uppercase tracking-wider text-signal-400 mb-1">
-                  Novo Convite
+                  {t("project_invite.new_invite", undefined, "Novo Convite")}
                 </span>
                 <h4 className="font-display text-lg font-bold text-bone-50">
-                  Você foi convidado para colaborar!
+                  {t("project_invite.invited_title", undefined, "Você foi convidado para colaborar!")}
                 </h4>
                 <p className="text-xs text-ink-300">
-                  Confira as informações do projeto abaixo antes de aceitar.
+                  {t("project_invite.invited_desc", undefined, "Confira as informações do projeto abaixo antes de aceitar.")}
                 </p>
               </div>
 
@@ -481,7 +483,7 @@ export function ProjectInviteModal({
                     </div>
                   </div>
                   <span className="rounded bg-ink-900 border border-ink-800 px-2 py-0.5 font-mono text-[9px] text-ink-400 uppercase tracking-wider">
-                    Proprietário
+                    {t("project_invite.owner_label", undefined, "Proprietário")}
                   </span>
                 </div>
 
@@ -489,7 +491,7 @@ export function ProjectInviteModal({
                 <div className="p-4 bg-ink-900/30">
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-mono text-[10px] uppercase tracking-wider text-ink-400">
-                      Permissão Proposta
+                      {t("project_invite.proposed_permission", undefined, "Permissão Proposta")}
                     </span>
                     <span className="rounded bg-signal-400/15 border border-signal-400/30 px-2 py-0.5 font-mono text-[10px] font-bold text-signal-400 uppercase tracking-wider">
                       {roleLabel}
@@ -511,7 +513,7 @@ export function ProjectInviteModal({
 
               {/* Aviso explicativo */}
               <p className="text-[11px] text-ink-400 font-mono text-center">
-                Ao clicar em aceitar, sua solicitação de entrada será enviada para aprovação do proprietário.
+                {t("project_invite.disclaimer", undefined, "Ao clicar em aceitar, sua solicitação de entrada será enviada para aprovação do proprietário.")}
               </p>
 
               {/* Ações */}
@@ -522,7 +524,7 @@ export function ProjectInviteModal({
                   disabled={submitting}
                   className="rounded-xl border border-ink-800 bg-ink-900/40 px-4 py-3 font-mono text-[11px] font-bold uppercase tracking-wider text-ink-300 transition-colors hover:bg-ink-800 hover:text-bone-100 disabled:opacity-50 cursor-pointer text-center"
                 >
-                  Recusar
+                  {t("project_invite.decline", undefined, "Recusar")}
                 </button>
                 <button
                   type="button"
@@ -533,11 +535,11 @@ export function ProjectInviteModal({
                   {submitting ? (
                     <>
                       <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-950 border-t-transparent" />
-                      <span>Enviando...</span>
+                      <span>{t("common.sending", undefined, "Enviando...")}</span>
                     </>
                   ) : (
                     <>
-                      <span>Aceitar Convite</span>
+                      <span>{t("project_invite.accept", undefined, "Aceitar Convite")}</span>
                       <Icon name="arrow" className="h-3.5 w-3.5" />
                     </>
                   )}

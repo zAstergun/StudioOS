@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { cn } from "../utils/cn";
 import { useAuth } from "../auth";
+import { useI18n } from "../i18n";
 import { Icon } from "../components/ui";
 import { Waveform } from "../components/Console";
 
@@ -8,14 +9,21 @@ type Mode = "login" | "signup" | "forgot" | "magic" | "sent" | "recover";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-function strength(pw: string) {
+function strength(pw: string, t: (k: string, p?: any, fb?: string) => string) {
   let s = 0;
   if (pw.length >= 8) s++;
   if (pw.length >= 12) s++;
   if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++;
   if (/\d/.test(pw)) s++;
   if (/[^A-Za-z0-9]/.test(pw)) s++;
-  const labels = ["muito fraca", "fraca", "ok", "boa", "forte", "excelente"];
+  const labels = [
+    t("auth.strength_very_weak", {}, "muito fraca"),
+    t("auth.strength_weak", {}, "fraca"),
+    t("auth.strength_ok", {}, "ok"),
+    t("auth.strength_good", {}, "boa"),
+    t("auth.strength_strong", {}, "forte"),
+    t("auth.strength_excellent", {}, "excelente"),
+  ];
   return { score: s, label: labels[s] };
 }
 
@@ -219,6 +227,7 @@ function Notice({ tone, children }: { tone: "error" | "ok" | "info"; children: R
 /* ------------------------------------------------------------ studio side */
 
 function StudioPanel({ mode }: { mode: Mode }) {
+  const { t } = useI18n();
   const [time, setTime] = useState(() => new Date());
   useEffect(() => {
     const id = window.setInterval(() => setTime(new Date()), 1000);
@@ -227,12 +236,12 @@ function StudioPanel({ mode }: { mode: Mode }) {
 
   const lines = useMemo(
     () => [
-      { k: "Rank de Ideia", v: "0–10", c: "text-signal-300" },
-      { k: "Score de Post", v: "0–50", c: "text-mint-300" },
-      { k: "Mentor AI", v: "24 FW", c: "text-sky-400" },
-      { k: "Histórico", v: "local", c: "text-bone-100" },
+      { k: t("tools.rank.name", {}, "Rank de Ideia"), v: "0–10", c: "text-signal-300" },
+      { k: t("tools.score.name", {}, "Score de Post"), v: "0–50", c: "text-mint-300" },
+      { k: t("tools.mentor.name", {}, "Mentor AI"), v: "24 FW", c: "text-sky-400" },
+      { k: t("nav.history", {}, "Histórico"), v: "local", c: "text-bone-100" },
     ],
-    []
+    [t]
   );
 
   return (
@@ -269,7 +278,7 @@ function StudioPanel({ mode }: { mode: Mode }) {
                 StudioOS
               </div>
               <div className="mt-1 font-mono text-[9.5px] tracking-[0.2em] text-ink-400 uppercase">
-                sistema operacional do criador
+                {t("console.creator_os", {}, "sistema operacional do criador")}
               </div>
             </div>
           </div>
@@ -277,16 +286,16 @@ function StudioPanel({ mode }: { mode: Mode }) {
           <h1 className="font-display text-[clamp(2.8rem,5.4vw,5.2rem)] leading-[0.84] font-extrabold tracking-[-0.045em] text-bone-50">
             {mode === "signup" ? (
               <>
-                Monte seu
+                {t("auth.build_studio", {}, "Monte seu")}
                 <br />
-                <span className="text-signal-400">estúdio.</span>
+                <span className="text-signal-400">{t("auth.studio", {}, "estúdio.")}</span>
               </>
             ) : (
               <>
-                O estúdio
+                {t("auth.the_studio", {}, "O estúdio")}
                 <br />
                 <span className="relative inline-block">
-                  <span className="relative z-10 text-signal-400">te espera.</span>
+                  <span className="relative z-10 text-signal-400">{t("auth.awaits_you", {}, "te espera.")}</span>
                   <span className="absolute inset-x-0 bottom-[0.12em] z-0 h-[0.13em] bg-oxide-400/70" />
                 </span>
               </>
@@ -294,8 +303,8 @@ function StudioPanel({ mode }: { mode: Mode }) {
           </h1>
           <p className="mt-6 max-w-md text-[15.5px] leading-relaxed text-bone-300">
             {mode === "signup"
-              ? "Uma conta, doze bancadas. Calibre o canal uma vez e todas as ferramentas passam a falar a sua língua."
-              : "Entre para retomar o banco de ideias, os roteiros no teleprompter e o histórico das suas análises."}
+              ? t("auth.signup_pitch", {}, "Uma conta, doze bancadas. Calibre o canal uma vez e todas as ferramentas passam a falar a sua língua.")
+              : t("auth.login_pitch", {}, "Entre para retomar o banco de ideias, os roteiros no teleprompter e o histórico das suas análises.")}
           </p>
         </div>
 
@@ -308,7 +317,7 @@ function StudioPanel({ mode }: { mode: Mode }) {
                 <span className="h-2 w-2 rounded-full bg-mint-400/80" />
               </div>
               <span className="font-mono text-[9.5px] tracking-[0.22em] text-ink-400 uppercase">
-                monitor de entrada
+                {t("auth.input_monitor", {}, "monitor de entrada")}
               </span>
               <Icon name="sound" className="h-3.5 w-3.5 text-ink-400" />
             </div>
@@ -328,7 +337,7 @@ function StudioPanel({ mode }: { mode: Mode }) {
 
           <p className="flex items-center gap-2 font-mono text-[10px] tracking-[0.14em] text-ink-400 uppercase">
             <Icon name="lock" className="h-3.5 w-3.5 text-mint-400" strokeWidth={1.8} />
-            sessão protegida · chave de IA continua só no seu navegador
+            {t("auth.session_protected", {}, "sessão protegida · chave de IA continua só no seu navegador")}
           </p>
         </div>
       </div>
@@ -340,6 +349,7 @@ function StudioPanel({ mode }: { mode: Mode }) {
 
 export function AuthScreen({ accessRequired = false }: { accessRequired?: boolean }) {
   const auth = useAuth();
+  const { t } = useI18n();
   const [mode, setMode] = useState<Mode>(auth.recovering ? "recover" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -368,33 +378,33 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
     setConfirm("");
   };
 
-  const pw = strength(password);
+  const pw = strength(password, t);
   const channelErr =
     touched && mode === "signup" && signupMethod === "username" && (!channel.trim() || channel.trim().replace(/^@/, '').length < 3)
-      ? "Informe um nome de usuário com pelo menos 3 caracteres."
+      ? t("auth.err_username_min", {}, "Informe um nome de usuário com pelo menos 3 caracteres.")
       : undefined;
 
   const emailErr =
     mode === "magic"
       ? undefined
       : mode === "signup" && signupMethod === "username"
-      ? (touched && email.trim() && !EMAIL_RE.test(email.trim()) ? "Informe um e-mail válido ou deixe em branco." : undefined)
+      ? (touched && email.trim() && !EMAIL_RE.test(email.trim()) ? t("auth.err_email_optional", {}, "Informe um e-mail válido ou deixe em branco.") : undefined)
       : touched && mode !== "login" && !EMAIL_RE.test(email.trim())
-      ? "Informe um e-mail válido."
+      ? t("auth.err_email_valid", {}, "Informe um e-mail válido.")
       : touched && mode === "login" && !email.trim()
-      ? "Informe seu e-mail ou nome de usuário."
+      ? t("auth.err_email_or_username", {}, "Informe seu e-mail ou nome de usuário.")
       : undefined;
   
   const passErr =
     touched && (mode === "signup" || mode === "recover") && password.length < 8
-      ? "Use pelo menos 8 caracteres."
+      ? t("auth.err_password_min", {}, "Use pelo menos 8 caracteres.")
       : touched && mode === "login" && !password
-        ? "Digite sua senha."
+        ? t("auth.err_password_required", {}, "Digite sua senha.")
         : undefined;
   const confirmErr =
-    touched && (mode === "signup" || mode === "recover") && confirm !== password ? "As senhas não conferem." : undefined;
-  const nameErr = touched && mode === "signup" && name.trim().length < 2 ? "Como devemos te chamar?" : undefined;
-  const termsErr = touched && mode === "signup" && !terms ? "Aceite os termos para continuar." : undefined;
+    touched && (mode === "signup" || mode === "recover") && confirm !== password ? t("auth.err_password_mismatch", {}, "As senhas não conferem.") : undefined;
+  const nameErr = touched && mode === "signup" && name.trim().length < 2 ? t("auth.err_name_required", {}, "Como devemos te chamar?") : undefined;
+  const termsErr = touched && mode === "signup" && !terms ? t("auth.err_terms_required", {}, "Aceite os termos para continuar.") : undefined;
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string; message?: string; needsConfirmation?: boolean }>) => {
     setLoading(true);
@@ -402,7 +412,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
     setInfo(null);
     try {
       const r = await fn();
-      if (!r.ok) setError(r.error ?? "Algo deu errado.");
+      if (!r.ok) setError(r.error ?? t("auth.err_generic", {}, "Algo deu errado."));
       else if (r.needsConfirmation) {
         setInfo(r.message ?? null);
         setMode("sent");
@@ -411,7 +421,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
         if (mode === "forgot") setMode("sent");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Algo deu errado.");
+      setError(e instanceof Error ? e.message : t("auth.err_generic", {}, "Algo deu errado."));
     } finally {
       setLoading(false);
     }
@@ -451,12 +461,12 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
   };
 
   const titles: Record<Mode, { k: string; t: string; d: string }> = {
-    login: { k: "01 · acesso", t: "Entrar no estúdio", d: "Use o e-mail/usuário e a senha da sua conta." },
-    signup: { k: "02 · nova conta", t: "Criar conta", d: "Escolha como prefere se cadastrar: você pode se registrar com seu e-mail ou com seu nome de usuário (@)." },
-    forgot: { k: "03 · recuperação", t: "Esqueci a senha", d: "Enviaremos um link para você definir uma nova senha." },
-    magic: { k: "04 · conta teste", t: "Entre com uma conta teste", d: "Acesso instantâneo de 24 horas sem precisar de e-mail ou cadastro." },
-    sent: { k: "05 · verifique o e-mail", t: "Confira sua caixa", d: "" },
-    recover: { k: "06 · nova senha", t: "Definir nova senha", d: "Escolha uma senha forte para a sua conta." },
+    login: { k: "01 · " + t("auth.login_title", undefined, "acesso"), t: t("auth.login_title", undefined, "Entrar no estúdio"), d: t("auth.login_subtitle", {}, "Use o e-mail/usuário e a senha da sua conta.") },
+    signup: { k: "02 · " + t("auth.signup_title", undefined, "nova conta"), t: t("auth.signup_title", undefined, "Criar conta"), d: t("auth.signup_subtitle", {}, "Escolha como prefere se cadastrar: você pode se registrar com seu e-mail ou com seu nome de usuário (@).") },
+    forgot: { k: "03 · " + t("auth.recovery_title", undefined, "recuperação"), t: t("auth.recovery_title", undefined, "Esqueci a senha"), d: t("auth.recovery_subtitle", {}, "Enviaremos um link para você definir uma nova senha.") },
+    magic: { k: "04 · " + t("auth.demo_login", undefined, "conta teste"), t: t("auth.demo_login", undefined, "Entre com uma conta teste"), d: t("auth.demo_subtitle", {}, "Acesso instantâneo de 24 horas sem precisar de e-mail ou cadastro.") },
+    sent: { k: "05 · " + t("auth.check_inbox", undefined, "verifique o e-mail"), t: t("auth.check_inbox", undefined, "Confira sua caixa"), d: "" },
+    recover: { k: "06 · " + t("auth.reset_title", undefined, "nova senha"), t: t("auth.reset_title", undefined, "Definir nova senha"), d: t("auth.reset_subtitle", {}, "Escolha uma senha forte para a sua conta.") },
   };
   const head = titles[mode];
 
@@ -485,8 +495,8 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                 <div className="mb-8 grid grid-cols-2 gap-1 rounded-md border border-ink-700 bg-ink-950/70 p-1">
                   {(
                     [
-                      ["login", "Entrar"],
-                      ["signup", "Criar conta"],
+                      ["login", t("auth.login_button", undefined, "Entrar")],
+                      ["signup", t("auth.signup_button", undefined, "Criar conta")],
                     ] as const
                   ).map(([id, label]) => (
                     <button
@@ -513,7 +523,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                   className="group mb-8 inline-flex items-center gap-2 font-mono text-[10.5px] tracking-[0.18em] text-ink-400 uppercase transition-colors hover:text-signal-400"
                 >
                   <Icon name="arrow" className="h-3.5 w-3.5 rotate-180 transition-transform group-hover:-translate-x-1" strokeWidth={2} />
-                  voltar ao login
+                  {t("auth.back_to_login", undefined, "voltar ao login")}
                 </button>
               )}
 
@@ -530,7 +540,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                 {accessRequired && mode !== "sent" && mode !== "forgot" && (
                   <div className="mt-5">
                     <Notice tone="info">
-                      Entre ou crie uma conta para acessar seu histórico, a lixeira e os dados salvos.
+                      {t("auth.access_required_notice", {}, "Entre ou crie uma conta para acessar seu histórico, a lixeira e os dados salvos.")}
                     </Notice>
                   </div>
                 )}
@@ -538,9 +548,8 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                 {auth.demo && mode !== "sent" && (
                   <div className="mt-5">
                     <Notice tone="info">
-                      <strong className="text-bone-50">Modo demo:</strong> o Supabase ainda não foi configurado. Contas
-                      ficam só neste navegador. Defina <code className="font-mono text-[11px]">PUBLIC_SUPABASE_URL</code> e{" "}
-                      <code className="font-mono text-[11px]">PUBLIC_SUPABASE_ANON_KEY</code> para ativar.
+                      <strong className="text-bone-50">{t("auth.demo_mode_label", undefined, "Modo demo:")}</strong>{" "}
+                      {t("auth.demo_mode_desc_full", undefined, "o Supabase ainda não foi configurado. Contas ficam só neste navegador. Defina PUBLIC_SUPABASE_URL e PUBLIC_SUPABASE_ANON_KEY para ativar.")}
                     </Notice>
                   </div>
                 )}
@@ -554,7 +563,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                       </div>
                       <p className="relative mt-4 text-[14.5px] leading-relaxed text-bone-100">{info}</p>
                       <p className="relative mt-2 text-[12.5px] leading-relaxed text-ink-400">
-                        Não chegou? Confira o spam ou a aba promoções. O link expira em 1 hora.
+                        {t("auth.email_not_arrived", {}, "Não chegou? Confira o spam ou a aba promoções. O link expira em 1 hora.")}
                       </p>
                     </div>
                     <button
@@ -563,7 +572,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                       className="flex w-full items-center justify-center gap-2 rounded-md border border-ink-600 bg-ink-900/70 px-5 py-3 text-[14px] font-semibold text-bone-100 transition-all hover:border-signal-400/50 hover:text-signal-300"
                     >
                       <Icon name="arrow" className="h-4 w-4 rotate-180" strokeWidth={2} />
-                      Voltar para o login
+                      {t("auth.back_to_login_btn", {}, "Voltar para o login")}
                     </button>
                   </div>
                 ) : (
@@ -577,10 +586,10 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                         <div className="rounded-lg border border-ink-700 bg-ink-950/70 p-1.5">
                           <div className="mb-1.5 px-1.5 pt-0.5 flex items-center justify-between">
                             <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-bone-300">
-                              Como prefere se cadastrar?
+                              {t("auth.how_to_signup", {}, "Como prefere se cadastrar?")}
                             </span>
                             <span className="font-mono text-[9px] text-signal-400 uppercase tracking-wider">
-                              Escolha uma opção
+                              {t("auth.choose_option", {}, "Escolha uma opção")}
                             </span>
                           </div>
                           <div className="grid grid-cols-2 gap-1.5">
@@ -593,12 +602,12 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                               className={cn(
                                 "flex items-center justify-center gap-1.5 rounded py-2 font-mono text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer",
                                 signupMethod === "email"
-                                  ? "bg-signal-400 text-ink-950 shadow-sm"
-                                  : "text-bone-400 hover:bg-ink-800 hover:text-bone-100"
+                                    ? "bg-signal-400 text-ink-950 shadow-sm"
+                                    : "text-bone-400 hover:bg-ink-800 hover:text-bone-100"
                               )}
                             >
                               <Icon name="mail" className="h-3.5 w-3.5" />
-                              Com E-mail
+                              {t("auth.with_email", {}, "Com E-mail")}
                             </button>
                             <button
                               type="button"
@@ -609,12 +618,12 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                               className={cn(
                                 "flex items-center justify-center gap-1.5 rounded py-2 font-mono text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer",
                                 signupMethod === "username"
-                                  ? "bg-signal-400 text-ink-950 shadow-sm"
-                                  : "text-bone-400 hover:bg-ink-800 hover:text-bone-100"
+                                    ? "bg-signal-400 text-ink-950 shadow-sm"
+                                    : "text-bone-400 hover:bg-ink-800 hover:text-bone-100"
                               )}
                             >
                               <Icon name="user" className="h-3.5 w-3.5" />
-                              Com @Usuário
+                              {t("auth.with_username", {}, "Com @Usuário")}
                             </button>
                           </div>
                         </div>
@@ -623,18 +632,18 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                         <div className="rounded-lg border border-signal-400/25 bg-signal-400/[0.06] p-3 text-[12px] leading-relaxed text-bone-200">
                           {signupMethod === "email" ? (
                             <p>
-                              ✉️ <strong>Cadastro por E-mail:</strong> você se registra com seu e-mail para confirmação e recuperação de senha. O <strong>@usuario</strong> é opcional no momento e poderá ser definido agora ou depois no seu perfil.
+                              {t("auth.signup_email_info", {}, "✉️ Cadastro por E-mail: você se registra com seu e-mail para confirmação e recuperação de senha. O @usuario é opcional no momento e poderá ser definido agora ou depois no seu perfil.")}
                             </p>
                           ) : (
                             <p>
-                              👤 <strong>Cadastro por @Usuário:</strong> você cria sua conta usando seu nome de usuário e senha diretamente. O <strong>e-mail</strong> é opcional. <em>Nota: caso se cadastre apenas com @usuario, a alteração dele no futuro exigirá a confirmação de um e-mail.</em>
+                              {t("auth.signup_username_info", {}, "👤 Cadastro por @Usuário: você cria sua conta usando seu nome de usuário e senha diretamente. O e-mail é opcional. Nota: caso se cadastre apenas com @usuario, a alteração dele no futuro exigirá a confirmação de um e-mail.")}
                             </p>
                           )}
                         </div>
 
                         {/* Campos de Nome e Usuário */}
                         <div className="grid gap-4 sm:grid-cols-2">
-                          <Field label="Seu nome" error={nameErr}>
+                          <Field label={t("auth.your_name", {}, "Seu nome")} error={nameErr}>
                             <input
                               value={name}
                               onChange={(e) => setName(e.target.value)}
@@ -644,10 +653,10 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                             />
                           </Field>
                           <Field
-                            label={signupMethod === "username" ? "Usuário (@)" : "Usuário"}
+                            label={signupMethod === "username" ? t("auth.username_at", {}, "Usuário (@)") : t("auth.username", {}, "Usuário")}
                             hint={
                               <span className={cn("text-[10px] font-mono", signupMethod === "username" ? "text-signal-400 font-bold" : "text-ink-400")}>
-                                {signupMethod === "username" ? "obrigatório · @login" : "opcional · @login"}
+                                {signupMethod === "username" ? t("auth.required_login", {}, "obrigatório · @login") : t("auth.optional_login", {}, "opcional · @login")}
                               </span>
                             }
                             error={channelErr}
@@ -663,10 +672,10 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
 
                         {/* Campo de E-mail para cadastro */}
                         <Field
-                          label={signupMethod === "email" ? "E-mail" : "E-mail (opcional)"}
+                          label={signupMethod === "email" ? t("auth.email", {}, "E-mail") : t("auth.email_optional", {}, "E-mail (opcional)")}
                           hint={
                             <span className={cn("text-[10px] font-mono", signupMethod === "email" ? "text-signal-400 font-bold" : "text-ink-400")}>
-                              {signupMethod === "email" ? "obrigatório" : "opcional · recuperação"}
+                              {signupMethod === "email" ? t("auth.required", {}, "obrigatório") : t("auth.optional_recovery", {}, "opcional · recuperação")}
                             </span>
                           }
                           error={emailErr}
@@ -685,7 +694,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                     )}
 
                     {mode === "login" && (
-                      <Field label="E-mail ou Nome de Usuário (@)" error={emailErr}>
+                      <Field label={t("auth.email_or_username", {}, "E-mail ou Nome de Usuário (@)")} error={emailErr}>
                         <input
                           type="text"
                           inputMode="text"
@@ -701,7 +710,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
 
                     {mode === "forgot" && (
                       <div className="space-y-4">
-                        <Field label="E-mail da sua conta" error={emailErr} hint="Informe o e-mail cadastrado para enviarmos as instruções de redefinição">
+                        <Field label={t("auth.account_email", {}, "E-mail da sua conta")} error={emailErr} hint={t("auth.reset_hint", {}, "Informe o e-mail cadastrado para enviarmos as instruções de redefinição")}>
                           <input
                             type="email"
                             inputMode="email"
@@ -719,16 +728,9 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                           <div className="flex items-start gap-2.5">
                             <Icon name="mail" className="h-4 w-4 shrink-0 text-signal-400 mt-0.5" />
                             <div className="space-y-1">
-                              <p className="font-semibold text-bone-100">Não cadastrou e-mail na sua conta?</p>
+                              <p className="font-semibold text-bone-100">{t("auth.no_email_title", {}, "Não cadastrou e-mail na sua conta?")}</p>
                               <p className="text-ink-400 text-[11.5px] leading-relaxed">
-                                Se você criou sua conta apenas com nome de usuário (@) e não vinculou um e-mail, envie uma mensagem para{" "}
-                                <a
-                                  href="mailto:help@asterdev.me?subject=Recupera%C3%A7%C3%A3o%20de%20Conta%20sem%20E-mail%20-%20StudioOS"
-                                  className="font-mono text-signal-400 underline decoration-signal-400/40 underline-offset-2 hover:text-signal-300 hover:decoration-signal-400"
-                                >
-                                  help@asterdev.me
-                                </a>{" "}
-                                com as informações da sua conta (seu @ de usuário, nome e detalhes de comprovação) para nossa equipe te ajudar a recuperar o acesso.
+                                {t("auth.no_email_desc", {}, "Se você criou sua conta apenas com nome de usuário (@) e não vinculou um e-mail, envie uma mensagem para help@asterdev.me com as informações da sua conta (seu @ de usuário, nome e detalhes de comprovação) para nossa equipe te ajudar a recuperar o acesso.")}
                               </p>
                             </div>
                           </div>
@@ -740,17 +742,17 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                       <div className="rounded-lg border border-signal-400/30 bg-signal-400/[0.06] p-4 text-[13px] leading-relaxed text-bone-200">
                         <div className="flex items-center gap-2 mb-1.5 text-signal-300 font-semibold">
                           <Icon name="flask" className="h-4 w-4" />
-                          <span>Conta temporária (válida por 24 horas)</span>
+                          <span>{t("auth.temp_account_title", {}, "Conta temporária (válida por 24 horas)")}</span>
                         </div>
                         <p className="text-bone-400 text-[12.5px]">
-                          Uma conta de teste será gerada automaticamente na hora. Você terá acesso completo a todos os recursos do StudioOS. Após 24h, todos os dados dessa conta são apagados sozinhos pelo sistema.
+                          {t("auth.temp_account_desc", {}, "Uma conta de teste será gerada automaticamente na hora. Você terá acesso completo a todos os recursos do StudioOS. Após 24h, todos os dados dessa conta são apagados sozinhos pelo sistema.")}
                         </p>
                       </div>
                     )}
 
                     {(mode === "login" || mode === "signup" || mode === "recover") && (
                       <Field
-                        label={mode === "recover" ? "Nova senha" : "Senha"}
+                        label={mode === "recover" ? t("auth.new_password", {}, "Nova senha") : t("auth.password", {}, "Senha")}
                         error={passErr}
                         hint={
                           mode === "login" ? (
@@ -759,7 +761,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                               onClick={() => go("forgot")}
                               className="text-[11.5px] text-ink-400 underline-offset-2 transition-colors hover:text-signal-300 hover:underline"
                             >
-                              Esqueci a senha
+                              {t("auth.forgot_password_link", {}, "Esqueci a senha")}
                             </button>
                           ) : undefined
                         }
@@ -769,7 +771,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                           value={password}
                           onChange={setPassword}
                           autoComplete={mode === "login" ? "current-password" : "new-password"}
-                          placeholder={mode === "login" ? "Sua senha" : "Mínimo de 8 caracteres"}
+                          placeholder={mode === "login" ? t("auth.password_placeholder_label", undefined, "Sua senha") : t("auth.password_min_chars", undefined, "Mínimo de 8 caracteres")}
                           invalid={!!passErr}
                         />
                         {(mode === "signup" || mode === "recover") && password && (
@@ -792,7 +794,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                               ))}
                             </div>
                             <div className="mt-1 flex justify-between font-mono text-[9.5px] tracking-[0.12em] uppercase">
-                              <span className="text-ink-400">força da senha</span>
+                              <span className="text-ink-400">{t("auth.password_strength", {}, "força da senha")}</span>
                               <span
                                 className={cn(
                                   pw.score <= 1 ? "text-oxide-400" : pw.score <= 3 ? "text-signal-300" : "text-mint-300"
@@ -807,7 +809,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                     )}
 
                     {(mode === "signup" || mode === "recover") && (
-                      <Field label="Confirmar senha" error={confirmErr}>
+                      <Field label={t("auth.confirm_password", {}, "Confirmar senha")} error={confirmErr}>
                         <PasswordInput
                           id="pw2"
                           value={confirm}
@@ -839,8 +841,8 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                             {terms && <Icon name="check" className="h-3 w-3" strokeWidth={3.2} />}
                           </button>
                           <span onClick={() => setTerms((t) => !t)}>
-                            Concordo com os <span className="text-bone-100 underline underline-offset-2">Termos de Uso</span> e a{" "}
-                            <span className="text-bone-100 underline underline-offset-2">Política de Privacidade</span>.
+                            {t("auth.agree_terms_1", {}, "Concordo com os")} <span className="text-bone-100 underline underline-offset-2">{t("auth.terms_of_use", {}, "Termos de Uso")}</span> {t("auth.and_the", {}, "e a")}{" "}
+                            <span className="text-bone-100 underline underline-offset-2">{t("auth.privacy_policy", {}, "Política de Privacidade")}</span>.
                           </span>
                         </label>
                         {termsErr && <p className="mt-1 pl-[30px] text-[11.5px] text-oxide-400">{termsErr}</p>}
@@ -849,11 +851,11 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
 
                     <div className="pt-1">
                       <Submit loading={loading} icon={mode === "forgot" ? "send" : mode === "magic" ? "flask" : "arrow"}>
-                        {mode === "login" && "Entrar"}
-                        {mode === "signup" && "Criar minha conta"}
-                        {mode === "forgot" && "Enviar link de redefinição"}
-                        {mode === "magic" && "Criar conta teste e entrar agora (24h)"}
-                        {mode === "recover" && "Salvar nova senha"}
+                        {mode === "login" && t("auth.login_button", undefined, "Entrar")}
+                        {mode === "signup" && t("auth.signup_button", undefined, "Criar minha conta")}
+                        {mode === "forgot" && t("auth.recovery_button", undefined, "Enviar link de redefinição")}
+                        {mode === "magic" && t("auth.demo_login", undefined, "Criar conta teste e entrar agora (24h)")}
+                        {mode === "recover" && t("auth.reset_button", undefined, "Salvar nova senha")}
                       </Submit>
                     </div>
 
@@ -862,7 +864,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                         <div className="flex items-center gap-3 py-1">
                           <span className="h-px flex-1 bg-ink-800" />
                           <span className="font-mono text-[9.5px] tracking-[0.2em] text-ink-500 uppercase">
-                            ou continue com
+                            {t("common.or", undefined, "ou")} {t("common.actions", undefined, "continue com")}
                           </span>
                           <span className="h-px flex-1 bg-ink-800" />
                         </div>
@@ -903,18 +905,18 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                               {testLoading ? (
                                 <>
                                   <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-signal-400/30 border-t-signal-400" />
-                                  <span>Criando conta de teste…</span>
+                                  <span>{t("auth.creating_test_account", {}, "Criando conta de teste…")}</span>
                                 </>
                               ) : (
                                 <>
                                   <Icon name="flask" className="h-3.5 w-3.5 text-signal-400 transition-transform duration-300 group-hover:scale-110" />
-                                  <span>Entre com uma conta teste</span>
+                                  <span>{t("auth.demo_login", undefined, "Entre com uma conta teste")}</span>
                                   <span className="rounded bg-signal-400/15 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider text-signal-300 uppercase">24h</span>
                                 </>
                               )}
                             </button>
                             <p className="mt-1.5 text-[11px] text-ink-500">
-                              Acesso instantâneo sem cadastro. Seus dados se apagam sozinhos após 24h.
+                              {t("auth.test_account_instant", {}, "Acesso instantâneo sem cadastro. Seus dados se apagam sozinhos após 24h.")}
                             </p>
                           </div>
                         )}
@@ -925,13 +927,13 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
 
                 {(mode === "login" || mode === "signup") && (
                   <p className="mt-8 text-center text-[13px] text-bone-400">
-                    {mode === "login" ? "Ainda não tem conta? " : "Já tem uma conta? "}
+                    {mode === "login" ? `${t("auth.dont_have_account", undefined, "Ainda não tem conta?")} ` : `${t("auth.already_account", undefined, "Já tem uma conta?")} `}
                     <button
                       type="button"
                       onClick={() => go(mode === "login" ? "signup" : "login")}
                       className="font-semibold text-signal-400 underline-offset-4 transition-colors hover:text-signal-300 hover:underline"
                     >
-                      {mode === "login" ? "Criar conta grátis" : "Entrar"}
+                      {mode === "login" ? t("auth.signup_title", undefined, "Criar conta grátis") : t("auth.login_button", undefined, "Entrar")}
                     </button>
                   </p>
                 )}

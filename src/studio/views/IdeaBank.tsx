@@ -3,29 +3,26 @@ import { cn } from "../utils/cn";
 import { Icon, Reveal } from "../components/ui";
 import { evaluate, verdict } from "../tools/RankIdeia";
 import { saveToHistory } from "../history";
+import { useI18n, getCurrentLanguage } from "../i18n";
+import { getLocalizedSeedIdeas } from "../i18n/examples";
 
 type Idea = { id: string; text: string; ts: number };
 
 const LS = "studioos.ideas.v1";
 
-const SEED: Idea[] = [
-  { id: "s1", text: "Eu parei de investir R$100 por mês em FIIs e mostrei o extrato na tela", ts: Date.now() - 86400000 * 3 },
-  { id: "s2", text: "Testei a carteira recomendada por 3 gerentes de banco durante 90 dias", ts: Date.now() - 86400000 * 8 },
-  { id: "s3", text: "Explicando o que é duration para iniciantes", ts: Date.now() - 86400000 * 12 },
-];
-
 function load(): Idea[] {
   try {
     const raw = localStorage.getItem(LS);
-    if (!raw) return SEED;
+    if (!raw) return getLocalizedSeedIdeas(getCurrentLanguage());
     const parsed = JSON.parse(raw) as Idea[];
-    return Array.isArray(parsed) && parsed.length ? parsed : SEED;
+    return Array.isArray(parsed) && parsed.length ? parsed : getLocalizedSeedIdeas(getCurrentLanguage());
   } catch {
-    return SEED;
+    return getLocalizedSeedIdeas(getCurrentLanguage());
   }
 }
 
 export function IdeaBank({ niche, onGo }: { niche: string; onGo: (id: string) => void }) {
+  const { t } = useI18n();
   const [ideas, setIdeas] = useState<Idea[]>(load);
   const [draft, setDraft] = useState("");
   const [sort, setSort] = useState<"nota" | "recentes">("nota");
@@ -62,9 +59,9 @@ export function IdeaBank({ niche, onGo }: { niche: string; onGo: (id: string) =>
     setIdeas((p) => [{ id: `i${Date.now()}`, text, ts: Date.now() }, ...p]);
     saveToHistory({
       tool: "ideia",
-      toolName: "Banco de Ideias",
+      toolName: t("tools.ideia.name", undefined, "Banco de Ideias"),
       title: text.slice(0, 90),
-      summary: `nota ${score.toFixed(1)}/10 · guardada na fila de produção`,
+      summary: `${t("ideabank.score_label", undefined, "nota")} ${score.toFixed(1)}/10 · ${t("ideabank.saved_in_queue", undefined, "guardada na fila de produção")}`,
       tag: `${score.toFixed(1)}/10`,
       content: `IDEIA: ${text}\nNOTA: ${score.toFixed(1)}/10\nNICHO: ${niche || "(não calibrado)"}`,
     });
@@ -88,13 +85,13 @@ export function IdeaBank({ niche, onGo }: { niche: string; onGo: (id: string) =>
                   <div className="mb-2 flex items-center gap-3">
                     <span className="h-px w-8 bg-mint-400/60" />
                     <span className="font-mono text-[11px] tracking-[0.22em] text-mint-400 uppercase">
-                      02 · Banco de ideias
+                      {t("ideabank.badge", undefined, "02 · Banco de ideias")}
                     </span>
                   </div>
                   <h2 className="font-display text-3xl leading-none font-extrabold tracking-[-0.03em] text-bone-50 sm:text-[2.6rem]">
-                    Nada de ideia
+                    {t("ideabank.title_1", undefined, "Nada de ideia")}
                     <br />
-                    <span className="text-mint-300">solta no notes.</span>
+                    <span className="text-mint-300">{t("ideabank.title_2", undefined, "solta no notes.")}</span>
                   </h2>
                 </div>
                 <div className="flex gap-1">
@@ -109,7 +106,7 @@ export function IdeaBank({ niche, onGo }: { niche: string; onGo: (id: string) =>
                           : "border-ink-700 text-bone-400 hover:border-ink-500 hover:text-bone-100"
                       )}
                     >
-                      {s === "nota" ? "por nota" : "recentes"}
+                      {s === "nota" ? t("ideabank.sort_score", undefined, "por nota") : t("ideabank.sort_recent", undefined, "recentes")}
                     </button>
                   ))}
                 </div>
@@ -121,7 +118,7 @@ export function IdeaBank({ niche, onGo }: { niche: string; onGo: (id: string) =>
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && add()}
-                    placeholder="Jogue a ideia crua aqui — ela entra já com nota"
+                    placeholder={t("ideabank.input_placeholder", undefined, "Jogue a ideia crua aqui — ela entra já com nota")}
                     className="w-full rounded-md border border-ink-600/80 bg-ink-950/70 py-3 pl-3 pr-24 text-[14px] text-bone-100 outline-none transition-all placeholder:text-ink-400 focus:border-mint-400/70 focus:ring-2 focus:ring-mint-400/15"
                   />
                   {preview !== null && (
@@ -141,7 +138,7 @@ export function IdeaBank({ niche, onGo }: { niche: string; onGo: (id: string) =>
                   className="group inline-flex shrink-0 items-center gap-2 rounded-md bg-mint-400 px-4 py-3 text-[13.5px] font-bold text-ink-950 transition-all duration-200 hover:bg-mint-300 active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-ink-700 disabled:text-ink-400"
                 >
                   <Icon name="plus" className="h-4 w-4 transition-transform duration-300 group-hover:rotate-90" strokeWidth={2.4} />
-                  Guardar
+                  {t("ideabank.save_button", undefined, "Guardar")}
                 </button>
               </div>
 
@@ -175,7 +172,7 @@ export function IdeaBank({ niche, onGo }: { niche: string; onGo: (id: string) =>
                           {s.text}
                         </span>
                         <span className="mt-0.5 block font-mono text-[9.5px] tracking-[0.12em] text-ink-400 uppercase">
-                          {v.tag} · {new Date(s.ts).toLocaleDateString("pt-BR")}
+                          {v.tag} · {new Date(s.ts).toLocaleDateString()}
                         </span>
                       </span>
                       <span
@@ -190,14 +187,14 @@ export function IdeaBank({ niche, onGo }: { niche: string; onGo: (id: string) =>
                         <button
                           onClick={() => onGo("rank")}
                           className="rounded p-1.5 text-ink-500 opacity-0 transition-all duration-200 hover:bg-ink-800 hover:text-signal-400 group-hover:opacity-100"
-                          aria-label="Ranquear ideia"
+                          aria-label={t("ideabank.rank_aria", undefined, "Ranquear ideia")}
                         >
                           <Icon name="arrow" className="h-3.5 w-3.5" strokeWidth={2.2} />
                         </button>
                         <button
                           onClick={() => setIdeas((p) => p.filter((x) => x.id !== s.id))}
                           className="rounded p-1.5 text-ink-500 opacity-0 transition-all duration-200 hover:bg-oxide-400/15 hover:text-oxide-400 group-hover:opacity-100"
-                          aria-label="Descartar ideia"
+                          aria-label={t("ideabank.discard_aria", undefined, "Descartar ideia")}
                         >
                           <Icon name="close" className="h-3.5 w-3.5" strokeWidth={2.2} />
                         </button>
@@ -208,10 +205,10 @@ export function IdeaBank({ niche, onGo }: { niche: string; onGo: (id: string) =>
                 {!scored.length && (
                   <li className="rounded-md border border-dashed border-ink-700 p-8 text-center">
                     <p className="font-display text-[15px] font-semibold text-bone-300">
-                      Banco vazio
+                      {t("ideabank.empty_title", undefined, "Banco vazio")}
                     </p>
                     <p className="mt-1 text-[12.5px] text-ink-400">
-                      Anote dez ideias cruas antes de julgar qualquer uma.
+                      {t("ideabank.empty_desc", undefined, "Anote dez ideias cruas antes de julgar qualquer uma.")}
                     </p>
                   </li>
                 )}
@@ -222,23 +219,23 @@ export function IdeaBank({ niche, onGo }: { niche: string; onGo: (id: string) =>
             <div className="lg:border-l lg:border-ink-800 lg:pl-10">
               <div className="mb-5">
                 <div className="font-mono text-[9.5px] tracking-[0.18em] text-ink-400 uppercase">
-                  Fila de produção
+                  {t("ideabank.queue_title", undefined, "Fila de produção")}
                 </div>
                 <div className="mt-2 flex items-end gap-2">
                   <span className="font-display text-[4rem] leading-[0.8] font-extrabold tracking-[-0.04em] text-bone-50 tabular-nums">
                     {scored.length}
                   </span>
                   <span className="pb-2 font-mono text-[11px] text-ink-400">
-                    ideias · média {stats.avg.toFixed(1)}
+                    {t("ideabank.ideas_count", undefined, "ideias")} · {t("ideabank.avg_score", undefined, "média")} {stats.avg.toFixed(1)}
                   </span>
                 </div>
               </div>
 
               <div className="space-y-3">
                 {[
-                  { k: "Aprovadas (≥ 8)", v: stats.approved, c: "bg-mint-400", t: "text-mint-300" },
-                  { k: "Ajustar ângulo (6–8)", v: stats.adjust, c: "bg-signal-400", t: "text-signal-300" },
-                  { k: "Descartar (< 4)", v: stats.dead, c: "bg-oxide-400", t: "text-oxide-400" },
+                  { k: t("ideabank.stat_approved", undefined, "Aprovadas (≥ 8)"), v: stats.approved, c: "bg-mint-400", t: "text-mint-300" },
+                  { k: t("ideabank.stat_adjust", undefined, "Ajustar ângulo (6–8)"), v: stats.adjust, c: "bg-signal-400", t: "text-signal-300" },
+                  { k: t("ideabank.stat_discard", undefined, "Descartar (< 4)"), v: stats.dead, c: "bg-oxide-400", t: "text-oxide-400" },
                 ].map((r) => (
                   <div key={r.k}>
                     <div className="mb-1.5 flex items-baseline justify-between">
@@ -261,18 +258,17 @@ export function IdeaBank({ niche, onGo }: { niche: string; onGo: (id: string) =>
                 <div className="mb-2 flex items-center gap-2">
                   <Icon name="target" className="h-3.5 w-3.5 text-signal-400" />
                   <span className="font-mono text-[9.5px] tracking-[0.16em] text-signal-400 uppercase">
-                    Régua da fila
+                    {t("ideabank.queue_rule", undefined, "Régua da fila")}
                   </span>
                 </div>
                 <p className="text-[12.5px] leading-relaxed text-bone-400">
-                  Grave sempre a de maior nota primeiro. Ideia morna entra na fila só se trouxer uma
-                  variável nova — prova, prazo ou confissão.
+                  {t("ideabank.queue_rule_desc", undefined, "Grave sempre a de maior nota primeiro. Ideia morna entra na fila só se trouxer uma variável nova — prova, prazo ou confissão.")}
                 </p>
                 <button
                   onClick={() => onGo("rank")}
                   className="group mt-3 inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.16em] text-signal-400 uppercase transition-colors hover:text-signal-300"
                 >
-                  abrir o rank de ideia
+                  {t("ideabank.open_rank", undefined, "abrir o rank de ideia")}
                   <Icon name="arrow" className="h-3 w-3 transition-transform group-hover:translate-x-1" strokeWidth={2.4} />
                 </button>
               </div>

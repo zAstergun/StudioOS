@@ -3,6 +3,7 @@ import Cropper from "react-easy-crop";
 import { Panel, Reveal, Icon, Button, Input, Label, Select } from "../components/ui";
 import { VipBadge } from "../components/VipBadge";
 import { useAuth, supabase } from "../auth";
+import { useI18n } from "../i18n";
 import { computeProjectStatus } from "./ProjetosScreen";
 import { cn } from "../utils/cn";
 import { VipRgbColorPicker } from "../components/VipRgbColorPicker";
@@ -195,6 +196,7 @@ export default function PerfilScreen({
     setNotice((prev) => ({ ...prev, isOpen: false }));
   };
 
+  const { t, resolvedLanguage, languageSetting, setLanguageSetting, languages } = useI18n();
   const [tab, setTab] = useState<"geral" | "seguranca" | "preferencias" | "atividade">("geral");
   const [name, setName] = useState(user?.name || "");
   const [channel, setChannel] = useState(user?.channel || "");
@@ -886,7 +888,7 @@ export default function PerfilScreen({
     }
   }, [user]);
 
-  const [jokerTitle, setJokerTitle] = useState("Vídeo em Destaque");
+  const [jokerTitle, setJokerTitle] = useState("");
   const [jokerProject, setJokerProject] = useState("");
   const [isEditingJoker, setIsEditingJoker] = useState(false);
   const [isSelectingProject, setIsSelectingProject] = useState(false);
@@ -968,7 +970,7 @@ export default function PerfilScreen({
       setHideOnboarding(localStorage.getItem(`studioos.onboarding.hidden.${user.id}`) === "true");
 
       const savedTitle = localStorage.getItem(`studioos.showcaseTitle.${user.id}`);
-      if (savedTitle) setJokerTitle(savedTitle);
+      if (savedTitle && savedTitle !== "Vídeo em Destaque") setJokerTitle(savedTitle);
 
       const savedProject = localStorage.getItem(`studioos.jokerProject.${user.id}`);
       if (savedProject) setJokerProject(savedProject);
@@ -1108,43 +1110,74 @@ export default function PerfilScreen({
     const totalRuns = historyEntries.length;
 
     // 4. Mapeamento de ferramentas mais usadas
+    const resolveToolKey = (key: string, name?: string): string => {
+      const k = (key || "").toLowerCase();
+      if (k) {
+        if (k === "rank") return "rank";
+        if (k.startsWith("hook")) return "hooks";
+        if (k.includes("thumb") || k.includes("briefing")) return "thumbnail";
+        if (k === "roteiro") return "roteiro";
+        if (k === "receita") return "receita";
+        if (k === "score") return "score";
+        if (k === "humanizador") return "humanizador";
+        if (k === "mentor") return "mentor";
+        if (k === "titulos") return "titulos";
+        if (k === "membros") return "membros";
+        if (k === "painel") return "painel";
+      }
+      const n = (name || "").toLowerCase();
+      if (n.includes("rank") || n.includes("ideia")) return "rank";
+      if (n.includes("hook")) return "hooks";
+      if (n.includes("thumb") || n.includes("briefing")) return "thumbnail";
+      if (n.includes("roteiro") || n.includes("gravação") || n.includes("gravacao")) return "roteiro";
+      if (n.includes("receita")) return "receita";
+      if (n.includes("score")) return "score";
+      if (n.includes("humanizador")) return "humanizador";
+      if (n.includes("mentor")) return "mentor";
+      if (n.includes("título") || n.includes("titulo")) return "titulos";
+      if (n.includes("membro")) return "membros";
+      if (n.includes("painel")) return "painel";
+      return k || n;
+    };
+
     const toolNameMap: Record<string, string> = {
-      rank: "Rank de Ideia",
-      hooks: "Gerador de Hooks",
-      hook: "Gerador de Hooks",
-      briefing: "Briefing Thumbnail",
-      thumb: "Briefing Thumbnail",
-      thumbnail: "Briefing Thumbnail",
-      roteiro: "Roteiro & Gravação",
-      receita: "Receita Viral",
-      score: "Score do Post",
-      humanizador: "Humanizador",
-      mentor: "Mentor IA",
-      titulos: "Gerador de Títulos",
-      membros: "Área de Membros",
-      painel: "Painel de Criação"
+      rank: t("tools.rank.name", {}, "Rank de Ideia"),
+      hooks: t("tools.hooks.title", {}, "Gerador de Hooks"),
+      hook: t("tools.hooks.title", {}, "Gerador de Hooks"),
+      briefing: t("tools.thumb.title", {}, "Briefing Thumbnail"),
+      thumb: t("tools.thumb.title", {}, "Briefing Thumbnail"),
+      thumbnail: t("tools.thumb.title", {}, "Briefing Thumbnail"),
+      roteiro: t("tools.roteiro.title", {}, "Roteiro & Gravação"),
+      receita: t("tools.receita.title", {}, "Receita Viral"),
+      score: t("tools.score.title", {}, "Score de Post"),
+      humanizador: t("tools.humanizador.title", {}, "Humanizador"),
+      mentor: t("tools.mentor.title", {}, "Mentor AI"),
+      titulos: t("tools.titulos.title", {}, "Gerador de Títulos"),
+      membros: t("tools.membros.title", {}, "Área de Membros"),
+      painel: t("tools.painel.title", {}, "Painel de Criação")
     };
 
     const toolCounts: Record<string, { name: string; runs: number }> = {};
 
     historyEntries.forEach(entry => {
-      const key = entry.tool;
-      const displayName = toolNameMap[key] || entry.toolName || key;
-      if (!toolCounts[key]) {
-        toolCounts[key] = { name: displayName, runs: 0 };
+      const canonical = resolveToolKey(entry.tool, entry.toolName);
+      const displayName = toolNameMap[canonical] || entry.toolName || canonical;
+      if (!toolCounts[canonical]) {
+        toolCounts[canonical] = { name: displayName, runs: 0 };
       }
-      toolCounts[key].runs += 1;
+      toolCounts[canonical].runs += 1;
     });
 
     Object.entries(userStats).forEach(([k, v]) => {
       if (k.startsWith("tool_")) {
-        const toolKey = k.replace("tool_", "");
+        const rawToolKey = k.replace("tool_", "");
+        const canonical = resolveToolKey(rawToolKey);
         const runs = Number(v) || 0;
-        const displayName = toolNameMap[toolKey] || toolKey;
-        if (!toolCounts[toolKey]) {
-          toolCounts[toolKey] = { name: displayName, runs: runs };
+        const displayName = toolNameMap[canonical] || rawToolKey;
+        if (!toolCounts[canonical]) {
+          toolCounts[canonical] = { name: displayName, runs: runs };
         } else {
-          toolCounts[toolKey].runs = Math.max(toolCounts[toolKey].runs, runs);
+          toolCounts[canonical].runs = Math.max(toolCounts[canonical].runs, runs);
         }
       }
     });
@@ -1252,7 +1285,9 @@ export default function PerfilScreen({
       }
     }
     const dowNames = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
+    const dowKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
     const bestDowName = dowNames[bestDowIdx];
+    const bestDowKey = dowKeys[bestDowIdx];
 
     return {
       ideasCount,
@@ -1276,6 +1311,7 @@ export default function PerfilScreen({
       avgRatingStr,
       avgRatingNum,
       bestDowName,
+      bestDowKey,
       completedProjectsCount,
       hasActivity: totalRuns > 0 || ideasCount > 0 || ongoingProjects.length > 0 || completedProjectsCount > 0
     };
@@ -1340,6 +1376,7 @@ export default function PerfilScreen({
         avgRatingStr,
         avgRatingNum,
         bestDowName: stats.best_dow || "domingo",
+        bestDowKey: accountMetrics.bestDowKey || "sun",
         hasActivity: projectsCount > 0 || ideasCount > 0 || projs.length > 0
       };
     }
@@ -1482,13 +1519,13 @@ export default function PerfilScreen({
         <button
           type="button"
           onClick={() => onGo?.("ranking")}
-          title="#1 no Ranking Global do StudioOS. Clique para abrir a tabela de criadores."
+          title={t("profile.ranking.rank1_tooltip", undefined, "#1 no Ranking Global do StudioOS. Clique para abrir a tabela de criadores.")}
           className="group relative inline-flex items-center gap-1.5 rounded-full border border-[#F2B33D] bg-gradient-to-r from-[#2c1d06] via-[#4a300a] to-[#2c1d06] px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-[0.14em] text-[#FFDF79] shadow-[0_0_20px_rgba(242,179,61,0.5),inset_0_1px_1px_rgba(255,255,255,0.4)] ring-1 ring-[#F2B33D]/60 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_28px_rgba(242,179,61,0.75)] cursor-pointer overflow-hidden shrink-0"
         >
           <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-sweep" />
           <Icon name="crown" className="h-3.5 w-3.5 text-[#FFDF79] drop-shadow-[0_0_6px_rgba(242,179,61,0.9)] animate-pulse" />
           <span className="bg-gradient-to-r from-[#FFF5D0] via-[#FFDF79] to-[#F2B33D] bg-clip-text text-transparent font-display font-black">
-            #1 TOP CRIADOR
+            {t("profile.ranking.rank1_badge", undefined, "#1 TOP CRIADOR")}
           </span>
           <span className="h-1.5 w-1.5 rounded-full bg-[#FFF5D0] shadow-[0_0_6px_#FFDF79] shrink-0" />
         </button>
@@ -1500,13 +1537,13 @@ export default function PerfilScreen({
         <button
           type="button"
           onClick={() => onGo?.("ranking")}
-          title="#2 no Ranking Global do StudioOS. Clique para abrir a tabela de criadores."
+          title={t("profile.ranking.rank2_tooltip", undefined, "#2 no Ranking Global do StudioOS. Clique para abrir a tabela de criadores.")}
           className="group relative inline-flex items-center gap-1.5 rounded-full border border-[#A7C8FF] bg-gradient-to-r from-[#0d1624] via-[#1a2b47] to-[#0d1624] px-2.5 py-0.5 text-[10.5px] font-extrabold uppercase tracking-[0.13em] text-[#E0EDFF] shadow-[0_0_18px_rgba(167,200,255,0.4),inset_0_1px_1px_rgba(255,255,255,0.4)] ring-1 ring-[#A7C8FF]/50 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_25px_rgba(167,200,255,0.65)] cursor-pointer overflow-hidden shrink-0"
         >
           <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-sweep" />
           <Icon name="trophy" className="h-3.5 w-3.5 text-[#CFE2FF] drop-shadow-[0_0_6px_rgba(167,200,255,0.85)]" />
           <span className="bg-gradient-to-r from-white via-[#E0EDFF] to-[#A7C8FF] bg-clip-text text-transparent font-display font-extrabold">
-            #2 RANKING
+            {t("profile.ranking.rank2_badge", undefined, "#2 RANKING")}
           </span>
           <span className="h-1.5 w-1.5 rounded-full bg-[#CFE2FF] shadow-[0_0_5px_#A7C8FF] shrink-0" />
         </button>
@@ -1518,13 +1555,13 @@ export default function PerfilScreen({
         <button
           type="button"
           onClick={() => onGo?.("ranking")}
-          title="#3 no Ranking Global do StudioOS. Clique para abrir a tabela de criadores."
+          title={t("profile.ranking.rank3_tooltip", undefined, "#3 no Ranking Global do StudioOS. Clique para abrir a tabela de criadores.")}
           className="group relative inline-flex items-center gap-1.5 rounded-full border border-[#F28C38] bg-gradient-to-r from-[#241308] via-[#3d1c0a] to-[#241308] px-2.5 py-0.5 text-[10.5px] font-extrabold uppercase tracking-[0.13em] text-[#FFB677] shadow-[0_0_16px_rgba(242,140,56,0.35),inset_0_1px_1px_rgba(255,255,255,0.3)] ring-1 ring-[#F28C38]/45 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_22px_rgba(242,140,56,0.6)] cursor-pointer overflow-hidden shrink-0"
         >
           <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/15 to-transparent animate-sweep" />
           <Icon name="medal" className="h-3.5 w-3.5 text-[#FFB677] drop-shadow-[0_0_5px_rgba(242,140,56,0.8)]" />
           <span className="bg-gradient-to-r from-[#FFE5CF] via-[#FFB677] to-[#F28C38] bg-clip-text text-transparent font-display font-extrabold">
-            #3 RANKING
+            {t("profile.ranking.rank3_badge", undefined, "#3 RANKING")}
           </span>
           <span className="h-1.5 w-1.5 rounded-full bg-[#FFB677] shadow-[0_0_5px_#F28C38] shrink-0" />
         </button>
@@ -1591,7 +1628,7 @@ export default function PerfilScreen({
             setCardVisibility(prev => ({ ...prev, ...data.card_visibility }));
           }
           if (data.featured_video) {
-            if (data.featured_video.title) setJokerTitle(data.featured_video.title);
+            if (data.featured_video.title && data.featured_video.title !== "Vídeo em Destaque") setJokerTitle(data.featured_video.title);
             if (data.featured_video.id) setJokerProject(data.featured_video.id);
           }
         }
@@ -1685,11 +1722,11 @@ export default function PerfilScreen({
     if (isEditingProfile) return;
     if (!channel) {
       showNotice(
-        "Defina seu @ de Usuário",
-        "Você ainda está com o @usuario padrão visual. Defina seu @ de usuário e salve seu perfil para ativar sua página pública!",
+        t("profile.hero.define_handle_title", undefined, "Defina seu @ de Usuário"),
+        t("profile.hero.define_handle_desc", undefined, "Você ainda está com o @usuario padrão visual. Defina seu @ de usuário e salve seu perfil para ativar sua página pública!"),
         "warning",
         {
-          actionText: "Editar Perfil",
+          actionText: t("profile.hero.edit_profile", undefined, "Editar Perfil"),
           onAction: () => startEditingProfile("channel"),
         }
       );
@@ -1717,11 +1754,11 @@ export default function PerfilScreen({
     const handleToCopy = isViewingOther ? cleanViewedHandle : (channel ? channel.replace(/^@/, '') : "");
     if (!handleToCopy) {
       showNotice(
-        "Defina seu @ de Usuário",
-        "Você ainda está com o @usuario padrão visual. Defina seu @ de usuário e salve seu perfil para ativar e copiar seu link!",
+        t("profile.hero.define_handle_title", undefined, "Defina seu @ de Usuário"),
+        t("profile.hero.define_handle_copy_desc", undefined, "Você ainda está com o @usuario padrão visual. Defina seu @ de usuário e salve seu perfil para ativar e copiar seu link!"),
         "warning",
         {
-          actionText: "Editar Perfil",
+          actionText: t("profile.hero.edit_profile", undefined, "Editar Perfil"),
           onAction: () => startEditingProfile("channel"),
         }
       );
@@ -2054,13 +2091,14 @@ export default function PerfilScreen({
     );
   };
 
-  const tabs = isPublicView
-    ? ([{ id: "geral", label: "Geral", icon: "user" }] as const)
-    : ([
-        { id: "geral", label: "Geral", icon: "user" },
-        { id: "seguranca", label: "Segurança", icon: "lock" },
-        { id: "preferencias", label: "Preferências", icon: "dial" },
-      ] as const);
+  type TabKey = "geral" | "seguranca" | "preferencias" | "atividade";
+  const tabs: Array<{ id: TabKey; label: string; icon: string }> = isPublicView
+    ? [{ id: "geral", label: t("profile.tabs.general", undefined, "Geral"), icon: "user" }]
+    : [
+        { id: "geral", label: t("profile.tabs.general", undefined, "Geral"), icon: "user" },
+        { id: "seguranca", label: t("profile.tabs.security", undefined, "Segurança"), icon: "lock" },
+        { id: "preferencias", label: t("profile.tabs.preferences", undefined, "Preferências"), icon: "dial" },
+      ];
 
   const scrollTo = (id: string, targetTab: "geral" | "seguranca" | "preferencias" | "atividade") => {
     if (tab !== targetTab) {
@@ -2106,18 +2144,18 @@ export default function PerfilScreen({
   const onboardingItems = [
     {
       id: "profile",
-      label: "Configurar seu perfil",
-      desc: "Defina seu nome, @canal oficial e biografia do estúdio.",
-      tag: "Perfil",
+      label: t("profile.onboarding.items.profile.label", undefined, "Configurar seu perfil"),
+      desc: t("profile.onboarding.items.profile.desc", undefined, "Defina seu nome, @canal oficial e biografia do estúdio."),
+      tag: t("profile.onboarding.items.profile.tag", undefined, "Perfil"),
       icon: "user",
       done: isProfileDone,
       action: () => startEditingProfile(),
     },
     {
       id: "wiki",
-      label: "Ler a Wiki do estúdio",
-      desc: "Conheça as diretrizes, boas práticas e funcionamento de cada ferramenta.",
-      tag: "Guia",
+      label: t("profile.onboarding.items.wiki.label", undefined, "Ler a Wiki do estúdio"),
+      desc: t("profile.onboarding.items.wiki.desc", undefined, "Conheça as diretrizes, boas práticas e funcionamento de cada ferramenta."),
+      tag: t("profile.onboarding.items.wiki.tag", undefined, "Guia"),
       icon: "book",
       done: isWikiDone,
       action: () => {
@@ -2130,9 +2168,9 @@ export default function PerfilScreen({
     },
     {
       id: "ai_tool",
-      label: "Testar uma ferramenta de IA",
-      desc: "Ranqueie ideias, gere títulos ou crie roteiros no laboratório de criação.",
-      tag: "IA",
+      label: t("profile.onboarding.items.ai_tool.label", undefined, "Testar uma ferramenta de IA"),
+      desc: t("profile.onboarding.items.ai_tool.desc", undefined, "Ranqueie ideias, gere títulos ou crie roteiros no laboratório de criação."),
+      tag: t("profile.onboarding.items.ai_tool.tag", undefined, "IA"),
       icon: "sparkles",
       done: isAiDone,
       action: () => {
@@ -2144,9 +2182,9 @@ export default function PerfilScreen({
     },
     {
       id: "project",
-      label: "Adicionar seu primeiro projeto",
-      desc: "Inicie uma produção na esteira Kanban de projetos do estúdio.",
-      tag: "Produção",
+      label: t("profile.onboarding.items.project.label", undefined, "Adicionar seu primeiro projeto"),
+      desc: t("profile.onboarding.items.project.desc", undefined, "Inicie uma produção na esteira Kanban de projetos do estúdio."),
+      tag: t("profile.onboarding.items.project.tag", undefined, "Produção"),
       icon: "kanban",
       done: isProjectDone,
       action: () => {
@@ -2162,18 +2200,18 @@ export default function PerfilScreen({
     },
     {
       id: "discord",
-      label: "Conectar conta do Discord",
-      desc: "Vincule para login unificado e integração com a comunidade do estúdio.",
-      tag: "Conexão",
+      label: t("profile.onboarding.items.discord.label", undefined, "Conectar conta do Discord"),
+      desc: t("profile.onboarding.items.discord.desc", undefined, "Vincule para login unificado e integração com a comunidade do estúdio."),
+      tag: t("profile.onboarding.items.discord.tag", undefined, "Conexão"),
       icon: "discord",
       done: isDiscordDone,
       action: () => scrollTo("panel-sso", "seguranca"),
     },
     {
       id: "preferences",
-      label: "Personalizar suas preferências",
-      desc: "Ajuste notificações, idioma ou a visibilidade dos blocos do perfil.",
-      tag: "Ajustes",
+      label: t("profile.onboarding.items.preferences.label", undefined, "Personalizar suas preferências"),
+      desc: t("profile.onboarding.items.preferences.desc", undefined, "Ajuste notificações, idioma ou a visibilidade dos blocos do perfil."),
+      tag: t("profile.onboarding.items.preferences.tag", undefined, "Ajustes"),
       icon: "dial",
       done: isPrefsDone,
       action: () => setTab("preferencias"),
@@ -2202,15 +2240,15 @@ export default function PerfilScreen({
               <div className="flex items-center gap-1.5 min-w-0">
                 <Icon name={isVisible ? "eye" : "eyeOff"} className="h-3.5 w-3.5 shrink-0" />
                 <span className="font-mono text-[10.5px] font-bold uppercase tracking-wider truncate">
-                  {isVisible ? "Visível no Perfil Público" : "Oculto no Perfil Público"}
+                  {isVisible ? t("profile.cards.visible_public", undefined, "Visível no Perfil Público") : t("profile.cards.hidden_public", undefined, "Oculto no Perfil Público")}
                 </span>
               </div>
               <button
                 type="button"
                 role="switch"
                 aria-checked={isVisible}
-                aria-label={isVisible ? "Tornar bloco oculto no perfil público" : "Tornar bloco visível no perfil público"}
-                title={isVisible ? "Visível publicamente (clique para ocultar)" : "Oculto (clique para tornar público)"}
+                aria-label={isVisible ? t("profile.cards.hide_aria", undefined, "Tornar bloco oculto no perfil público") : t("profile.cards.show_aria", undefined, "Tornar bloco visível no perfil público")}
+                title={isVisible ? t("profile.cards.visible_title", undefined, "Visível publicamente (clique para ocultar)") : t("profile.cards.hidden_title", undefined, "Oculto (clique para tornar público)")}
                 onClick={() => setDraftCardVisibility(prev => ({ ...prev, [cardKey]: !prev[cardKey] }))}
                 className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-all duration-200 ease-in-out focus:outline-none hover:opacity-90 active:scale-95 ${
                   isVisible
@@ -2236,8 +2274,8 @@ export default function PerfilScreen({
               </span>
               <p className="text-[10.5px] text-bone-400 leading-normal">
                 {isVisible 
-                  ? "Quem acessar o seu link verá este bloco." 
-                  : "Apenas você vê este bloco. Visitantes não terão acesso."}
+                  ? t("profile.cards.visible_desc", undefined, "Quem acessar o seu link verá este bloco.") 
+                  : t("profile.cards.hidden_desc", undefined, "Apenas você vê este bloco. Visitantes não terão acesso.")}
               </p>
             </div>
           </div>
@@ -2249,7 +2287,7 @@ export default function PerfilScreen({
       return (
         <div className="flex items-center gap-2 px-4 py-2 bg-[#18181b]/80 border-b border-[#232327] text-[#8c8c94] text-[10.5px] font-mono">
           <Icon name="eyeOff" className="h-3.5 w-3.5 text-signal-400/70" />
-          <span>Oculto do perfil público · Apenas você tem visão deste bloco</span>
+          <span>{t("profile.cards.hidden_owner_notice", undefined, "Oculto do perfil público · Apenas você tem visão deste bloco")}</span>
         </div>
       );
     }
@@ -2353,16 +2391,16 @@ export default function PerfilScreen({
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-[#232327] bg-[#0c0c0e] text-bone-400">
           <Icon name="search" className="h-8 w-8 text-signal-400" />
         </div>
-        <h2 className="font-display text-xl font-bold text-bone-50">Criador não encontrado</h2>
+        <h2 className="font-display text-xl font-bold text-bone-50">{t("profile.creator_not_found", undefined, "Criador não encontrado")}</h2>
         <p className="mt-2 text-sm text-bone-400">
-          Não encontramos nenhum criador cadastrado com o @{cleanViewedHandle}.
+          {t("profile.creator_not_found_desc", { handle: cleanViewedHandle || "" }, `Não encontramos nenhum criador cadastrado com o @${cleanViewedHandle}.`)}
         </p>
         <button
           type="button"
           onClick={handleBackToMyProfile}
           className="mt-6 inline-flex items-center gap-2 rounded-lg bg-signal-400 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-ink-950 hover:bg-signal-300 cursor-pointer"
         >
-          <Icon name="arrow-left" className="h-3.5 w-3.5" /> Voltar ao meu perfil
+          <Icon name="arrow-left" className="h-3.5 w-3.5" /> {t("profile.back_to_my_profile", undefined, "Voltar ao meu perfil")}
         </button>
       </div>
     );
@@ -2377,8 +2415,8 @@ export default function PerfilScreen({
             <span className="h-2 w-2 rounded-full bg-signal-400 animate-pulse" />
             <span>
               {isViewingOther 
-                ? `Visualizando perfil público de @${cleanViewedHandle}` 
-                : "Modo de visualização pública do seu próprio perfil"}
+                ? t("profile.viewing_public_other", { handle: cleanViewedHandle || "" }, `Visualizando perfil público de @${cleanViewedHandle}`)
+                : t("profile.viewing_public_own", undefined, "Modo de visualização pública do seu próprio perfil")}
             </span>
           </div>
           <button
@@ -2387,7 +2425,7 @@ export default function PerfilScreen({
             className="flex items-center gap-1.5 rounded-lg border border-signal-400/40 bg-ink-950/80 px-3 py-1.5 text-xs font-semibold text-signal-400 hover:bg-signal-400 hover:text-ink-950 transition-all cursor-pointer shadow-sm"
           >
             <Icon name="arrow-left" className="h-3.5 w-3.5" />
-            <span>Voltar ao meu perfil</span>
+            <span>{t("profile.back_to_my_profile", undefined, "Voltar ao meu perfil")}</span>
           </button>
         </div>
       )}
@@ -2473,7 +2511,7 @@ export default function PerfilScreen({
                       className={`group/name relative flex items-center gap-2 select-none rounded-lg py-0.5 px-1.5 -ml-1.5 transition-all ${
                         !isPublicView ? "cursor-pointer hover:bg-white/[0.04]" : ""
                       }`}
-                      title={!isPublicView ? "Clique para editar seu nome de exibição" : undefined}
+                      title={!isPublicView ? t("profile.hero.edit_name_tooltip", undefined, "Clique para editar seu nome de exibição") : undefined}
                     >
                       <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-bone-50">
                         {displayedName}
@@ -2492,14 +2530,14 @@ export default function PerfilScreen({
                       className={`group/channel relative flex items-center gap-1.5 select-none rounded-lg py-0.5 px-2 -ml-2 transition-all ${
                         !isPublicView ? "cursor-pointer hover:bg-signal-400/10 border border-transparent hover:border-signal-400/30" : ""
                       }`}
-                      title={!isPublicView ? "Clique para editar seu nome de usuário (@)" : undefined}
+                      title={!isPublicView ? t("profile.hero.edit_handle_tooltip", undefined, "Clique para editar seu nome de usuário (@)") : undefined}
                     >
                       <span className="font-mono text-[13px] text-signal-400 font-medium">
                         {displayedChannel}
                       </span>
                       {!channel && !isViewingOther && (
                         <span className="text-[9px] font-mono uppercase tracking-wider text-ink-400 bg-ink-800/80 px-1.5 py-0.5 rounded border border-ink-700">
-                          padrão
+                          {t("profile.hero.default_badge", undefined, "padrão")}
                         </span>
                       )}
                       {!isPublicView && (
@@ -2508,7 +2546,7 @@ export default function PerfilScreen({
                     </div>
 
                     <span className="flex items-center gap-1.5 text-[11px] font-mono tracking-widest uppercase text-ink-400">
-                      <Icon name="clock" className="h-3 w-3" /> Membro desde {new Date().getFullYear()}
+                      <Icon name="clock" className="h-3 w-3" /> {t("profile.hero.member_since", { year: new Date().getFullYear() }, `Membro desde ${new Date().getFullYear()}`)}
                     </span>
                   </div>
                 </div>
@@ -2524,10 +2562,10 @@ export default function PerfilScreen({
                         disabled={likingLoading}
                         title={
                           user?.is_temporary
-                            ? "Contas de teste não podem curtir perfis"
+                            ? t("profile.hero.test_account_no_likes", undefined, "Contas de teste não podem curtir perfis")
                             : hasLiked
-                            ? "Descurtir perfil"
-                            : "Curtir este perfil"
+                            ? t("profile.hero.unlike_title", undefined, "Descurtir perfil")
+                            : t("profile.hero.like_title", undefined, "Curtir este perfil")
                         }
                         className={`col-span-2 sm:col-span-1 flex items-center justify-center gap-2 rounded-lg border px-4 py-2 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
                           hasLiked
@@ -2554,13 +2592,13 @@ export default function PerfilScreen({
                         onClick={handleBackToMyProfile}
                         className="col-span-2 sm:col-span-1 justify-center text-[11px] font-semibold uppercase tracking-[0.12em] px-3.5 py-2 sm:px-4 sm:py-2.5 shadow-[0_0_20px_rgba(242,179,61,0.25)] hover:shadow-[0_0_25px_rgba(242,179,61,0.4)]"
                       >
-                        <Icon name="arrow-left" className="h-3.5 w-3.5" /> Voltar ao Meu Perfil
+                        <Icon name="arrow-left" className="h-3.5 w-3.5" /> {t("profile.hero.back_to_my_profile", undefined, "Voltar ao Meu Perfil")}
                       </Button>
                       <button
                         type="button"
                         onClick={handleCopyProfileLink}
-                        aria-label="Copiar link do perfil"
-                        title={copiedLink ? "Link copiado para a área de transferência!" : "Copiar link do perfil para compartilhar"}
+                        aria-label={t("profile.hero.copy_link_aria", undefined, "Copiar link do perfil")}
+                        title={copiedLink ? t("profile.hero.copied_title", undefined, "Link copiado para a área de transferência!") : t("profile.hero.copy_title", undefined, "Copiar link do perfil para compartilhar")}
                         className={`flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
                           copiedLink
                             ? "border-[#2FD4A0]/60 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_15px_rgba(47,212,160,0.25)]"
@@ -2568,7 +2606,7 @@ export default function PerfilScreen({
                         }`}
                       >
                         <Icon name={copiedLink ? "check" : "copy"} className="h-3.5 w-3.5" />
-                        <span>{copiedLink ? "Copiado!" : "Copiar link"}</span>
+                        <span>{copiedLink ? t("common.copied", undefined, "Copiado!") : t("common.copy_link", undefined, "Copiar link")}</span>
                       </button>
                     </>
                   ) : (
@@ -2578,20 +2616,20 @@ export default function PerfilScreen({
                         onClick={() => startEditingProfile()} 
                         className="col-span-2 sm:col-span-1 justify-center text-[11px] font-semibold uppercase tracking-[0.12em] px-3.5 py-2 sm:px-4 sm:py-2.5 shadow-[0_0_20px_rgba(242,179,61,0.25)] hover:shadow-[0_0_25px_rgba(242,179,61,0.4)]"
                       >
-                        <Icon name="type" className="h-3.5 w-3.5" /> Editar perfil
+                        <Icon name="type" className="h-3.5 w-3.5" /> {t("profile.hero.edit_profile", undefined, "Editar perfil")}
                       </Button>
                       <button 
                         type="button"
                         onClick={handleOpenPublicProfile}
                         className={`flex items-center justify-center gap-2 rounded-lg border border-ink-700 bg-ink-900/50 px-3.5 py-2 sm:px-4 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-bone-300 transition-colors cursor-pointer ${channel ? 'hover:border-signal-400/60 hover:text-bone-50 hover:bg-ink-800/60' : 'opacity-60 hover:border-signal-400/50 hover:text-signal-400'}`}
                       >
-                        <Icon name="eye" className="h-3.5 w-3.5" /> Ver público
+                        <Icon name="eye" className="h-3.5 w-3.5" /> {t("profile.hero.view_public", undefined, "Ver público")}
                       </button>
                       <button
                         type="button"
                         onClick={handleCopyProfileLink}
-                        aria-label="Copiar link do perfil"
-                        title={copiedLink ? "Link copiado para a área de transferência!" : "Copiar link do perfil para compartilhar"}
+                        aria-label={t("profile.hero.copy_link_aria", undefined, "Copiar link do perfil")}
+                        title={copiedLink ? t("profile.hero.copied_title", undefined, "Link copiado para a área de transferência!") : t("profile.hero.copy_title", undefined, "Copiar link do perfil para compartilhar")}
                         className={`flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2 sm:py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-all cursor-pointer ${
                           copiedLink
                             ? "border-[#2FD4A0]/60 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_15px_rgba(47,212,160,0.25)]"
@@ -2599,7 +2637,7 @@ export default function PerfilScreen({
                         }`}
                       >
                         <Icon name={copiedLink ? "check" : "copy"} className="h-3.5 w-3.5" />
-                        <span>{copiedLink ? "Copiado!" : "Copiar link"}</span>
+                        <span>{copiedLink ? t("common.copied", undefined, "Copiado!") : t("common.copy_link", undefined, "Copiar link")}</span>
                       </button>
                     </>
                   )}
@@ -2612,7 +2650,7 @@ export default function PerfilScreen({
                 className={`group/bio mt-1.5 max-w-3xl rounded-lg p-2 -ml-2 transition-all border border-transparent ${
                   !isPublicView ? "cursor-pointer hover:bg-white/[0.03] hover:border-ink-800" : ""
                 }`}
-                title={!isPublicView ? "Clique para editar a bio" : undefined}
+                title={!isPublicView ? t("profile.hero.edit_bio_tooltip", undefined, "Clique para editar a bio") : undefined}
               >
                 <p className="text-[13.5px] leading-relaxed text-bone-400 group-hover/bio:text-bone-200 transition-colors flex items-start gap-2">
                   <span className="flex-1">{displayedBio}</span>
@@ -2625,10 +2663,20 @@ export default function PerfilScreen({
               {/* Estatísticas (agora com largura total desobstruída e contagem de curtidas) */}
               <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-2.5">
                 {[
-                  [metrics.completedProjectsCount.toString(), metrics.completedProjectsCount === 1 ? "projeto concluído" : "projetos concluídos"],
-                  [metrics.ideasCount.toString(), "ideias ranqueadas"],
-                  [metrics.avgRatingStr, "nota média"],
-                  [likesCount.toString(), likesCount === 1 ? "curtida recebida" : "curtidas recebidas"],
+                  [
+                    metrics.completedProjectsCount.toString(),
+                    metrics.completedProjectsCount === 1
+                      ? t("profile.stats.project_completed", undefined, "projeto concluído")
+                      : t("profile.stats.projects_completed", undefined, "projetos concluídos")
+                  ],
+                  [metrics.ideasCount.toString(), t("profile.stats.ideas_ranked", undefined, "ideias ranqueadas")],
+                  [metrics.avgRatingStr, t("profile.stats.avg_rating", undefined, "nota média")],
+                  [
+                    likesCount.toString(),
+                    likesCount === 1
+                      ? t("profile.stats.like_received", undefined, "curtida recebida")
+                      : t("profile.stats.likes_received", undefined, "curtidas recebidas")
+                  ],
                 ].map(([v, l]) => (
                   <div key={l} className="flex items-baseline gap-2">
                     <span className="font-display text-[16px] font-bold text-bone-50 tabular-nums">{v}</span>
@@ -2677,7 +2725,7 @@ export default function PerfilScreen({
                     onClick={() => startEditingProfile()} 
                     className="flex items-center gap-1.5 text-[12px] text-bone-400 hover:text-signal-400 transition-colors font-mono cursor-pointer"
                   >
-                    <Icon name="plus" className="h-3 w-3" /> Adicionar links ao perfil
+                    <Icon name="plus" className="h-3 w-3" /> {t("profile.add_links_btn", undefined, "Adicionar links ao perfil")}
                   </button>
                 </div>
               ) : null}
@@ -2688,8 +2736,8 @@ export default function PerfilScreen({
               {/* Top Bar no Modo Edição */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-[#232327]">
                 <div>
-                  <h3 className="font-display text-lg font-bold text-white tracking-tight">Editar Perfil</h3>
-                  <p className="text-[12px] text-ink-400 font-mono mt-0.5">Altere suas informações e gerencie a visibilidade dos cards públicos</p>
+                  <h3 className="font-display text-lg font-bold text-white tracking-tight">{t("profile.edit.title", undefined, "Editar Perfil")}</h3>
+                  <p className="text-[12px] text-ink-400 font-mono mt-0.5">{t("profile.edit.desc", undefined, "Altere suas informações e gerencie a visibilidade dos cards públicos")}</p>
                 </div>
                 <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
                   <Button 
@@ -2698,7 +2746,7 @@ export default function PerfilScreen({
                     disabled={saving}
                     className="justify-center text-[11px] font-bold uppercase tracking-[0.12em] px-4 py-2.5 bg-signal-400 hover:bg-signal-300 text-ink-950 shadow-[0_0_15px_rgba(242,179,61,0.3)]"
                   >
-                    <Icon name="check" className="h-3.5 w-3.5 stroke-[3]" /> {saving ? "Salvando..." : "Salvar Perfil"}
+                    <Icon name="check" className="h-3.5 w-3.5 stroke-[3]" /> {saving ? t("common.saving", undefined, "Salvando...") : t("profile.edit.save_btn", undefined, "Salvar Perfil")}
                   </Button>
                   <Button 
                     variant="outline" 
@@ -2707,7 +2755,7 @@ export default function PerfilScreen({
                     disabled={saving}
                     className="justify-center text-[11px] font-semibold uppercase tracking-[0.12em] px-3.5 py-2.5 border-ink-700 bg-ink-900/60 text-bone-300 hover:text-white cursor-pointer"
                   >
-                    Cancelar
+                    {t("common.cancel", undefined, "Cancelar")}
                   </Button>
                 </div>
               </div>
@@ -2715,20 +2763,20 @@ export default function PerfilScreen({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-mono uppercase tracking-widest text-ink-400 block mb-1.5">
-                    Nome de Exibição
+                    {t("profile.edit.display_name", undefined, "Nome de Exibição")}
                   </label>
                   <Input 
                     ref={nameInputRef}
                     value={draftName} 
                     onChange={e => setDraftName(e.target.value)} 
-                    placeholder="Seu Nome" 
+                    placeholder={t("profile.edit.your_name_placeholder", undefined, "Seu Nome")} 
                     maxLength={50} 
                     className="bg-[#101012] border-[#232327] text-white focus:border-signal-400 font-display text-lg font-bold w-full" 
                   />
                 </div>
                 <div>
                   <label className="text-[10px] font-mono uppercase tracking-widest text-ink-400 block mb-1.5">
-                    Nome de Usuário (@ único)
+                    {t("profile.edit.username_handle", undefined, "Nome de Usuário (@ único)")}
                   </label>
                   <div className={`flex items-center rounded-lg border bg-[#101012] px-3 py-2 transition-all ${
                     Boolean(channel && !user?.email_confirmed_at)
@@ -2752,11 +2800,11 @@ export default function PerfilScreen({
                   {Boolean(channel && !user?.email_confirmed_at) ? (
                     <span className="text-[11px] text-amber-400/90 font-mono mt-1.5 flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded">
                       <span>🔒</span>
-                      <span>Confirme seu e-mail na sua caixa de entrada para poder alterar seu @usuario.</span>
+                      <span>{t("profile.edit.confirm_email_to_change_handle", undefined, "Confirme seu e-mail na sua caixa de entrada para poder alterar seu @usuario.")}</span>
                     </span>
                   ) : (
                     <span className="text-[10px] text-ink-400 font-mono mt-1 block">
-                      {draftChannel ? `Link público: /perfil/${draftChannel}` : "Padrão visual: @usuario (salve para criar seu link real)"}
+                      {draftChannel ? t("profile.edit.public_link_prefix", { channel: draftChannel }, `Link público: /perfil/${draftChannel}`) : t("profile.edit.default_visual_handle", undefined, "Padrão visual: @usuario (salve para criar seu link real)")}
                     </span>
                   )}
                 </div>
@@ -2764,20 +2812,20 @@ export default function PerfilScreen({
 
               <div>
                 <label className="text-[10px] font-mono uppercase tracking-widest text-ink-400 block mb-1.5">
-                  Bio do Perfil
+                  {t("profile.edit.bio_label", undefined, "Bio do Perfil")}
                 </label>
                 <div className="relative">
                   <textarea
                     ref={bioInputRef}
                     value={draftBio}
                     onChange={e => setDraftBio(e.target.value)}
-                    placeholder="Conte quem você é e seus conteúdos..."
+                    placeholder={t("profile.bio_placeholder", undefined, "Conte quem você é e seus conteúdos...")}
                     maxLength={280}
                     rows={3}
                     className="w-full rounded-xl border border-[#232327] bg-[#101012] p-3 text-[13.5px] leading-relaxed text-bone-200 placeholder:text-bone-600 focus:border-signal-400 focus:outline-none focus:shadow-[0_0_15px_rgba(242,179,61,0.15)] transition-all resize-none"
                   />
                   <div className="flex justify-between items-center mt-1 px-1 text-[11px] font-mono text-ink-400">
-                    <span>Aparecerá para quem visitar o seu link público</span>
+                    <span>{t("profile.bio_public_hint", undefined, "Aparecerá para quem visitar o seu link público")}</span>
                     <span className={draftBio.length >= 260 ? "text-signal-400 font-bold" : ""}>{draftBio.length}/280</span>
                   </div>
                 </div>
@@ -2789,11 +2837,11 @@ export default function PerfilScreen({
                   <div className="flex items-center gap-2">
                     <span className="text-base">📐</span>
                     <span className="font-display text-[13.5px] font-bold text-white tracking-tight">
-                      Medidas e Formatos Ideais para o Perfil
+                      {t("profile.specs.title", undefined, "Medidas e Formatos Ideais para o Perfil")}
                     </span>
                   </div>
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-mono text-signal-400 bg-signal-400/10 border border-signal-400/25 px-2.5 py-0.5 rounded-full w-fit">
-                    <span>✨</span> Especificações Técnicas
+                    <span>✨</span> {t("profile.specs.badge", undefined, "Especificações Técnicas")}
                   </span>
                 </div>
 
@@ -2804,7 +2852,7 @@ export default function PerfilScreen({
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2 text-white text-xs font-bold">
                           <Icon name="user" className="h-3.5 w-3.5 text-signal-400" />
-                          <span>Foto do Perfil (Avatar)</span>
+                          <span>{t("profile.specs.avatar_title", undefined, "Foto do Perfil (Avatar)")}</span>
                         </div>
                         <span className="font-mono text-[10.5px] font-bold text-signal-400 bg-signal-400/15 border border-signal-400/30 px-2 py-0.5 rounded">
                           400 × 400 px
@@ -2812,21 +2860,21 @@ export default function PerfilScreen({
                       </div>
                       <div className="space-y-1.5 text-[11px] font-mono">
                         <div className="flex items-center justify-between text-ink-400">
-                          <span>Proporção:</span>
-                          <span className="text-bone-200 font-semibold">1:1 (Quadrada · Corte circular)</span>
+                          <span>{t("profile.specs.aspect_ratio", undefined, "Proporção:")}</span>
+                          <span className="text-bone-200 font-semibold">{t("profile.specs.avatar_ratio_val", undefined, "1:1 (Quadrada · Corte circular)")}</span>
                         </div>
                         <div className="flex items-center justify-between text-ink-400">
-                          <span>Formatos:</span>
-                          <span className="text-bone-200">JPG, PNG, WEBP ou GIF (VIP)</span>
+                          <span>{t("profile.specs.formats", undefined, "Formatos:")}</span>
+                          <span className="text-bone-200">{t("profile.specs.avatar_formats_val", undefined, "JPG, PNG, WEBP ou GIF (VIP)")}</span>
                         </div>
                         <div className="flex items-center justify-between text-ink-400">
-                          <span>Peso Máximo:</span>
-                          <span className="text-bone-200">Até 5 MB</span>
+                          <span>{t("profile.specs.max_weight", undefined, "Peso Máximo:")}</span>
+                          <span className="text-bone-200">{t("profile.specs.up_to_5mb", undefined, "Até 5 MB")}</span>
                         </div>
                       </div>
                     </div>
                     <p className="text-[10px] text-ink-400 font-sans leading-relaxed pt-2 border-t border-[#1e1e24]">
-                      Centralize o rosto ou a marca no centro da imagem para manter o enquadramento perfeito dentro do círculo.
+                      {t("profile.specs.avatar_tip", undefined, "Centralize o rosto ou a marca no centro da imagem para manter o enquadramento perfeito dentro do círculo.")}
                     </p>
                   </div>
 
@@ -2836,7 +2884,7 @@ export default function PerfilScreen({
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2 text-white text-xs font-bold">
                           <Icon name="frame" className="h-3.5 w-3.5 text-amber-400" />
-                          <span>Capa de Fundo (Banner VIP)</span>
+                          <span>{t("profile.specs.cover_title", undefined, "Capa de Fundo (Banner VIP)")}</span>
                         </div>
                         <span className="font-mono text-[10.5px] font-bold text-amber-400 bg-amber-400/15 border border-amber-400/35 px-2 py-0.5 rounded">
                           1920 × 480 px
@@ -2844,25 +2892,25 @@ export default function PerfilScreen({
                       </div>
                       <div className="space-y-1.5 text-[11px] font-mono">
                         <div className="flex items-center justify-between text-ink-400">
-                          <span>Proporção:</span>
-                          <span className="text-bone-200 font-semibold">4:1 (Panorâmica · Mín: 1200×300 px)</span>
+                          <span>{t("profile.specs.aspect_ratio", undefined, "Proporção:")}</span>
+                          <span className="text-bone-200 font-semibold">{t("profile.specs.cover_ratio_val", undefined, "4:1 (Panorâmica · Mín: 1200×300 px)")}</span>
                         </div>
                         <div className="flex items-center justify-between text-ink-400">
-                          <span>Área Segura:</span>
-                          <span className="text-bone-200">1920 × 400 px (foco central/direita)</span>
+                          <span>{t("profile.specs.safe_area", undefined, "Área Segura:")}</span>
+                          <span className="text-bone-200">{t("profile.specs.safe_area_val", undefined, "1920 × 400 px (foco central/direita)")}</span>
                         </div>
                         <div className="flex items-center justify-between text-ink-400">
-                          <span>Formatos:</span>
-                          <span className="text-bone-200">JPG, PNG, WEBP, GIF ou Cor VIP</span>
+                          <span>{t("profile.specs.formats", undefined, "Formatos:")}</span>
+                          <span className="text-bone-200">{t("profile.specs.cover_formats_val", undefined, "JPG, PNG, WEBP, GIF ou Cor VIP")}</span>
                         </div>
                         <div className="flex items-center justify-between text-ink-400">
-                          <span>Peso Máximo:</span>
-                          <span className="text-bone-200">Até 10 MB</span>
+                          <span>{t("profile.specs.max_weight", undefined, "Peso Máximo:")}</span>
+                          <span className="text-bone-200">{t("profile.specs.up_to_10mb", undefined, "Até 10 MB")}</span>
                         </div>
                       </div>
                     </div>
                     <p className="text-[10px] text-ink-400 font-sans leading-relaxed pt-2 border-t border-amber-500/15">
-                      O avatar e o nome sobrepõem o canto esquerdo da capa. Mantenha elementos gráficos principais no centro ou à direita.
+                      {t("profile.specs.cover_tip", undefined, "O avatar e o nome sobrepõem o canto esquerdo da capa. Mantenha elementos gráficos principais no centro ou à direita.")}
                     </p>
                   </div>
                 </div>
@@ -2885,25 +2933,25 @@ export default function PerfilScreen({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-[#232327]">
                     <div className="flex items-center gap-2.5">
                       <Icon name="frame" className={cn("h-4 w-4", user?.is_vip ? "text-signal-400" : "text-ink-400")} />
-                      <span className="font-display text-[13.5px] font-bold text-white tracking-tight">Capa de Fundo do Perfil</span>
+                      <span className="font-display text-[13.5px] font-bold text-white tracking-tight">{t("profile.cover.title", undefined, "Capa de Fundo do Perfil")}</span>
                       {user?.is_vip ? (
                         <span className="inline-flex items-center gap-1 rounded-full border border-signal-400/40 bg-signal-400/10 px-2 py-0.5 text-[9.5px] font-mono font-bold uppercase tracking-wider text-signal-400 shadow-[0_0_10px_rgba(242,179,61,0.2)]">
-                          <span>👑</span> VIP Ativo
+                          <span>👑</span> {t("profile.cover.vip_active", undefined, "VIP Ativo")}
                         </span>
                       ) : (
                         <button
                           type="button"
                           onClick={openVipModal}
                           className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 text-[9.5px] font-mono font-bold uppercase tracking-wider text-amber-400 cursor-pointer transition-colors"
-                          title="Clique para saber como se tornar VIP"
+                          title={t("profile.cover.how_to_vip_tooltip", undefined, "Clique para saber como se tornar VIP")}
                         >
-                          <span>🔒</span> Exclusivo VIP
+                          <span>🔒</span> {t("profile.cover.exclusive_vip", undefined, "Exclusivo VIP")}
                         </button>
                       )}
                     </div>
 
                     <span className="text-[11px] font-mono text-ink-400">
-                      {user?.is_vip ? "Fotos, GIFs animados ou cores e gradientes VIP" : "Disponível apenas para membros VIP"}
+                      {user?.is_vip ? t("profile.cover.vip_perks_summary", undefined, "Fotos, GIFs animados ou cores e gradientes VIP") : t("profile.cover.vip_only", undefined, "Disponível apenas para membros VIP")}
                     </span>
                   </div>
 
@@ -2922,7 +2970,7 @@ export default function PerfilScreen({
                               >
                                 <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
                                   <span className="text-[9px] font-mono uppercase tracking-wider text-white font-bold bg-black/70 px-2 py-0.5 rounded border border-white/20">
-                                    Cor VIP Ativa
+                                    {t("profile.cover.vip_color_active", undefined, "Cor VIP Ativa")}
                                   </span>
                                 </div>
                               </div>
@@ -2931,7 +2979,7 @@ export default function PerfilScreen({
                                 <img src={draftCover} alt="Prévia da capa" className="h-full w-full object-cover object-center" />
                                 <div className="absolute inset-0 bg-ink-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                   <span className="text-[9px] font-mono uppercase tracking-wider text-white font-bold bg-black/70 px-2 py-0.5 rounded border border-white/20">
-                                    Prévia Ativa
+                                    {t("profile.cover.preview_active", undefined, "Prévia Ativa")}
                                   </span>
                                 </div>
                               </>
@@ -2939,13 +2987,13 @@ export default function PerfilScreen({
                           ) : (
                             <div className="h-full w-full flex flex-col items-center justify-center text-ink-500 p-2 text-center bg-[#141416]">
                               <Icon name="frame" className="h-5 w-5 mb-1 opacity-50 text-ink-400" />
-                              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-400">Sem capa definida</span>
+                              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-400">{t("profile.cover.no_cover", undefined, "Sem capa definida")}</span>
                             </div>
                           )}
                           {uploadingCover && (
                             <div className="absolute inset-0 bg-ink-950/75 flex items-center justify-center gap-2 text-signal-400 text-xs font-mono">
                               <Icon name="spark" className="h-4 w-4 animate-pulse" />
-                              <span>Enviando...</span>
+                              <span>{t("common.uploading", undefined, "Enviando...")}</span>
                             </div>
                           )}
                         </div>
@@ -2966,7 +3014,7 @@ export default function PerfilScreen({
                                 )}
                               >
                                 <Icon name="spark" className="h-3 w-3" />
-                                <span>Foto / Imagem</span>
+                                <span>{t("profile.cover.tab_image", undefined, "Foto / Imagem")}</span>
                               </button>
                               <button
                                 type="button"
@@ -2979,7 +3027,7 @@ export default function PerfilScreen({
                                 )}
                               >
                                 <Icon name="palette" className="h-3 w-3" />
-                                <span>Cor / Gradiente</span>
+                                <span>{t("profile.cover.tab_color", undefined, "Cor / Gradiente")}</span>
                               </button>
                             </div>
 
@@ -2989,19 +3037,19 @@ export default function PerfilScreen({
                                 onClick={handleRemoveCover}
                                 disabled={uploadingCover}
                                 className="flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer ml-auto"
-                                title="Remover capa e restaurar fundo padrão"
+                                title={t("profile.cover.remove_tooltip", undefined, "Remover capa e restaurar fundo padrão")}
                               >
                                 <Icon name="trash" className="h-3.5 w-3.5" />
-                                <span>Remover</span>
+                                <span>{t("common.remove", undefined, "Remover")}</span>
                               </button>
                             )}
                           </div>
 
                           <div className="text-[11px] text-ink-400 font-mono">
                             {coverEditTab === "image" ? (
-                              <span>Recomendado: 1920 × 480 px (4:1) · JPG, PNG, WEBP ou GIF animado</span>
+                              <span>{t("profile.cover.image_rec", undefined, "Recomendado: 1920 × 480 px (4:1) · JPG, PNG, WEBP ou GIF animado")}</span>
                             ) : (
-                              <span>Escolha uma cor sólida, um gradiente moderno ou personalize via HEX</span>
+                              <span>{t("profile.cover.color_rec", undefined, "Escolha uma cor sólida, um gradiente moderno ou personalize via HEX")}</span>
                             )}
                           </div>
                         </div>
@@ -3025,31 +3073,34 @@ export default function PerfilScreen({
                               className="flex items-center gap-2 rounded-lg bg-signal-400 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-950 hover:bg-signal-300 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
                             >
                               <Icon name="spark" className="h-3.5 w-3.5" />
-                              <span>{draftCover && !isCoverColor(draftCover) ? "Trocar Imagem / GIF" : "Fazer Upload de Capa"}</span>
+                              <span>{draftCover && !isCoverColor(draftCover) ? t("profile.cover.change_image", undefined, "Trocar Imagem / GIF") : t("profile.cover.upload_cover", undefined, "Fazer Upload de Capa")}</span>
                             </button>
                             <span className="text-[10.5px] font-mono text-ink-400">
-                              Formatos aceitos: JPG, PNG, WEBP e GIFs animados (até 10 MB)
+                              {t("profile.cover.formats_accepted", undefined, "Formatos aceitos: JPG, PNG, WEBP e GIFs animados (até 10 MB)")}
                             </span>
                           </div>
 
                           {/* Galeria de sugestões / Presets Rápidos */}
                           <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                            <span className="text-[10px] font-mono uppercase tracking-wider text-ink-400 mr-1">Sugestões de Fotos:</span>
-                            {PRESET_COVERS.map((preset) => (
-                              <button
-                                key={preset.id}
-                                type="button"
-                                onClick={() => handleSelectCoverPreset(preset.url)}
-                                className={cn(
-                                  "rounded px-2.5 py-1 text-[10.5px] font-mono border transition-all cursor-pointer",
-                                  draftCover === preset.url
-                                    ? "border-signal-400 bg-signal-400/20 text-signal-400 font-bold shadow-[0_0_8px_rgba(242,179,61,0.2)]"
-                                    : "border-ink-800 bg-ink-900/60 text-bone-400 hover:border-ink-700 hover:text-bone-200"
-                                )}
-                              >
-                                {preset.name}
-                              </button>
-                            ))}
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-ink-400 mr-1">{t("profile.cover.photo_suggestions", undefined, "Sugestões de Fotos:")}</span>
+                            {PRESET_COVERS.map((preset) => {
+                              const presetName = t(`profile.cover.presets.${preset.id.replace(/-/g, "_")}`, undefined, preset.name);
+                              return (
+                                <button
+                                  key={preset.id}
+                                  type="button"
+                                  onClick={() => handleSelectCoverPreset(preset.url)}
+                                  className={cn(
+                                    "rounded px-2.5 py-1 text-[10.5px] font-mono border transition-all cursor-pointer",
+                                    draftCover === preset.url
+                                      ? "border-signal-400 bg-signal-400/20 text-signal-400 font-bold shadow-[0_0_8px_rgba(242,179,61,0.2)]"
+                                      : "border-ink-800 bg-ink-900/60 text-bone-400 hover:border-ink-700 hover:text-bone-200"
+                                  )}
+                                >
+                                  {presetName}
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -3060,17 +3111,18 @@ export default function PerfilScreen({
                           {/* Cores Sólidas VIP */}
                           <div>
                             <span className="text-[10px] font-mono uppercase tracking-wider text-ink-400 block mb-2">
-                              Cores Sólidas VIP:
+                              {t("profile.cover.solid_colors_title", undefined, "Cores Sólidas VIP:")}
                             </span>
                             <div className="flex flex-wrap items-center gap-2">
                               {PRESET_SOLID_COLORS.map((c) => {
                                 const isSelected = draftCover?.toLowerCase() === c.value.toLowerCase();
+                                const colorName = t(`profile.cover.colors.${c.id}`, undefined, c.name);
                                 return (
                                   <button
                                     key={c.id}
                                     type="button"
                                     onClick={() => handleSelectCoverColor(c.value)}
-                                    title={c.name}
+                                    title={colorName}
                                     className={cn(
                                       "group relative flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-all cursor-pointer",
                                       isSelected
@@ -3086,7 +3138,7 @@ export default function PerfilScreen({
                                       "font-mono text-[11px]",
                                       isSelected ? "text-signal-400 font-bold" : "text-bone-300 group-hover:text-white"
                                     )}>
-                                      {c.name}
+                                      {colorName}
                                     </span>
                                   </button>
                                 );
@@ -3097,11 +3149,12 @@ export default function PerfilScreen({
                           {/* Gradientes Cinematográficos VIP */}
                           <div>
                             <span className="text-[10px] font-mono uppercase tracking-wider text-ink-400 block mb-2">
-                              Gradientes Cinematográficos VIP:
+                              {t("profile.cover.gradients_title", undefined, "Gradientes Cinematográficos VIP:")}
                             </span>
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                               {PRESET_GRADIENTS.map((g) => {
                                 const isSelected = draftCover === g.value;
+                                const gradientName = t(`profile.cover.gradients.${g.id.replace("grad-", "").replace(/-/g, "_")}`, undefined, g.name);
                                 return (
                                   <button
                                     key={g.id}
@@ -3123,7 +3176,7 @@ export default function PerfilScreen({
                                       "relative z-2 text-[10px] font-mono font-bold leading-tight drop-shadow",
                                       isSelected ? "text-signal-400" : "text-bone-100"
                                     )}>
-                                      {g.name}
+                                      {gradientName}
                                     </span>
                                   </button>
                                 );
@@ -3139,7 +3192,7 @@ export default function PerfilScreen({
                                 setCustomHexColor(val);
                                 handleSelectCoverColor(val);
                               }}
-                              label="Tabela RGB & Cor Personalizada da Capa"
+                              label={t("profile.cover.rgb_custom_label", undefined, "Tabela RGB & Cor Personalizada da Capa")}
                               palette={PRESET_SOLID_COLORS.map((c) => c.value)}
                             />
                           </div>
@@ -3155,10 +3208,10 @@ export default function PerfilScreen({
                         </div>
                         <div>
                           <p className="text-[12.5px] text-bone-300 leading-relaxed max-w-xl">
-                            Apenas criadores com assinatura <strong className="text-amber-400 font-semibold">VIP</strong> ativa podem definir capas fotográficas, GIFs animados ou cores de fundo personalizadas no perfil.
+                            {t("profile.cover.vip_only_desc", {}, "Apenas criadores com assinatura VIP ativa podem definir capas fotográficas, GIFs animados ou cores de fundo personalizadas no perfil.")}
                           </p>
                           <p className="text-[11px] text-ink-400 mt-1 font-mono">
-                            Opção disponível exclusivamente para contas VIP · Mostre seu estúdio com visual personalizado
+                            {t("profile.cover.vip_only_sub", {}, "Opção disponível exclusivamente para contas VIP · Mostre seu estúdio com visual personalizado")}
                           </p>
                         </div>
                       </div>
@@ -3167,10 +3220,10 @@ export default function PerfilScreen({
                           type="button"
                           onClick={openVipModal}
                           className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 px-3 py-2 text-xs font-semibold text-amber-300 transition-all cursor-pointer shadow-[0_0_15px_rgba(242,179,61,0.15)] active:scale-95"
-                          title="Clique para saber como se tornar VIP"
+                          title={t("vip.click_how_to_vip", {}, "Clique para saber como se tornar VIP")}
                         >
                           <Icon name="spark" className="h-3.5 w-3.5 text-amber-400" />
-                          <span>Se torne VIP agora</span>
+                          <span>{t("vip.become_vip_now", {}, "Se torne VIP agora")}</span>
                         </button>
                       </div>
                     </div>
@@ -3182,12 +3235,12 @@ export default function PerfilScreen({
               <div className="rounded-xl border border-[#232327] bg-[#0c0c0e] p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Icon name="link" className="h-4 w-4 text-signal-400" />
-                  <span className="font-display text-[13px] font-bold text-white tracking-tight">Links do Perfil (Redes Sociais & Portfólio)</span>
+                  <span className="font-display text-[13px] font-bold text-white tracking-tight">{t("profile.links.title", {}, "Links do Perfil (Redes Sociais & Portfólio)")}</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-mono uppercase tracking-wider text-[#8c8c94] flex items-center gap-1.5 mb-1">
-                      <Icon name="globe" className="h-3 w-3 text-[#F2B33D]" /> Website / Portfólio
+                      <Icon name="globe" className="h-3 w-3 text-[#F2B33D]" /> {t("profile.links.website", {}, "Website / Portfólio")}
                     </label>
                     <Input 
                       value={draftWebsite} 
@@ -3231,7 +3284,7 @@ export default function PerfilScreen({
                   </div>
                   <div className="sm:col-span-2">
                     <label className="text-[10px] font-mono uppercase tracking-wider text-[#8c8c94] flex items-center gap-1.5 mb-1">
-                      <Icon name="discord" className="h-3 w-3 text-[#5865F2]" /> Comunidade no Discord
+                      <Icon name="discord" className="h-3 w-3 text-[#5865F2]" /> {t("profile.links.discord", {}, "Comunidade no Discord")}
                     </label>
                     <Input 
                       value={draftDiscord} 
@@ -3257,9 +3310,9 @@ export default function PerfilScreen({
                 <Icon name="type" className="h-5 w-5" />
               </div>
               <div>
-                <h4 className="font-display text-[16px] font-bold text-white tracking-tight">Modo de Edição de Perfil Ativo</h4>
+                <h4 className="font-display text-[16px] font-bold text-white tracking-tight">{t("profile.edit.mode_active_title", undefined, "Modo de Edição de Perfil Ativo")}</h4>
                 <p className="text-[12.5px] text-bone-400 mt-0.5 leading-relaxed">
-                  Personalize seu nome, seu @ de usuário único, sua bio e links no formulário acima. Abaixo em cada card, use os botões para definir quais blocos visitantes poderão ver.
+                  {t("profile.edit.mode_active_desc", undefined, "Personalize seu nome, seu @ de usuário único, sua bio e links no formulário acima. Abaixo em cada card, use os botões para definir quais blocos visitantes poderão ver.")}
                 </p>
               </div>
             </div>
@@ -3270,7 +3323,7 @@ export default function PerfilScreen({
                 disabled={saving} 
                 className="border-[#232327] bg-[#101012] text-bone-300 hover:text-white hover:bg-[#18181b] text-[12px] px-4 py-2.5 font-semibold"
               >
-                Cancelar
+                {t("common.cancel", undefined, "Cancelar")}
               </Button>
               <Button 
                 variant="solid" 
@@ -3278,7 +3331,7 @@ export default function PerfilScreen({
                 disabled={saving} 
                 className="text-[12px] font-bold uppercase tracking-wider px-5 py-2.5 bg-signal-400 text-ink-950 hover:bg-signal-300 shadow-[0_0_20px_rgba(242,179,61,0.35)]"
               >
-                {saving ? "Salvando..." : "Salvar Perfil"}
+                {saving ? t("common.saving", undefined, "Salvando...") : t("profile.edit.save_btn", undefined, "Salvar Perfil")}
               </Button>
             </div>
           </div>
@@ -3305,12 +3358,12 @@ export default function PerfilScreen({
 
       {/* CONTENT */}
       {tab === "geral" && (
-        <Reveal className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <Reveal className="grid gap-6 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]">
           {/* Coluna Esquerda: Estatísticas de Uso */}
           <div className="flex flex-col gap-6">
             {(!isViewingOther || displayedCardVis.stats !== false) && (
               <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
-                {renderCardVisibilityBanner("stats", "Monitor de uso")}
+                {renderCardVisibilityBanner("stats", t("profile.stats.usage_monitor_title", {}, "Monitor de uso"))}
                 
                 {/* Header: Monitor de uso */}
                 <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3">
@@ -3320,10 +3373,10 @@ export default function PerfilScreen({
                     <span className="h-2 w-2 rounded-full bg-[#2FD4A0]" />
                   </span>
                   <span className="flex-1 text-center font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">
-                    Monitor de uso · 12 semanas
+                    {t("profile.stats.usage_monitor_12w", {}, "Monitor de uso · 12 semanas")}
                   </span>
                   <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-[#2FD4A0]">
-                    <Icon name="wave" className="h-3 w-3" strokeWidth={2.4} /> Ao vivo
+                    <Icon name="wave" className="h-3 w-3" strokeWidth={2.4} /> {t("common.live", {}, "Ao vivo")}
                   </span>
                 </div>
                 
@@ -3341,7 +3394,7 @@ export default function PerfilScreen({
                       return (
                         <div 
                           key={i} 
-                          title={`Dia ${i + 1}: ${count} ${count === 1 ? 'ação' : 'ações'}`}
+                          title={t("profile.stats.day_action_tooltip", { day: i + 1, count, action: count === 1 ? t("common.action", {}, "ação") : t("common.actions", {}, "ações") }, `Dia ${i + 1}: ${count} ${count === 1 ? 'ação' : 'ações'}`)}
                           className="flex-1 rounded-full hover:opacity-100 transition-all duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
                           style={{ 
                             height: mounted ? `${h}%` : '4%', 
@@ -3357,8 +3410,8 @@ export default function PerfilScreen({
                     <span>{metrics.startDateStr}</span>
                     <span>
                       {metrics.hasActivity
-                        ? `pico ${metrics.peakMinutes} min · média ${metrics.avgMinutesPerActiveDay} min/dia ativo`
-                        : "sem atividade recente registrada"}
+                        ? t("profile.stats.peak_avg", { peak: metrics.peakMinutes, avg: metrics.avgMinutesPerActiveDay }, `pico ${metrics.peakMinutes} min · média ${metrics.avgMinutesPerActiveDay} min/dia ativo`)
+                        : t("profile.stats.no_recent_activity", {}, "sem atividade recente registrada")}
                     </span>
                     <span>{metrics.endDateStr}</span>
                   </div>
@@ -3366,9 +3419,10 @@ export default function PerfilScreen({
 
                 {/* Carga por dia da semana */}
                 <div className="mx-4 rounded-xl border border-[#232327] bg-[#0d0d0f] p-3.5">
-                  <div className="mb-3 text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">Carga por dia da semana</div>
+                  <div className="mb-3 text-[10px] font-mono uppercase tracking-widest text-[#8c8c94]">{t("profile.stats.weekly_load", {}, "Carga por dia da semana")}</div>
                   <div className="space-y-[7px]">
-                    {["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((label, i) => {
+                    {["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map((dayKey, i) => {
+                      const label = t(`common.days_short.${dayKey}`, {}, ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"][i]);
                       const count = metrics.dowCounts[i];
                       const filled = metrics.maxDow > 0 && count > 0 
                         ? Math.max(1, Math.round((count / metrics.maxDow) * 18)) 
@@ -3414,38 +3468,38 @@ export default function PerfilScreen({
                 <div className="mt-4 grid grid-cols-1 gap-px border-t border-[#232327] bg-[#232327] sm:grid-cols-2">
                   {[
                     { 
-                      label: "USO DE FERRAMENTAS", 
+                      label: t("profile.stats.tools_usage", {}, "USO DE FERRAMENTAS"), 
                       value: metrics.totalRuns.toString(), 
                       vcolor: "#2FD4A0", 
                       delta: metrics.totalRuns > 0 ? `+${metrics.totalRuns}` : "-", 
                       dtone: "#2FD4A0", 
-                      hint: metrics.totalRuns === 1 ? "1 EXECUÇÃO REGISTRADA" : `${metrics.totalRuns} EXECUÇÕES REGISTRADAS` 
+                      hint: metrics.totalRuns === 1 ? t("profile.stats.one_run_recorded", {}, "1 EXECUÇÃO REGISTRADA") : t("profile.stats.many_runs_recorded", { count: metrics.totalRuns }, `${metrics.totalRuns} EXECUÇÕES REGISTRADAS`) 
                     },
                     { 
-                      label: "HORAS EM ESTÚDIO", 
+                      label: t("profile.stats.studio_hours", {}, "HORAS EM ESTÚDIO"), 
                       value: metrics.studioHoursFormatted, 
                       suffix: metrics.studioMinutesSuffix, 
                       vcolor: "#2FD4A0", 
                       delta: metrics.studioMinutes > 0 ? `${Math.round((metrics.studioMinutes / (40 * 60)) * 100)}%` : "-", 
                       dtone: "#2FD4A0", 
-                      hint: "META MENSAL: 40H" 
+                      hint: t("profile.stats.monthly_goal", {}, "META MENSAL: 40H") 
                     },
                     { 
-                      label: "IDEIAS RANQUEADAS", 
+                      label: t("profile.stats.ranked_ideas", {}, "IDEIAS RANQUEADAS"), 
                       value: metrics.ideasCount.toString(), 
                       vcolor: "#F2604C", 
                       delta: metrics.ideasCount > 0 ? `+${metrics.ideasCount}` : "-", 
                       dtone: "#F2604C", 
-                      hint: "BANCO DE IDEIAS DO ESTÚDIO" 
+                      hint: t("profile.stats.ideas_bank_hint", {}, "BANCO DE IDEIAS DO ESTÚDIO") 
                     },
                     { 
-                      label: "SEQUÊNCIA ATUAL", 
+                      label: t("profile.stats.current_streak", {}, "SEQUÊNCIA ATUAL"), 
                       value: metrics.streak.toString(), 
-                      suffix: metrics.streak === 1 ? " dia" : " dias", 
+                      suffix: metrics.streak === 1 ? t("common.day_suffix", {}, " dia") : t("common.days_suffix", {}, " dias"), 
                       vcolor: "#F2B33D", 
                       delta: `+${metrics.streak}`, 
                       dtone: "#F2B33D", 
-                      hint: `RECORDE: ${metrics.streak} ${metrics.streak === 1 ? 'DIA' : 'DIAS'}` 
+                      hint: t("profile.stats.streak_record", { count: metrics.streak, unit: metrics.streak === 1 ? t("common.day_upper", {}, "DIA") : t("common.days_upper", {}, "DIAS") }, `RECORDE: ${metrics.streak} ${metrics.streak === 1 ? 'DIA' : 'DIAS'}`) 
                     }
                   ].map((m, i) => (
                     <div 
@@ -3475,10 +3529,10 @@ export default function PerfilScreen({
                 <div className="border-t border-[#232327] bg-[#0c0c0e] px-4 py-4">
                   <div className="mb-3 flex items-center gap-2">
                     <Icon name="dial" className="h-3 w-3 text-[#F2B33D]" />
-                    <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">Ferramentas mais usadas</span>
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2]">{t("profile.stats.most_used_tools", {}, "Ferramentas mais usadas")}</span>
                     <span className="h-px flex-1 bg-[#232327]" />
                     <span className="font-mono text-[10px] uppercase tracking-widest text-[#9a9aa2] tabular-nums">
-                      {metrics.totalRuns} {metrics.totalRuns === 1 ? "EXECUÇÃO" : "EXECUÇÕES"}
+                      {metrics.totalRuns} {metrics.totalRuns === 1 ? t("common.execution_upper", {}, "EXECUÇÃO") : t("common.executions_upper", {}, "EXECUÇÕES")}
                     </span>
                   </div>
                   <div className="space-y-2.5">
@@ -3502,7 +3556,7 @@ export default function PerfilScreen({
                       })
                     ) : (
                       <div className="text-[12px] text-[#8c8c94] py-1 font-mono">
-                        Nenhuma ferramenta utilizada ainda.
+                        {t("profile.stats.no_tools_used", undefined, "Nenhuma ferramenta utilizada ainda.")}
                       </div>
                     )}
                   </div>
@@ -3512,11 +3566,17 @@ export default function PerfilScreen({
                   <p className="text-[12px] leading-relaxed text-[#8c8c94]">
                     {metrics.hasActivity ? (
                       <>
-                        Histórico sincronizado em tempo real. Dia com maior atividade: <strong className="text-bone-200 capitalize">{metrics.bestDowName}</strong>, totalizando <strong className="text-bone-200">{metrics.studioHoursFormatted}{metrics.studioMinutesSuffix}</strong> dedicados à criação.
+                        {t("profile.stats.synced_history_prefix", {}, "Histórico sincronizado em tempo real. Dia com maior atividade:")}{" "}
+                        <strong className="text-bone-200 capitalize">
+                          {t(`common.days_full.${metrics.bestDowKey || "sun"}`, {}, metrics.bestDowName)}
+                        </strong>
+                        {t("profile.stats.synced_history_middle", {}, ", totalizando")}{" "}
+                        <strong className="text-bone-200">{metrics.studioHoursFormatted}{metrics.studioMinutesSuffix}</strong>{" "}
+                        {t("profile.stats.synced_history_suffix", {}, "dedicados à criação.")}
                       </>
                     ) : (
                       <>
-                        O monitor de estúdio é sincronizado em tempo real com o uso da conta. Conforme ferramentas forem executadas e projetos planejados, as métricas aparecerão aqui automaticamente.
+                        {t("profile.stats.monitor_desc", undefined, "O monitor de estúdio é sincronizado em tempo real com o uso da conta. Conforme ferramentas forem executadas e projetos planejados, as métricas aparecerão aqui automaticamente.")}
                       </>
                     )}
                   </p>
@@ -3528,7 +3588,7 @@ export default function PerfilScreen({
             {/* Card de Comentários da Comunidade */}
             {(!isViewingOther || displayedCardVis.comments !== false) && (
               <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
-                {renderCardVisibilityBanner("comments", "Mural de Comentários")}
+                {renderCardVisibilityBanner("comments", t("profile.comments_wall_title", {}, "Mural de Comentários"))}
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                   <div className="flex items-center gap-3">
@@ -3536,7 +3596,7 @@ export default function PerfilScreen({
                     <div className="flex items-center gap-2">
                       <Icon name="message" className="h-4 w-4 text-[#6E93F5]" />
                       <h3 className="font-display text-[15px] font-bold text-white tracking-tight">
-                        Mural de Comentários
+                        {t("profile.comments_wall_title", {}, "Mural de Comentários")}
                       </h3>
                     </div>
                   </div>
@@ -3550,14 +3610,14 @@ export default function PerfilScreen({
                             ? "border-[#232327] bg-[#101012] text-[#8c8c94] hover:text-bone-200"
                             : "border-signal-500/40 bg-signal-500/10 text-signal-400"
                         )}
-                        title={cardVisibility.comments !== false ? "Clique para ocultar este mural do perfil público" : "Clique para tornar este mural visível no perfil público"}
+                        title={cardVisibility.comments !== false ? t("profile.cards.comments_hide_title", undefined, "Clique para ocultar este mural do perfil público") : t("profile.cards.comments_show_title", undefined, "Clique para tornar este mural visível no perfil público")}
                       >
                         <Icon name={cardVisibility.comments !== false ? "eye" : "eyeOff"} className="h-3 w-3" />
-                        <span>{cardVisibility.comments !== false ? "Visível" : "Oculto"}</span>
+                        <span>{cardVisibility.comments !== false ? t("common.visible", undefined, "Visível") : t("common.hidden", undefined, "Oculto")}</span>
                       </button>
                     )}
                     <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">
-                      {comments.length} {comments.length === 1 ? "comentário" : "comentários"}
+                      {comments.length} {comments.length === 1 ? t("profile.comments.singular", undefined, "comentário") : t("profile.comments.plural", undefined, "comentários")}
                     </span>
                   </div>
                 </div>
@@ -3572,10 +3632,10 @@ export default function PerfilScreen({
                       </div>
                       <div>
                         <p className="text-xs font-semibold text-bone-200">
-                          Conta teste em modo demonstração
+                          {t("profile.comments.demo_title", undefined, "Conta teste em modo demonstração")}
                         </p>
                         <p className="text-[11px] text-[#8c8c94]">
-                          Contas de teste de 24h não podem comentar ou curtir perfis. Crie uma conta definitiva para interagir no mural.
+                          {t("profile.comments.demo_desc", undefined, "Contas de teste de 24h não podem comentar ou curtir perfis. Crie uma conta definitiva para interagir no mural.")}
                         </p>
                       </div>
                     </div>
@@ -3583,7 +3643,7 @@ export default function PerfilScreen({
                       onClick={() => onGo?.("login")}
                       className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-signal-400/40 bg-signal-400/10 px-3.5 py-1.5 font-mono text-[11px] font-bold text-signal-400 hover:bg-signal-400 hover:text-ink-950 transition-all cursor-pointer"
                     >
-                      <span>Criar conta definitiva</span>
+                      <span>{t("profile.comments.demo_create_account", undefined, "Criar conta definitiva")}</span>
                       <Icon name="arrow" className="h-3 w-3" />
                     </button>
                   </div>
@@ -3632,12 +3692,12 @@ export default function PerfilScreen({
                             {postingComment ? (
                               <>
                                 <Icon name="refresh" className="h-3 w-3 animate-spin" />
-                                <span>Enviando…</span>
+                                <span>{t("common.sending", undefined, "Enviando…")}</span>
                               </>
                             ) : (
                               <>
                                 <Icon name="send" className="h-3 w-3" />
-                                <span>Comentar</span>
+                                <span>{t("profile.comments.submit_btn", undefined, "Comentar")}</span>
                               </>
                             )}
                           </button>
@@ -3657,10 +3717,10 @@ export default function PerfilScreen({
                       </div>
                       <div>
                         <p className="text-xs font-semibold text-bone-200">
-                          Apenas usuários com conta podem comentar
+                          {t("profile.comments.login_required_title", undefined, "Apenas usuários com conta podem comentar")}
                         </p>
                         <p className="text-[11px] text-[#8c8c94]">
-                          Faça login para interagir e deixar seu recado no perfil.
+                          {t("profile.comments.login_required_desc", undefined, "Faça login para interagir e deixar seu recado no perfil.")}
                         </p>
                       </div>
                     </div>
@@ -3668,7 +3728,7 @@ export default function PerfilScreen({
                       onClick={() => onGo?.("login")}
                       className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-[#6E93F5]/40 bg-[#6E93F5]/10 px-3.5 py-1.5 font-mono text-[11px] font-bold text-[#6E93F5] hover:bg-[#6E93F5] hover:text-ink-950 transition-all"
                     >
-                      <span>Entrar com conta</span>
+                      <span>{t("profile.comments.login_btn", undefined, "Entrar com conta")}</span>
                       <Icon name="arrow" className="h-3 w-3" />
                     </button>
                   </div>
@@ -3682,7 +3742,7 @@ export default function PerfilScreen({
                   {commentsLoading && comments.length === 0 ? (
                     <div className="flex items-center justify-center py-6 font-mono text-xs text-[#8c8c94]">
                       <Icon name="refresh" className="mr-2 h-3.5 w-3.5 animate-spin text-[#6E93F5]" />
-                      Carregando comentários…
+                      {t("profile.comments.loading", undefined, "Carregando comentários…")}
                     </div>
                   ) : comments.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -3690,12 +3750,12 @@ export default function PerfilScreen({
                         <Icon name="message" className="h-5 w-5" />
                       </div>
                       <p className="mt-2.5 text-xs font-medium text-bone-300">
-                        Nenhum comentário por aqui ainda
+                        {t("profile.comments.empty_title", undefined, "Nenhum comentário por aqui ainda")}
                       </p>
                       <p className="mt-0.5 text-[11px] text-[#52525b]">
                         {isViewingOther
-                          ? `Seja o primeiro a deixar uma mensagem para @${cleanViewedHandle}!`
-                          : "Seu mural está vazio. Usuários que visitarem seu perfil poderão comentar aqui."}
+                          ? t("profile.comments.empty_other", { handle: cleanViewedHandle || "" }, `Seja o primeiro a deixar uma mensagem para @${cleanViewedHandle}!`)
+                          : t("profile.comments.empty_owner", undefined, "Seu mural está vazio. Usuários que visitarem seu perfil poderão comentar aqui.")}
                       </p>
                     </div>
                   ) : (
@@ -3747,14 +3807,14 @@ export default function PerfilScreen({
                                 </button>
                                 {isTargetOwner && (
                                   <span className="rounded bg-[#F2B33D]/10 px-1.5 py-0.2 font-mono text-[8.5px] font-bold text-[#F2B33D] uppercase border border-[#F2B33D]/20">
-                                    Dono do Perfil
+                                    {t("profile.comments.badge_owner", undefined, "Dono do Perfil")}
                                   </span>
                                 )}
                               </div>
 
                               <div className="flex items-center gap-2">
                                 <span className="font-mono text-[9.5px] text-[#52525b]">
-                                  {new Date(c.created_at).toLocaleDateString("pt-BR", {
+                                  {new Date(c.created_at).toLocaleDateString(resolvedLanguage || "pt-BR", {
                                     day: "2-digit",
                                     month: "short",
                                     hour: "2-digit",
@@ -3770,8 +3830,8 @@ export default function PerfilScreen({
                                     className="opacity-0 group-hover:opacity-100 p-1 text-[#71717a] hover:text-signal-400 transition-all rounded hover:bg-signal-500/10"
                                     title={
                                       isProfileOwner && !isAuthor
-                                        ? "Excluir comentário (Você é o dono do perfil)"
-                                        : "Excluir meu comentário"
+                                        ? t("profile.comments.delete_as_owner", undefined, "Excluir comentário (Você é o dono do perfil)")
+                                        : t("profile.comments.delete_my", undefined, "Excluir meu comentário")
                                     }
                                   >
                                     {deletingCommentId === c.id ? (
@@ -3803,10 +3863,10 @@ export default function PerfilScreen({
             {/* Projetos em Andamento */}
             {(!isViewingOther || displayedCardVis.projects !== false) && (
               <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
-                {renderCardVisibilityBanner("projects", "Projetos em Andamento")}
+                {renderCardVisibilityBanner("projects", t("profile.ongoing_projects_title", {}, "Projetos em Andamento"))}
                 <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                   <span className="h-3.5 w-1 rounded-full bg-[#2FD4A0]" />
-                  <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Projetos em Andamento</h3>
+                  <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">{t("profile.ongoing_projects_title", {}, "Projetos em Andamento")}</h3>
                   <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">{effectiveOngoingProjects.length}</span>
                 </div>
                 <div className="p-5 space-y-4">
@@ -3853,7 +3913,7 @@ export default function PerfilScreen({
                     </div>
                   ))}
                   {effectiveOngoingProjects.length === 0 && (
-                    <div className="text-[12px] text-[#8c8c94] text-center py-2 font-mono">Nenhum projeto em andamento.</div>
+                    <div className="text-[12px] text-[#8c8c94] text-center py-2 font-mono">{t("profile.no_ongoing_projects", {}, "Nenhum projeto em andamento.")}</div>
                   )}
                 </div>
               </Panel>
@@ -3862,13 +3922,14 @@ export default function PerfilScreen({
             {/* Card Coringa */}
             {(!isViewingOther || displayedCardVis.video !== false) && (
               <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
-                {renderCardVisibilityBanner("video", "Vídeo em Destaque")}
+                {renderCardVisibilityBanner("video", t("profile.featured_video_title", {}, "Vídeo em Destaque"))}
                 <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                   <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
                   {isEditingJoker && !isViewingOther ? (
                     <input
                       type="text"
                       value={jokerTitle}
+                      placeholder={t("profile.featured_video_title", {}, "Vídeo em Destaque")}
                       onChange={(e) => setJokerTitle(e.target.value)}
                       className="flex-1 bg-transparent text-[15px] font-display font-bold text-white focus:outline-none"
                       autoFocus
@@ -3877,11 +3938,13 @@ export default function PerfilScreen({
                     />
                   ) : (
                     <h3 className={`flex-1 font-display text-[15px] font-bold text-white tracking-tight ${!isViewingOther ? 'cursor-pointer hover:text-[#6E93F5] transition-colors' : ''}`} onClick={() => !isViewingOther && setIsEditingJoker(true)}>
-                      {(isViewingOther ? (targetProfile?.featured_video?.title || "Vídeo em Destaque") : (jokerTitle || "Clique para definir título"))}
+                      {(isViewingOther 
+                        ? (targetProfile?.featured_video?.title && targetProfile.featured_video.title !== "Vídeo em Destaque" ? targetProfile.featured_video.title : t("profile.featured_video_title", {}, "Vídeo em Destaque")) 
+                        : (jokerTitle && jokerTitle !== "Vídeo em Destaque" ? jokerTitle : t("profile.featured_video_title", {}, "Vídeo em Destaque")))}
                     </h3>
                   )}
                   {!isViewingOther && (
-                    <button onClick={() => setIsEditingJoker(!isEditingJoker)} className="text-[#8c8c94] hover:text-white transition-colors" title="Editar Título">
+                    <button onClick={() => setIsEditingJoker(!isEditingJoker)} className="text-[#8c8c94] hover:text-white transition-colors" title={t("profile.video.edit_title", undefined, "Editar Título")}>
                       <Icon name="type" className="h-3.5 w-3.5" />
                     </button>
                   )}
@@ -3892,20 +3955,20 @@ export default function PerfilScreen({
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/5 mb-3 border border-white/5">
                       <Icon name="youtube" className="h-5 w-5 text-[#8c8c94]" />
                     </div>
-                    <h4 className="text-[13px] font-medium text-white mb-1.5">Nenhum vídeo disponível</h4>
+                    <h4 className="text-[13px] font-medium text-white mb-1.5">{t("profile.no_video_available", {}, "Nenhum vídeo disponível")}</h4>
                     <p className="text-[11px] text-[#8c8c94] max-w-[260px] leading-relaxed">
-                      Para exibir um vídeo aqui, adicione um link (YouTube, Vimeo, TikTok, ou MP4) nas configurações de algum dos seus projetos.
+                      {t("profile.no_video_desc", {}, "Para exibir um vídeo aqui, adicione um link (YouTube, Vimeo, TikTok, ou MP4) nas configurações de algum dos seus projetos.")}
                     </p>
                   </div>
                 ) : !videoProjects.find(p => p.id === jokerProject) || isSelectingProject ? (
                   <div className="flex flex-col gap-3">
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-mono text-[#8c8c94] uppercase tracking-widest">
-                        {videoProjects.find(p => p.id === jokerProject) ? "Alterar Projeto" : "Selecione um projeto"}
+                        {videoProjects.find(p => p.id === jokerProject) ? t("profile.change_project", {}, "Alterar Projeto") : t("profile.select_a_project", {}, "Selecione um projeto")}
                       </span>
                       {videoProjects.find(p => p.id === jokerProject) && (
                         <button onClick={() => setIsSelectingProject(false)} className="text-[10px] font-medium text-[#6E93F5] hover:text-white transition-colors">
-                          Cancelar
+                          {t("common.cancel", {}, "Cancelar")}
                         </button>
                       )}
                     </div>
@@ -3993,7 +4056,7 @@ export default function PerfilScreen({
                                        }
                                      }}
                                      className={`pointer-events-auto flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition-all hover:bg-black/90 hover:text-[#6E93F5] hover:scale-110`}
-                                     title="Expandir"
+                                     title={t("profile.video.expand", undefined, "Expandir")}
                                    >
                                      <Icon name="maximize" className="h-3.5 w-3.5" />
                                    </button>
@@ -4047,22 +4110,22 @@ export default function PerfilScreen({
                                                  autoFocus
                                                  onKeyDown={(e) => e.key === 'Enter' && handleSaveLink(jokerProject)}
                                                />
-                                               <button onClick={() => handleSaveLink(jokerProject)} className="px-1.5 py-1 rounded-md bg-[#2FD4A0] text-black text-[9px] font-bold hover:bg-[#2FD4A0]/90 transition-colors">Salvar</button>
+                                               <button onClick={() => handleSaveLink(jokerProject)} className="px-1.5 py-1 rounded-md bg-[#2FD4A0] text-black text-[9px] font-bold hover:bg-[#2FD4A0]/90 transition-colors">{t("common.save", undefined, "Salvar")}</button>
                                                <button onClick={() => setEditingLink(false)} className="px-1.5 py-1 rounded-md text-white/70 text-[9px] font-medium hover:text-white hover:bg-white/10 transition-colors">X</button>
                                              </div>
                                            ) : videoProjects.find(p => p.id === jokerProject)?.external_link ? (
-                                             <button onClick={() => { setTempLink(videoProjects.find(p => p.id === jokerProject)?.external_link || ""); setEditingLink(true); }} className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/10 text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 hover:scale-105 transition-all shadow-lg" title="Editar link">
+                                             <button onClick={() => { setTempLink(videoProjects.find(p => p.id === jokerProject)?.external_link || ""); setEditingLink(true); }} className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/10 text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 hover:scale-105 transition-all shadow-lg" title={t("profile.video.edit_link", undefined, "Editar link")}>
                                                <Icon name="type" className="h-3 w-3" />
                                              </button>
                                            ) : (
                                              <button onClick={() => { setTempLink(""); setEditingLink(true); }} className="flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1.5 text-[10px] font-medium text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 hover:scale-105 transition-all shadow-lg">
-                                                <Icon name="link" className="h-3 w-3" /> Link
+                                                <Icon name="link" className="h-3 w-3" /> {t("profile.video.link_btn", undefined, "Link")}
                                               </button>
                                             )}
 
                                             <div className="h-3 w-px bg-white/20 mx-0.5" />
 
-                                            <button onClick={() => setIsSelectingProject(true)} className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/10 text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 hover:scale-105 transition-all shadow-lg" title="Trocar projeto">
+                                            <button onClick={() => setIsSelectingProject(true)} className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/10 text-white backdrop-blur-sm border border-white/10 hover:bg-white/20 hover:scale-105 transition-all shadow-lg" title={t("profile.change_project", undefined, "Trocar projeto")}>
                                               <Icon name="dial" className="h-3 w-3" />
                                             </button>
                                          </div>
@@ -4082,159 +4145,205 @@ export default function PerfilScreen({
             {!hideOnboarding && !isPublicView && (
               <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
                 {/* Header */}
-                <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
-                  <span className={cn(
-                    "h-3.5 w-1 rounded-full transition-colors",
-                    completedCount === onboardingItems.length ? "bg-[#2FD4A0] shadow-[0_0_8px_#2FD4A0]" : "bg-[#F2B33D]"
-                  )} />
-                  <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight flex items-center gap-2">
-                    <span>Primeiros Passos</span>
-                    {completedCount === onboardingItems.length && (
-                      <span className="rounded-full bg-[#2FD4A0]/15 border border-[#2FD4A0]/30 px-2 py-0.5 text-[8.5px] font-mono font-bold uppercase text-[#2FD4A0] tracking-wider">
-                        100% Completo
+                <div className="flex items-center justify-between gap-3 border-b border-[#232327] px-4.5 py-3.5 bg-[#0a0a0c]">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className={cn(
+                      "h-3.5 w-1 rounded-full shrink-0 transition-colors",
+                      completedCount === onboardingItems.length ? "bg-[#2FD4A0] shadow-[0_0_8px_#2FD4A0]" : "bg-[#F2B33D]"
+                    )} />
+                    <h3 className="font-display text-[15px] font-bold text-white tracking-tight whitespace-nowrap">
+                      {t("profile.onboarding.title", {}, "Primeiros Passos")}
+                    </h3>
+                    {completedCount === onboardingItems.length ? (
+                      <span className="shrink-0 rounded-full bg-[#2FD4A0]/15 border border-[#2FD4A0]/30 px-2 py-0.5 text-[9px] font-mono font-bold uppercase text-[#2FD4A0] tracking-wider">
+                        {t("profile.onboarding.100_completed", {}, "100% Completo")}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-[#F2B33D]/15 border border-[#F2B33D]/30 px-2 py-0.5 text-[9px] font-mono font-bold uppercase text-[#F2B33D] tracking-wider">
+                        {progressPercent}%
                       </span>
                     )}
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.12em] tabular-nums bg-[#141418] px-2 py-0.5 rounded border border-[#232327]">
                       {completedCount} / {onboardingItems.length}
                     </span>
                     <button
                       type="button"
                       onClick={() => setOnboardingCollapsed(!onboardingCollapsed)}
                       className="p-1 rounded text-[#71717a] hover:text-white transition-colors cursor-pointer"
-                      title={onboardingCollapsed ? "Expandir etapas" : "Recolher etapas"}
-                      aria-label={onboardingCollapsed ? "Expandir etapas" : "Recolher etapas"}
+                      title={onboardingCollapsed ? t("profile.onboarding.expand_steps", {}, "Expandir etapas") : t("profile.onboarding.collapse_steps", {}, "Recolher etapas")}
+                      aria-label={onboardingCollapsed ? t("profile.onboarding.expand_steps", {}, "Expandir etapas") : t("profile.onboarding.collapse_steps", {}, "Recolher etapas")}
                     >
-                      <Icon name={onboardingCollapsed ? "chevron" : "close"} className="h-3.5 w-3.5" />
+                      <Icon 
+                        name="chevron" 
+                        className={cn("h-3.5 w-3.5 transition-transform duration-200", !onboardingCollapsed && "rotate-180")} 
+                      />
                     </button>
                   </div>
                 </div>
 
                 {!onboardingCollapsed && (
-                  <div className="p-5">
+                  <div className="p-4 sm:p-5">
                     {/* Meter e Resumo */}
-                    <div className="flex items-center gap-5">
-                      <div className="relative h-[76px] w-[76px] shrink-0">
-                        <svg viewBox="0 0 88 88" className="absolute inset-0 h-full w-full -rotate-90 drop-shadow-[0_0_10px_rgba(242,179,61,0.2)]">
-                          <circle cx="44" cy="44" r="38" fill="none" className="stroke-[#1a1a1f]" strokeWidth="7" />
-                          <circle 
-                            cx="44" 
-                            cy="44" 
-                            r="38" 
-                            fill="none" 
-                            className={cn(
-                              "transition-all duration-1000 ease-out",
-                              completedCount === onboardingItems.length ? "stroke-[#2FD4A0]" : "stroke-[#F2B33D]"
-                            )} 
-                            strokeWidth="7" 
-                            strokeLinecap="round" 
-                            strokeDasharray="238.7" 
-                            strokeDashoffset={strokeDashoffset} 
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <div className="flex items-baseline gap-[1px]">
-                            <span className="font-display text-[20px] text-white font-bold leading-none tracking-tight">{progressPercent}</span>
-                            <span className={cn("text-[10px] font-bold leading-none", completedCount === onboardingItems.length ? "text-[#2FD4A0]" : "text-[#F2B33D]")}>%</span>
+                    {completedCount === onboardingItems.length ? (
+                      <div className="rounded-xl border border-[#2FD4A0]/30 bg-gradient-to-br from-[#2FD4A0]/10 via-[#101013] to-[#0c0c0e] p-4 flex items-center gap-4 relative overflow-hidden shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]">
+                        <div className="relative h-13 w-13 shrink-0 flex items-center justify-center rounded-2xl bg-[#2FD4A0]/15 border border-[#2FD4A0]/30 shadow-[0_0_20px_rgba(47,212,160,0.25)]">
+                          <Icon name="award" className="h-6 w-6 text-[#2FD4A0]" strokeWidth={2.2} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13px] font-bold text-white tracking-tight">{t("profile.onboarding.completed_title", {}, "Onboarding Concluído")}</span>
+                            <span className="rounded-full bg-[#2FD4A0]/20 text-[#2FD4A0] px-1.5 py-0.2 text-[8.5px] font-mono font-bold uppercase">100%</span>
                           </div>
+                          <p className="text-[11.5px] text-[#a1a1aa] leading-relaxed mt-1">
+                            {t("profile.onboarding.completed_banner", {}, "🎉 Parabéns! Você concluiu todas as etapas e desbloqueou a conquista")} <strong className="text-white font-medium">{t("profile.achievements_list.onboarding.label", {}, "Primeiros Passos")}</strong> {t("profile.onboarding.in_your_profile", {}, "no seu perfil.")}
+                          </p>
                         </div>
                       </div>
-                      <div>
-                        <p className="text-[12.5px] text-[#8c8c94] leading-relaxed">
-                          {remainingItems > 0 
-                            ? `Faltam ${remainingItems} ite${remainingItems === 1 ? 'm' : 'ns'} para você concluir o onboarding e desbloquear a conquista Primeiros Passos.`
-                            : "🎉 Parabéns! Você concluiu todas as etapas e desbloqueou a conquista Primeiros Passos no seu perfil."}
-                        </p>
+                    ) : (
+                      <div className="rounded-xl border border-[#232328] bg-[#111115] p-4 flex items-center gap-4 shadow-sm">
+                        <div className="relative h-13 w-13 shrink-0">
+                          <svg viewBox="0 0 88 88" className="absolute inset-0 h-full w-full -rotate-90 drop-shadow-[0_0_8px_rgba(242,179,61,0.2)]">
+                            <circle cx="44" cy="44" r="38" fill="none" className="stroke-[#1a1a20]" strokeWidth="7" />
+                            <circle 
+                              cx="44" 
+                              cy="44" 
+                              r="38" 
+                              fill="none" 
+                              className="stroke-[#F2B33D] transition-all duration-700 ease-out" 
+                              strokeWidth="7" 
+                              strokeLinecap="round" 
+                              strokeDasharray="238.7" 
+                              strokeDashoffset={strokeDashoffset} 
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="flex items-baseline">
+                              <span className="font-display text-[15px] text-white font-bold leading-none">{progressPercent}</span>
+                              <span className="text-[9px] font-bold text-[#F2B33D] leading-none">%</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13px] font-bold text-white tracking-tight">
+                              {remainingItems === 1
+                                ? t("profile.onboarding.remaining_one", undefined, "Falta apenas 1 etapa")
+                                : t("profile.onboarding.remaining_many", { count: remainingItems }, `Faltam ${remainingItems} etapas`)}
+                            </span>
+                          </div>
+                          <p className="text-[11.5px] text-[#8c8c94] leading-relaxed mt-0.5">
+                            {t("profile.onboarding.complete_steps_desc", undefined, "Conclua as etapas abaixo para desbloquear a conquista Primeiros Passos no estúdio.")}
+                          </p>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Lista interativa de tarefas */}
-                    <div className="mt-6 space-y-2.5">
+                    <div className="mt-4 space-y-2.5">
                       {onboardingItems.map((item, i) => (
                         <button 
                           key={item.id}
                           type="button"
                           onClick={item.action}
                           className={cn(
-                            "w-full flex items-center justify-between gap-3 text-left p-2.5 rounded-xl border transition-all duration-200 group cursor-pointer",
+                            "w-full text-left p-3 sm:p-3.5 rounded-xl border transition-all duration-200 group cursor-pointer relative overflow-hidden",
                             item.done 
-                              ? "bg-[#101012]/60 border-[#1c1c20] hover:border-[#2FD4A0]/30 hover:bg-[#121215]" 
-                              : "bg-[#101012] border-[#232327] hover:border-[#F2B33D]/40 hover:bg-[#141418] shadow-sm"
+                              ? "bg-[#101013]/70 border-[#1e1e23] hover:border-[#2FD4A0]/40 hover:bg-[#131317]" 
+                              : "bg-[#111115] border-[#242429] hover:border-[#F2B33D]/50 hover:bg-[#15151a] shadow-sm"
                           )}
-                          style={{ opacity: mounted ? 1 : 0, transform: mounted ? "translateX(0)" : "translateX(10px)", transitionDelay: `${i * 60 + 150}ms` }}
+                          style={{ opacity: mounted ? 1 : 0, transform: mounted ? "translateX(0)" : "translateX(10px)", transitionDelay: `${i * 40 + 80}ms` }}
                         >
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="flex items-start gap-3">
                             {/* Checkmark icon */}
-                            <span className={cn(
-                              "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-all duration-300",
-                              item.done 
-                                ? "border-[#2FD4A0]/50 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_10px_rgba(47,212,160,0.25)]" 
-                                : "border-[#2a2a30] bg-[#141417] text-[#52525b] group-hover:border-[#F2B33D]/50 group-hover:text-[#F2B33D]"
-                            )}>
-                              {item.done ? (
-                                <Icon name="check" className="h-3 w-3" strokeWidth={3.5} />
-                              ) : (
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#3a3a42] group-hover:bg-[#F2B33D] transition-colors" />
-                              )}
-                            </span>
+                            <div className="pt-0.5 shrink-0">
+                              <span className={cn(
+                                "flex h-6 w-6 items-center justify-center rounded-full border transition-all duration-300",
+                                item.done 
+                                  ? "border-[#2FD4A0]/60 bg-[#2FD4A0]/15 text-[#2FD4A0] shadow-[0_0_10px_rgba(47,212,160,0.25)]" 
+                                  : "border-[#2c2c34] bg-[#16161b] text-[#71717a] group-hover:border-[#F2B33D]/60 group-hover:text-[#F2B33D] group-hover:bg-[#1b1b22]"
+                              )}>
+                                {item.done ? (
+                                  <Icon name="check" className="h-3.5 w-3.5" strokeWidth={3.5} />
+                                ) : (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#3f3f46] group-hover:bg-[#F2B33D] transition-colors" />
+                                )}
+                              </span>
+                            </div>
 
                             {/* Conteúdo */}
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className={cn(
-                                  "text-[12.5px] font-semibold tracking-tight transition-colors truncate",
-                                  item.done ? "text-[#d3d3d8]" : "text-white group-hover:text-signal-300"
+                              {/* Linha de Título e Tag */}
+                              <div className="flex items-baseline justify-between gap-2">
+                                <h4 className={cn(
+                                  "text-[13px] font-semibold tracking-tight transition-colors leading-snug",
+                                  item.done ? "text-[#e2e2e6] group-hover:text-white" : "text-white group-hover:text-signal-300"
                                 )}>
                                   {item.label}
-                                </span>
-                                <span className="text-[8.5px] font-mono uppercase px-1.5 py-0.2 rounded border border-[#232327] bg-[#141417] text-[#8c8c94] shrink-0">
+                                </h4>
+
+                                <span className="text-[8.5px] font-mono uppercase px-1.5 py-0.5 rounded border border-[#232328] bg-[#141418] text-[#8c8c94] shrink-0">
                                   {item.tag}
                                 </span>
                               </div>
-                              <p className="text-[11px] text-[#71717a] group-hover:text-[#8c8c94] transition-colors truncate mt-0.5">
+
+                              {/* Descrição Completa - Sem truncate! */}
+                              <p className="text-[11.5px] text-[#7d7d87] leading-relaxed mt-1 group-hover:text-[#9c9ca6] transition-colors">
                                 {item.desc}
                               </p>
-                            </div>
-                          </div>
 
-                          {/* Status / Ação à direita */}
-                          <div className="shrink-0 pl-2">
-                            {item.done ? (
-                              <span className="inline-flex items-center gap-1 font-mono text-[10px] text-[#2FD4A0] uppercase font-bold tracking-wider">
-                                Concluído
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 font-mono text-[10.5px] font-bold text-[#8c8c94] group-hover:text-signal-400 uppercase tracking-wider transition-colors">
-                                <span>Acessar</span>
-                                <Icon name="arrow" className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" strokeWidth={2.4} />
-                              </span>
-                            )}
+                              {/* Linha de Status / Ação inferior */}
+                              <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-[#1a1a20]/80">
+                                <span className="font-mono text-[9px] uppercase tracking-wider text-[#52525b]">
+                                  {t("profile.onboarding.step_progress", { current: i + 1, total: onboardingItems.length }, `Etapa ${i + 1} de ${onboardingItems.length}`)}
+                                </span>
+
+                                {item.done ? (
+                                  <span className="inline-flex items-center gap-1 font-mono text-[10px] font-bold text-[#2FD4A0] uppercase tracking-wider">
+                                    <Icon name="check" className="h-3 w-3" strokeWidth={3} />
+                                    {t("common.completed", undefined, "Concluído")}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 font-mono text-[10px] font-bold text-[#F2B33D] group-hover:text-signal-300 uppercase tracking-wider transition-colors">
+                                    <span>{t("common.access", undefined, "Acessar")}</span>
+                                    <Icon name="arrow" className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" strokeWidth={2.4} />
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </button>
                       ))}
                     </div>
 
-                    {completedCount === onboardingItems.length && (
-                      <div className="mt-4 pt-3 border-t border-[#1c1c20] flex items-center justify-between text-[11px] text-[#8c8c94]">
-                        <span className="text-[#2FD4A0] font-mono font-medium flex items-center gap-1.5">
-                          <Icon name="check" className="h-3 w-3 text-[#2FD4A0]" />
-                          Conquista Primeiros Passos desbloqueada
+                    {/* Rodapé */}
+                    <div className="mt-4 pt-3.5 border-t border-[#1c1c22] flex items-center justify-between text-[11px]">
+                      {completedCount === onboardingItems.length ? (
+                        <span className="text-[#2FD4A0] font-mono text-[10.5px] font-semibold flex items-center gap-1.5">
+                          <Icon name="award" className="h-3.5 w-3.5 text-[#2FD4A0]" />
+                          {t("profile.onboarding.achievement_unlocked", undefined, "Conquista desbloqueada")}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setHideOnboarding(true);
-                            if (user) {
-                              localStorage.setItem(`studioos.onboarding.hidden.${user.id}`, "true");
-                            }
-                          }}
-                          className="hover:text-white transition-colors text-[10.5px] font-mono underline cursor-pointer"
-                        >
-                          Dispensar card
-                        </button>
-                      </div>
-                    )}
+                      ) : (
+                        <span className="text-[#71717a] font-mono text-[10px] flex items-center gap-1.5">
+                          <Icon name="spark" className="h-3 w-3 text-[#F2B33D]" />
+                          {t("profile.onboarding.complete_to_unlock", undefined, "Complete para desbloquear")}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHideOnboarding(true);
+                          if (user) {
+                            localStorage.setItem(`studioos.onboarding.hidden.${user.id}`, "true");
+                          }
+                        }}
+                        className="text-[#8c8c94] hover:text-white transition-colors text-[10.5px] font-mono underline underline-offset-2 cursor-pointer"
+                      >
+                        {t("profile.onboarding.dismiss_card", undefined, "Dispensar card")}
+                      </button>
+                    </div>
                   </div>
                 )}
               </Panel>
@@ -4242,13 +4351,13 @@ export default function PerfilScreen({
 
             {(!isViewingOther || displayedCardVis.achievements !== false) && (
               <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
-                {renderCardVisibilityBanner("achievements", "Conquistas do Estúdio")}
+                {renderCardVisibilityBanner("achievements", t("profile.achievements_title", undefined, "Conquistas do Estúdio"))}
                 <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                   <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
-                  <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Conquistas do estúdio</h3>
+                  <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">{t("profile.achievements_title", undefined, "Conquistas do Estúdio")}</h3>
                   <span className="font-mono text-[10px] text-[#8c8c94] tracking-[0.15em] tabular-nums">
                     {isPublicView
-                      ? `${unlockedCount} ${unlockedCount === 1 ? "DESBLOQUEADA" : "DESBLOQUEADAS"}`
+                      ? `${unlockedCount} ${unlockedCount === 1 ? t("profile.unlocked", undefined, "DESBLOQUEADA") : t("profile.unlocked_plural", undefined, "DESBLOQUEADAS")}`
                       : `${unlockedCount} / ${achievements.length}`}
                   </span>
                 </div>
@@ -4258,8 +4367,8 @@ export default function PerfilScreen({
                       <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#6E93F5]/10 text-[#6E93F5] mb-2.5">
                         <Icon name="star" className="h-5 w-5" />
                       </div>
-                      <p className="text-[13px] font-semibold text-white">Nenhuma conquista ainda</p>
-                      <p className="text-[11px] text-[#8c8c94] mt-1">Este criador ainda não desbloqueou conquistas no estúdio.</p>
+                      <p className="text-[13px] font-semibold text-white">{t("profile.no_achievements_title", undefined, "Nenhuma conquista ainda")}</p>
+                      <p className="text-[11px] text-[#8c8c94] mt-1">{t("profile.no_achievements_desc", undefined, "Este criador ainda não desbloqueou conquistas no estúdio.")}</p>
                     </div>
                   ) : (
                     <>
@@ -4275,15 +4384,13 @@ export default function PerfilScreen({
                             <div className={`rounded-md p-1.5 relative z-10 ${a.unlocked ? a.bg : 'bg-[#18181b]'}`}>
                               <Icon name={a.icon} className={`h-3.5 w-3.5 ${a.unlocked ? a.tone : 'text-[#52525b]'}`} />
                             </div>
-                            <span className={`text-[12px] font-medium tracking-tight leading-snug relative z-10 ${a.unlocked ? 'text-[#d3d3d8]' : 'text-[#8c8c94]'}`}>{a.label}</span>
+                            <span className={`text-[12px] font-medium tracking-tight leading-snug relative z-10 ${a.unlocked ? 'text-[#d3d3d8]' : 'text-[#8c8c94]'}`}>{t(`profile.achievements_list.${a.id}.label`, undefined, a.label)}</span>
                           </div>
                         ))}
                       </div>
                       {(isPublicView ? displayedAchievements.length > 4 : true) && (
                         <Button onClick={() => setShowAchievModal(true)} variant="outline" className="w-full text-[#8c8c94] border-[#232327] bg-[#0c0c0e] hover:bg-[#101012] hover:text-[#d3d3d8]">
-                          {isPublicView
-                            ? `Ver todas as ${displayedAchievements.length} conquistas`
-                            : `Ver todas as ${achievements.length} conquistas`}
+                          {t("profile.view_all_achievements", { count: isPublicView ? displayedAchievements.length : achievements.length }, `Ver todas as ${isPublicView ? displayedAchievements.length : achievements.length} conquistas`)}
                         </Button>
                       )}
                     </>
@@ -4301,18 +4408,18 @@ export default function PerfilScreen({
             <Panel className="p-0 self-start w-full overflow-hidden border-[#232327] bg-[#0c0c0e]">
               <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                 <span className="h-3.5 w-1 rounded-full bg-[#2FD4A0]" />
-                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">E-mail Vinculado</h3>
+                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">{t("profile.security.linked_email", undefined, "E-mail Vinculado")}</h3>
               </div>
               <div className="p-5">
                 <div className="grid gap-5">
                   <div>
-                    <Label hint="Pode ser alterado. Exige confirmação na caixa de entrada.">Endereço de E-mail</Label>
+                    <Label hint={t("profile.security.linked_email_hint", undefined, "Pode ser alterado. Exige confirmação na caixa de entrada.")}>{t("profile.security.email_address", undefined, "Endereço de E-mail")}</Label>
                     <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                 </div>
                 <div className="mt-6 flex justify-end">
                   <Button disabled={saving} onClick={handleSaveEmail} className="bg-[#101012] text-[#d3d3d8] border border-[#232327] hover:bg-[#232327] shadow-[0_0_15px_rgba(242,179,61,0.1)] transition-shadow hover:shadow-[0_0_20px_rgba(242,179,61,0.2)]">
-                    {saving ? "Salvando..." : "Atualizar E-mail"}
+                    {saving ? t("common.saving", undefined, "Salvando...") : t("profile.security.update_email_btn", undefined, "Atualizar E-mail")}
                   </Button>
                 </div>
               </div>
@@ -4321,27 +4428,27 @@ export default function PerfilScreen({
             <Panel className="p-0 self-start w-full overflow-hidden border-[#232327] bg-[#0c0c0e]">
               <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                 <span className="h-3.5 w-1 rounded-full bg-[#F2B33D]" />
-                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Alterar Senha</h3>
+                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">{t("profile.security.change_password", undefined, "Alterar Senha")}</h3>
               </div>
               <form onSubmit={e => { e.preventDefault(); handleSavePassword(); }} className="p-5">
                 <input type="text" name="username" autoComplete="username" className="hidden" readOnly value={user?.email || "user"} />
                 <div className="grid gap-5">
                   <div>
-                    <Label>Senha Atual</Label>
+                    <Label>{t("profile.security.current_password", undefined, "Senha Atual")}</Label>
                     <Input type="password" autoComplete="current-password" placeholder="••••••••" value={pass} onChange={e => setPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                   <div>
-                    <Label hint="Mín. 8 caracteres, com letras e números">Nova Senha</Label>
+                    <Label hint={t("profile.security.new_password_hint", undefined, "Mín. 8 caracteres, com letras e números")}>{t("profile.security.new_password", undefined, "Nova Senha")}</Label>
                     <Input type="password" autoComplete="new-password" placeholder="••••••••" value={newPass} onChange={e => setNewPass(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                   <div>
-                    <Label>Confirmar Nova Senha</Label>
+                    <Label>{t("profile.security.confirm_new_password", undefined, "Confirmar Nova Senha")}</Label>
                     <Input type="password" autoComplete="new-password" placeholder="••••••••" value={newPassConf} onChange={e => setNewPassConf(e.target.value)} className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full" />
                   </div>
                 </div>
                 <div className="mt-6 flex justify-end">
                   <Button type="submit" disabled={passSaving} className="bg-[#101012] text-[#d3d3d8] border border-[#232327] hover:bg-[#232327] shadow-[0_0_15px_rgba(242,179,61,0.1)] transition-shadow hover:shadow-[0_0_20px_rgba(242,179,61,0.2)]">
-                    {passSaving ? "Atualizando..." : "Atualizar Senha"}
+                    {passSaving ? t("common.updating", undefined, "Atualizando...") : t("profile.security.update_password_btn", undefined, "Atualizar Senha")}
                   </Button>
                 </div>
               </form>
@@ -4352,7 +4459,7 @@ export default function PerfilScreen({
             <Panel id="panel-sso" className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
               <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                 <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
-                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Autenticação (SSO)</h3>
+                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">{t("profile.security.sso_title", undefined, "Autenticação (SSO)")}</h3>
               </div>
               <div className="p-5">
                 <div className="grid gap-3">
@@ -4374,9 +4481,9 @@ export default function PerfilScreen({
                               {connected ? (
                                 <span className="flex items-center gap-1.5">
                                   <span className="h-1.5 w-1.5 rounded-full bg-[#2FD4A0]"></span>
-                                  Conectado {accountInfo && <span className="opacity-70">({accountInfo})</span>}
+                                  {t("common.connected", undefined, "Conectado")} {accountInfo && <span className="opacity-70">({accountInfo})</span>}
                                 </span>
-                              ) : "Não conectado"}
+                              ) : t("common.not_connected", undefined, "Não conectado")}
                             </div>
                           </div>
                         </div>
@@ -4386,14 +4493,14 @@ export default function PerfilScreen({
                             size="sm"
                             onClick={() => handleUnlink(connected.identity_id || connected.id, provider === "google" ? "Google" : "Discord")}
                             disabled={identities.length <= 1}
-                            title={identities.length <= 1 ? "Mantenha ao menos uma forma de login vinculada à sua conta." : undefined}
+                            title={identities.length <= 1 ? t("profile.security.unlink_min_warn", undefined, "Mantenha ao menos uma forma de login vinculada à sua conta.") : undefined}
                             className="border-[#232327] bg-[#0c0c0e] text-[#8c8c94] hover:bg-[#232327] hover:text-[#d3d3d8]"
                           >
-                            Desvincular
+                            {t("profile.security.unlink", undefined, "Desvincular")}
                           </Button>
                         ) : (
                           <Button variant="outline" size="sm" onClick={() => handleLink(provider)} className="border-[#232327] bg-[#0c0c0e] text-[#8c8c94] hover:bg-[#232327] hover:text-[#d3d3d8]">
-                            Vincular
+                            {t("profile.security.link", undefined, "Vincular")}
                           </Button>
                         )}
                       </div>
@@ -4406,11 +4513,11 @@ export default function PerfilScreen({
             <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
               <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                 <span className="h-3.5 w-1 rounded-full bg-[#2FD4A0]" />
-                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Sessões Ativas</h3>
+                <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">{t("profile.security.active_sessions", undefined, "Sessões Ativas")}</h3>
               </div>
               <div className="p-5">
               <p className="mb-4 text-[12px] text-[#8c8c94]">
-                Você está logado em {sessions.length} dispositivo{sessions.length !== 1 ? "s" : ""} atualmente.
+                {t("profile.security.active_sessions_count", { count: sessions.length, plural: sessions.length !== 1 ? "s" : "" }, `Você está logado em ${sessions.length} dispositivo${sessions.length !== 1 ? "s" : ""} atualmente.`)}
               </p>
               <div className="mb-5 grid gap-3">
                 {sessions.map(s => (
@@ -4422,7 +4529,7 @@ export default function PerfilScreen({
                     <div className="flex items-center gap-3">
                       <span className={s.current ? "text-[#2FD4A0] font-medium" : "text-[#8c8c94]"}>{s.time}</span>
                       {!s.current && (
-                        <button onClick={() => setSessions(prev => prev.filter(x => x.id !== s.id))} className="text-[#F2604C] hover:text-[#F2604C]/80 transition-colors p-1" title="Encerrar sessão" aria-label="Encerrar sessão">
+                        <button onClick={() => setSessions(prev => prev.filter(x => x.id !== s.id))} className="text-[#F2604C] hover:text-[#F2604C]/80 transition-colors p-1" title={t("profile.security.terminate_session", undefined, "Encerrar sessão")} aria-label={t("profile.security.terminate_session", undefined, "Encerrar sessão")}>
                           <Icon name="close" className="h-4 w-4" />
                         </button>
                       )}
@@ -4435,15 +4542,15 @@ export default function PerfilScreen({
                 onClick={() => {
                   setSessions(prev => prev.filter(x => x.current));
                   showNotice(
-                    "Sessões Desconectadas",
-                    "Você desconectou todas as outras sessões ativas com sucesso.",
+                    t("profile.security.sessions_disconnected_title", undefined, "Sessões Desconectadas"),
+                    t("profile.security.sessions_disconnected_desc", undefined, "Você desconectou todas as outras sessões ativas com sucesso."),
                     "success"
                   );
                 }}
                 variant="outline"
                 className="w-full text-[#F2604C] border-[#F2604C]/20 bg-[#F2604C]/5 hover:bg-[#F2604C]/10 hover:text-[#F2604C] disabled:opacity-40"
               >
-                <Icon name="close" className="h-4 w-4 mr-1" /> Desconectar de outras sessões
+                <Icon name="close" className="h-4 w-4 mr-1" /> {t("profile.security.disconnect_other_sessions", undefined, "Desconectar de outras sessões")}
               </Button>
               </div>
             </Panel>
@@ -4451,14 +4558,14 @@ export default function PerfilScreen({
             <Panel className="p-0 overflow-hidden border-[#232327] bg-[#0c0c0e]">
               <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
                 <span className="h-3.5 w-1 rounded-full bg-[#F2604C]" />
-                <h3 className="flex-1 font-display text-[15px] font-bold text-[#F2604C] tracking-tight">Zona de Perigo</h3>
+                <h3 className="flex-1 font-display text-[15px] font-bold text-[#F2604C] tracking-tight">{t("profile.security.danger_zone", undefined, "Zona de Perigo")}</h3>
               </div>
               <div className="p-5">
               <p className="mb-5 text-[12px] text-[#8c8c94] leading-relaxed">
-                Ao excluir sua conta, você perderá permanentemente o acesso ao sistema, seus dados de perfil e seu histórico. Esta ação é irreversível.
+                {t("profile.security.delete_account_warn", undefined, "Ao excluir sua conta, você perderá permanentemente o acesso ao sistema, seus dados de perfil e seu histórico. Esta ação é irreversível.")}
               </p>
               <Button onClick={handleDeleteAccount} className="w-full bg-[#F2604C] text-[#0c0c0e] font-semibold border-none shadow-[0_8px_25px_-5px_rgba(242,96,76,0.4)] hover:bg-[#ff725e] transition-all">
-                Excluir Conta Permanentemente
+                {t("profile.security.delete_account", undefined, "Excluir Conta Permanentemente")}
               </Button>
               </div>
             </Panel>
@@ -4471,14 +4578,14 @@ export default function PerfilScreen({
           <Panel className="p-0 self-start w-full overflow-hidden border-[#232327] bg-[#0c0c0e]">
             <div className="flex items-center gap-3 border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
               <span className="h-3.5 w-1 rounded-full bg-[#6E93F5]" />
-              <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Notificações</h3>
+              <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">{t("profile.preferences.notifications_title")}</h3>
             </div>
             <div className="p-5">
               <div className="grid gap-6">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-[13px] font-semibold text-[#d3d3d8] tracking-tight">E-mail</div>
-                    <div className="text-[11px] text-[#8c8c94] mt-0.5">Receber resumos e alertas na caixa de entrada.</div>
+                    <div className="text-[13px] font-semibold text-[#d3d3d8] tracking-tight">{t("profile.preferences.email_notif")}</div>
+                    <div className="text-[11px] text-[#8c8c94] mt-0.5">{t("profile.preferences.email_notif_desc")}</div>
                   </div>
                   <div className="shrink-0 h-6 w-11 rounded-full bg-[#2FD4A0] p-1 transition-colors cursor-pointer flex items-center">
                     <div className="h-4 w-4 translate-x-5 rounded-full bg-[#0c0c0e] shadow-sm transition-transform" />
@@ -4487,8 +4594,8 @@ export default function PerfilScreen({
                 <div className="h-px bg-[#232327]" />
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-[13px] font-semibold text-[#d3d3d8] tracking-tight">Push (Sistema)</div>
-                    <div className="text-[11px] text-[#8c8c94] mt-0.5">Notificações em tempo real no painel.</div>
+                    <div className="text-[13px] font-semibold text-[#d3d3d8] tracking-tight">{t("profile.preferences.push_notif")}</div>
+                    <div className="text-[11px] text-[#8c8c94] mt-0.5">{t("profile.preferences.push_notif_desc")}</div>
                   </div>
                   <div className="shrink-0 h-6 w-11 rounded-full bg-[#2FD4A0] p-1 transition-colors cursor-pointer flex items-center">
                     <div className="h-4 w-4 translate-x-5 rounded-full bg-[#0c0c0e] shadow-sm transition-transform" />
@@ -4501,31 +4608,44 @@ export default function PerfilScreen({
           <Panel className="p-0 self-start w-full border-[#232327] bg-[#0c0c0e]">
             <div className="flex items-center gap-3 rounded-t-lg border-b border-[#232327] px-4 py-3.5 bg-[#0a0a0c]">
               <span className="h-3.5 w-1 rounded-full bg-[#8c8c94]" />
-              <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">Sistema</h3>
+              <h3 className="flex-1 font-display text-[15px] font-bold text-white tracking-tight">{t("profile.preferences.system_title")}</h3>
             </div>
             <div className="p-5">
               <div className="grid gap-5">
                 <div>
-                  <Label>Idioma da Interface</Label>
-                  <Select defaultValue="pt" headerTitle="Idiomas da interface" className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full">
-                    <option value="pt">Português (BR)</option>
-                    <option value="en" disabled>English (US) - Em breve</option>
-                    <option value="es" disabled>Español - Em breve</option>
+                  <Label>{t("profile.preferences.language_label")}</Label>
+                  <Select
+                    value={languageSetting}
+                    onChange={(e: any) => {
+                      const newLang = e?.target?.value || e;
+                      if (newLang) {
+                        setLanguageSetting(newLang);
+                      }
+                    }}
+                    headerTitle={t("profile.preferences.language_header")}
+                    className="bg-[#101012] border-[#232327] text-white focus:border-[#2FD4A0] w-full"
+                  >
+                    {languages.map((opt) => (
+                      <option key={opt.code} value={opt.code}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </Select>
                 </div>
               </div>
               <div className="mt-6 flex justify-end">
                 <Button
-                  onClick={() => {
+                  onClick={async () => {
+                    await setLanguageSetting(languageSetting, true);
                     showNotice(
-                      "Preferências Salvas",
-                      "Suas configurações de sistema e notificações foram atualizadas com sucesso.",
+                      t("profile.preferences.saved_title"),
+                      t("profile.preferences.saved_desc"),
                       "success"
                     );
                   }}
                   className="bg-[#101012] text-[#d3d3d8] border border-[#232327] hover:bg-[#232327] shadow-[0_0_15px_rgba(242,179,61,0.1)] transition-shadow hover:shadow-[0_0_20px_rgba(242,179,61,0.2)]"
                 >
-                  Salvar Preferências
+                  {t("profile.preferences.save_btn")}
                 </Button>
               </div>
             </div>
@@ -4544,13 +4664,13 @@ export default function PerfilScreen({
                   <Icon name="heart" className="h-5 w-5 fill-red-500" />
                 </div>
                 <div>
-                  <h3 className="font-display text-lg font-bold text-white tracking-tight">Conta necessária</h3>
+                  <h3 className="font-display text-lg font-bold text-white tracking-tight">{t("profile.login_prompt.title", undefined, "Conta necessária")}</h3>
                   <p className="text-[11px] font-mono uppercase tracking-wider text-[#8c8c94]">Aster Account · StudioOS</p>
                 </div>
               </div>
               
               <p className="mb-6 text-[13px] text-[#a8a8b0] leading-relaxed">
-                Apenas criadores conectados com uma conta ativa podem curtir o perfil de outro criador no StudioOS. Crie sua conta ou faça login para apoiar este estúdio.
+                {t("profile.login_prompt.desc", undefined, "Apenas criadores conectados com uma conta ativa podem curtir o perfil de outro criador no StudioOS. Crie sua conta ou faça login para apoiar este estúdio.")}
               </p>
 
               <div className="flex items-center justify-end gap-3">
@@ -4559,7 +4679,7 @@ export default function PerfilScreen({
                   onClick={() => setShowLoginPrompt(false)}
                   className="border-[#232327] bg-[#101012] text-[#8c8c94] hover:text-white"
                 >
-                  Fechar
+                  {t("common.close", undefined, "Fechar")}
                 </Button>
                 <Button 
                   onClick={() => {
@@ -4568,7 +4688,7 @@ export default function PerfilScreen({
                   }}
                   className="bg-signal-400 text-ink-950 hover:bg-signal-300 font-semibold uppercase text-xs tracking-wider"
                 >
-                  Fazer Login / Criar Conta
+                  {t("profile.login_prompt.btn", undefined, "Fazer Login / Criar Conta")}
                 </Button>
               </div>
             </Panel>
@@ -4588,11 +4708,11 @@ export default function PerfilScreen({
                     <Icon name="star" className="h-6 w-6" />
                   </div>
                   <div>
-                    <h3 className="font-display text-2xl font-bold text-white tracking-tight">Conquistas do estúdio</h3>
+                    <h3 className="font-display text-2xl font-bold text-white tracking-tight">{t("profile.achievements.modal_title", undefined, "Conquistas do estúdio")}</h3>
                     <p className="text-[14px] text-[#8c8c94] mt-1 font-mono tracking-widest uppercase">
                       {isPublicView
-                        ? `${unlockedCount} ${unlockedCount === 1 ? "conquista desbloqueada" : "conquistas desbloqueadas"}`
-                        : `${unlockedCount} de ${achievements.length} desbloqueadas`}
+                        ? `${unlockedCount} ${unlockedCount === 1 ? t("profile.achievements.unlocked_singular", undefined, "conquista desbloqueada") : t("profile.achievements.unlocked_plural", undefined, "conquistas desbloqueadas")}`
+                        : t("profile.achievements.unlocked_ratio", { count: unlockedCount, total: achievements.length }, `${unlockedCount} de ${achievements.length} desbloqueadas`)}
                     </p>
                   </div>
                 </div>
@@ -4623,8 +4743,8 @@ export default function PerfilScreen({
                         <Icon name={a.icon} className={`h-5 w-5 ${a.unlocked ? a.tone : 'text-[#52525b]'}`} />
                       </div>
                       <div className="relative z-10">
-                        <div className={`text-[15px] font-bold tracking-tight mb-1.5 ${a.unlocked ? 'text-white' : 'text-[#8c8c94]'}`}>{a.label}</div>
-                        <div className={`text-[12px] leading-relaxed ${a.unlocked ? 'text-[#a8a8b0]' : 'text-[#52525b]'}`}>{a.desc}</div>
+                        <div className={`text-[15px] font-bold tracking-tight mb-1.5 ${a.unlocked ? 'text-white' : 'text-[#8c8c94]'}`}>{t(`profile.achievements_list.${a.id}.label`, undefined, a.label)}</div>
+                        <div className={`text-[12px] leading-relaxed ${a.unlocked ? 'text-[#a8a8b0]' : 'text-[#52525b]'}`}>{t(`profile.achievements_list.${a.id}.desc`, undefined, a.desc)}</div>
                       </div>
                     </div>
                   ))}
@@ -4644,20 +4764,20 @@ export default function PerfilScreen({
                 <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#2a1616] text-[#F2604C]">
                   <Icon name="close" className="h-5 w-5" />
                 </div>
-                <h3 className="font-display text-xl font-bold text-white tracking-tight">Excluir Conta</h3>
+                <h3 className="font-display text-xl font-bold text-white tracking-tight">{t("profile.delete_modal.title", undefined, "Excluir Conta")}</h3>
               </div>
               
               <div className="mb-6 space-y-4 text-[13px] text-[#8c8c94] leading-relaxed">
-                <p>Esta ação é <strong className="text-[#F2604C] font-semibold">permanente e irreversível</strong>.</p>
-                <p>Todos os seus projetos, roteiros, histórico e ideias serão apagados para sempre. Seu perfil público será deletado e seu @ ficará livre.</p>
-                <p>Para confirmar, digite exatamente <strong className="text-white select-all font-semibold whitespace-nowrap">Quero excluir minha conta</strong> abaixo:</p>
+                <p>{t("profile.delete_modal.p1_prefix", undefined, "Esta ação é")} <strong className="text-[#F2604C] font-semibold">{t("profile.delete_modal.p1_bold", undefined, "permanente e irreversível")}</strong>.</p>
+                <p>{t("profile.delete_modal.p2", undefined, "Todos os seus projetos, roteiros, histórico e ideias serão apagados para sempre. Seu perfil público será deletado e seu @ ficará livre.")}</p>
+                <p>{t("profile.delete_modal.p3_prefix", undefined, "Para confirmar, digite exatamente")} <strong className="text-white select-all font-semibold whitespace-nowrap">{t("profile.delete_modal.type_phrase", undefined, "Quero excluir minha conta")}</strong> {t("profile.delete_modal.p3_suffix", undefined, "abaixo:")}</p>
               </div>
 
               <div className="mb-6">
                 <Input 
                   value={deleteConfirmText} 
                   onChange={e => setDeleteConfirmText(e.target.value)} 
-                  placeholder="Quero excluir minha conta"
+                  placeholder={t("profile.delete_modal.type_phrase", undefined, "Quero excluir minha conta")}
                   className="w-full text-center bg-transparent border border-[#232327] text-white focus:border-[#F2604C]"
                 />
               </div>
@@ -4669,14 +4789,14 @@ export default function PerfilScreen({
                   disabled={isDeleting}
                   className="sm:w-auto border border-[#232327] bg-transparent text-[#8c8c94] hover:bg-[#101012] hover:text-white transition-colors"
                 >
-                  Cancelar
+                  {t("common.cancel", undefined, "Cancelar")}
                 </Button>
                 <Button 
                   onClick={confirmDeleteAccount}
-                  disabled={isDeleting || deleteConfirmText !== "Quero excluir minha conta"}
+                  disabled={isDeleting || (deleteConfirmText.toLowerCase() !== t("profile.delete_modal.type_phrase", undefined, "Quero excluir minha conta").toLowerCase() && deleteConfirmText !== "Quero excluir minha conta" && deleteConfirmText.toLowerCase() !== "delete")}
                   className="sm:w-auto bg-[#9A4239] text-[#0c0c0e] font-semibold border-none shadow-[0_8px_20px_-5px_rgba(242,96,76,0.3)] hover:bg-[#b54f44] transition-all disabled:opacity-50"
                 >
-                  {isDeleting ? "Excluindo..." : "Excluir permanentemente"}
+                  {isDeleting ? t("common.deleting", undefined, "Excluindo...") : t("profile.delete_modal.confirm_btn", undefined, "Excluir permanentemente")}
                 </Button>
               </div>
             </Panel>
@@ -4689,9 +4809,9 @@ export default function PerfilScreen({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <Reveal className="w-full max-w-md flex flex-col">
             <Panel className="p-6 border-[#232327] bg-[#0c0c0e] shadow-2xl">
-              <h3 className="mb-1 font-display text-lg font-bold text-white tracking-tight">Ajustar foto de perfil</h3>
+              <h3 className="mb-1 font-display text-lg font-bold text-white tracking-tight">{t("profile.avatar.adjust_modal_title", undefined, "Ajustar foto de perfil")}</h3>
               <p className="mb-4 text-xs font-mono text-[#8c8c94]">
-                Medida ideal recomendada: <span className="text-[#F2B33D] font-bold">400 × 400 px</span> (Proporção 1:1 quadrada) · Máx 5 MB
+                {t("profile.avatar.ideal_measurement", undefined, "Medida ideal recomendada:")} <span className="text-[#F2B33D] font-bold">400 × 400 px</span> {t("profile.avatar.aspect_note", undefined, "(Proporção 1:1 quadrada) · Máx 5 MB")}
               </p>
               
               <div className="relative h-64 w-full bg-[#101012] border border-[#232327] rounded-xl overflow-hidden mb-6">
@@ -4724,10 +4844,10 @@ export default function PerfilScreen({
 
               <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
                 <Button variant="outline" onClick={() => setCropImage(null)} disabled={uploadingAvatar} className="sm:w-auto border-[#232327] bg-[#101012] text-[#8c8c94] hover:bg-[#232327] hover:text-white">
-                  Cancelar
+                  {t("common.cancel", undefined, "Cancelar")}
                 </Button>
                 <Button onClick={handleSaveCrop} disabled={uploadingAvatar} className="sm:w-auto bg-[#F2B33D] text-[#0c0c0e] hover:bg-[#F2B33D]/90 font-semibold disabled:opacity-50 border-none">
-                  {uploadingAvatar ? "Salvando..." : "Salvar Foto"}
+                  {uploadingAvatar ? t("common.saving", undefined, "Salvando...") : t("profile.avatar.save_btn", undefined, "Salvar Foto")}
                 </Button>
               </div>
             </Panel>
@@ -4759,18 +4879,18 @@ export default function PerfilScreen({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="font-display text-lg font-bold text-white tracking-tight">
-                      Excluir Comentário
+                      {t("profile.comments.delete_modal_title", undefined, "Excluir Comentário")}
                     </h3>
                     {user?.id !== commentToDelete.author_id && (
                       <span className="rounded bg-[#F2604C]/10 border border-[#F2604C]/25 px-2 py-0.5 font-mono text-[9px] font-bold text-[#F2604C] uppercase tracking-wider">
-                        Moderação
+                        {t("profile.comments.moderation_badge", undefined, "Moderação")}
                       </span>
                     )}
                   </div>
                   <p className="mt-1 text-xs text-[#8c8c94] leading-relaxed">
                     {user?.id === commentToDelete.author_id
-                      ? "Tem certeza de que deseja remover seu comentário deste perfil?"
-                      : "Como dono do perfil, você pode moderar e remover mensagens do seu mural."}
+                      ? t("profile.comments.confirm_delete_author", undefined, "Tem certeza de que deseja remover seu comentário deste perfil?")
+                      : t("profile.comments.confirm_delete_owner", undefined, "Como dono do perfil, você pode moderar e remover mensagens do seu mural.")}
                   </p>
                 </div>
                 <button
@@ -4778,7 +4898,7 @@ export default function PerfilScreen({
                   onClick={() => setCommentToDelete(null)}
                   disabled={isDeletingComment}
                   className="text-[#71717a] hover:text-white transition-colors p-1.5 rounded-lg hover:bg-[#18181b]"
-                  title="Fechar"
+                  title={t("common.close", undefined, "Fechar")}
                 >
                   <Icon name="close" className="h-4 w-4" />
                 </button>
@@ -4830,7 +4950,7 @@ export default function PerfilScreen({
               {/* Aviso Destrutivo */}
               <div className="mb-6 rounded-lg bg-[#18181c]/70 border border-[#27272c] px-3.5 py-2.5 text-[11.5px] text-[#8c8c94] flex items-center gap-2.5">
                 <Icon name="alert" className="h-4 w-4 text-[#F2604C] shrink-0" />
-                <span>Esta ação é definitiva e não poderá ser desfeita.</span>
+                <span>{t("profile.comments.irreversible_warn", undefined, "Esta ação é definitiva e não poderá ser desfeita.")}</span>
               </div>
 
               {/* Botões de Ação */}
@@ -4841,7 +4961,7 @@ export default function PerfilScreen({
                   disabled={isDeletingComment}
                   className="sm:w-auto border border-[#232327] bg-[#101012] text-[#8c8c94] hover:bg-[#18181b] hover:text-white transition-colors font-semibold text-xs py-2 px-4"
                 >
-                  Cancelar
+                  {t("common.cancel", undefined, "Cancelar")}
                 </Button>
                 <Button
                   onClick={confirmDeleteComment}
@@ -4851,12 +4971,12 @@ export default function PerfilScreen({
                   {isDeletingComment ? (
                     <>
                       <Icon name="refresh" className="h-3.5 w-3.5 animate-spin" />
-                      <span>Excluindo…</span>
+                      <span>{t("common.deleting", undefined, "Excluindo…")}</span>
                     </>
                   ) : (
                     <>
                       <Icon name="trash" className="h-3.5 w-3.5" />
-                      <span>Excluir permanentemente</span>
+                      <span>{t("profile.comments.confirm_delete_btn", undefined, "Excluir permanentemente")}</span>
                     </>
                   )}
                 </Button>

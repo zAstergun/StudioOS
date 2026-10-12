@@ -42,10 +42,12 @@ import { SalvosScreen } from "./views/SalvosScreen";
 import { RankingScreen } from "./views/RankingScreen";
 import { ProjectInviteModal } from "./components/ProjectInviteModal";
 import { VipModal } from "./components/VipModal";
+import { useI18n } from "./i18n";
 
 /* ------------------------------------------------------------- footer */
 
 function Footer({ onGo }: { onGo: (id: string) => void }) {
+  const { t } = useI18n();
   const groups = ["Criação", "Publicação", "Estratégia", "Painel"] as const;
   return (
     <footer className="relative mt-8 overflow-hidden border-t border-ink-800 bg-ink-950">
@@ -67,56 +69,65 @@ function Footer({ onGo }: { onGo: (id: string) => void }) {
               </div>
             </div>
             <p className="mt-5 max-w-sm text-[13.5px] leading-relaxed text-bone-400">
-              Sistema operacional do criador: doze ferramentas calibradas no seu canal, do banco de
-              ideias ao post publicado. Chave de IA sua, dados seus, tudo local.
+              {t("footer.desc")}
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
               <button
                 onClick={() => onGo("rank")}
                 className="group inline-flex items-center gap-2 rounded-md bg-signal-400 px-4 py-2.5 text-[13px] font-bold text-ink-950 transition-all hover:bg-signal-300"
               >
-                Começar pelo rank
+                {t("footer.cta_rank")}
                 <Icon name="arrow" className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" strokeWidth={2.2} />
               </button>
               <button
                 onClick={() => onGo("wiki")}
                 className="inline-flex items-center gap-2 rounded-md border border-ink-700 px-4 py-2.5 text-[13px] font-semibold text-bone-300 transition-all hover:border-bone-300/40 hover:text-bone-50"
               >
-                Ler a wiki
+                {t("footer.cta_wiki")}
               </button>
             </div>
           </div>
 
           <div className="grid gap-6 grid-cols-2 sm:grid-cols-5">
-            {groups.map((g) => (
-              <div key={g}>
-                <div className="mb-3 font-mono text-[9.5px] tracking-[0.2em] text-signal-400 uppercase">
-                  {g}
+            {groups.map((g) => {
+              const groupLabel =
+                g === "Criação"
+                  ? t("nav.groups.creation")
+                  : g === "Publicação"
+                  ? t("nav.groups.publishing")
+                  : g === "Estratégia"
+                  ? t("nav.groups.strategy")
+                  : t("nav.groups.panel");
+              return (
+                <div key={g}>
+                  <div className="mb-3 font-mono text-[9.5px] tracking-[0.2em] text-signal-400 uppercase">
+                    {groupLabel}
+                  </div>
+                  <ul className="space-y-2">
+                    {TOOLS.filter((tTool) => tTool.group === g).map((tTool) => (
+                      <li key={tTool.id}>
+                        <button
+                          onClick={() => onGo(tTool.id)}
+                          className="group flex items-center gap-1.5 text-left text-[12.5px] text-bone-400 transition-colors hover:text-bone-50"
+                        >
+                          <span className="h-px w-0 bg-signal-400 transition-all duration-300 group-hover:w-3" />
+                          {t(`tools.${tTool.id}.name`, undefined, tTool.name)}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="space-y-2">
-                  {TOOLS.filter((t) => t.group === g).map((t) => (
-                    <li key={t.id}>
-                      <button
-                        onClick={() => onGo(t.id)}
-                        className="group flex items-center gap-1.5 text-left text-[12.5px] text-bone-400 transition-colors hover:text-bone-50"
-                      >
-                        <span className="h-px w-0 bg-signal-400 transition-all duration-300 group-hover:w-3" />
-                        {t.name}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+              );
+            })}
             <div>
               <div className="mb-3 font-mono text-[9.5px] tracking-[0.2em] text-signal-400 uppercase">
-                Sistema
+                {t("nav.groups.panel")}
               </div>
               <ul className="space-y-2">
                 {[
-                  ["historico", "Histórico & Lixeira"],
-                  ["config", "Provedor de IA"],
-                  ["calibracao", "Calibração"],
+                  ["historico", t("nav.history", undefined, "Histórico & Lixeira")],
+                  ["config", t("tools.config.name", undefined, "Provedor de IA")],
+                  ["calibracao", t("tools.calibracao.name", undefined, "Calibração")],
                 ].map(([id, label]) => (
                   <li key={id}>
                     <button
@@ -145,13 +156,13 @@ function Footer({ onGo }: { onGo: (id: string) => void }) {
 
         <div className="mt-8 flex flex-col gap-3 border-t border-ink-800 pt-6 sm:flex-row sm:items-center">
           <p className="font-mono text-[10px] tracking-[0.14em] text-ink-400 uppercase">
-            © {new Date().getFullYear()} asterdev studio — painel local, sem telemetria
+            © {new Date().getFullYear()} asterdev studio — {t("footer.local_panel_no_telemetry", undefined, "painel local, sem telemetria")}
           </p>
           <div className="flex flex-wrap items-center gap-4 sm:ml-auto">
             {[
-              ["wiki", "Documentação"],
-              ["config", "Provedor de IA"],
-              ["calibracao", "Calibração"],
+              ["wiki", t("tools.wiki.name", undefined, "Documentação")],
+              ["config", t("tools.config.name", undefined, "Provedor de IA")],
+              ["calibracao", t("tools.calibracao.name", undefined, "Calibração")],
             ].map(([id, label]) => (
               <button
                 key={id}
@@ -201,6 +212,7 @@ const VALID_VIEWS = new Set([
   "home",
   "login",
   "perfil",
+  "ranking",
   "projetos",
   "salvos",
   "wiki",
@@ -253,6 +265,7 @@ function getInitialView(): string {
 }
 
 export default function App() {
+  const { t } = useI18n();
   const auth = useAuth();
   const [view, setView] = useState<string>(getInitialView);
   const [viewedProfileHandle, setViewedProfileHandle] = useState<string | null>(getInitialProfileHandle);
@@ -520,22 +533,23 @@ export default function App() {
 
   useEffect(() => {
     const titles: Record<string, string> = {
-      home: "StudioOS — Sistema Operacional do Criador",
-      config: "Provedor de IA — StudioOS",
-      historico: "Histórico & Lixeira — StudioOS",
-      lixeira: "Lixeira — StudioOS",
-      ranking: "Ranking de Criadores — StudioOS",
-      perfil: "Meu Perfil — StudioOS",
-      projetos: "Meus Projetos — StudioOS",
-      salvos: "Itens Salvos — StudioOS",
+      home: `StudioOS — ${t("console.creator_os", {}, "Sistema Operacional do Criador")}`,
+      config: `${t("tools.config.name", {}, "Provedor de IA")} — StudioOS`,
+      historico: `${t("nav.history", {}, "Histórico & Lixeira")} — StudioOS`,
+      lixeira: `${t("history.trash_tab", {}, "Lixeira")} — StudioOS`,
+      ranking: `${t("nav.ranking", {}, "Ranking de Criadores")} — StudioOS`,
+      perfil: `${t("nav.profile", {}, "Meu Perfil")} — StudioOS`,
+      projetos: `${t("nav.projects", {}, "Meus Projetos")} — StudioOS`,
+      salvos: `${t("nav.saved", {}, "Itens Salvos")} — StudioOS`,
     };
-    document.title = titles[view] ?? `${tool?.name ?? "StudioOS"} — StudioOS`;
-  }, [view, tool]);
+    const toolName = tool ? t(`tools.${tool.id}.name`, {}, tool.name) : "StudioOS";
+    document.title = titles[view] ?? `${toolName} — StudioOS`;
+  }, [view, tool, t]);
 
   if (auth.loading) {
     return (
       <div className="studio-bg flex min-h-screen items-center justify-center" aria-busy="true">
-        <p className="font-mono text-xs tracking-[0.16em] text-bone-300 uppercase">Abrindo o StudioOS…</p>
+        <p className="font-mono text-xs tracking-[0.16em] text-bone-300 uppercase">{t("common.loading_app", {}, "Abrindo o StudioOS…")}</p>
       </div>
     );
   }
@@ -550,7 +564,7 @@ export default function App() {
           onNavigate={go}
           open={menu}
           onClose={() => setMenu(false)}
-          provider={os.config.apiKey ? "IA conectada" : "IA sem chave"}
+          provider={os.config.apiKey ? t("common.ai_connected", {}, "IA conectada") : t("common.ai_no_key", {}, "IA sem chave")}
           hasKey={Boolean(os.config.apiKey)}
           progress={progress}
           historyCount={os.history.length}
@@ -578,8 +592,8 @@ export default function App() {
           <div className="sticky top-0 z-40 flex items-center gap-3 border-b border-ink-800 bg-ink-950/90 px-4 py-2.5 backdrop-blur-md lg:hidden">
             <button
               onClick={() => setMenu(true)}
-              className="flex h-8 w-8 items-center justify-center rounded border border-ink-700 text-bone-300 transition-colors hover:border-signal-400/50 hover:text-signal-400"
-              aria-label="Abrir menu"
+              className="flex h-8 w-8 items-center justify-center rounded border border-ink-700 text-bone-300 transition-colors hover:border-signal-400/50 hover:text-signal-400 cursor-pointer"
+              aria-label={t("common.open_menu", {}, "Abrir menu")}
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                 <path d="M3 6h18M3 12h18M3 18h13" />
@@ -589,17 +603,18 @@ export default function App() {
               {view === "home"
                 ? "StudioOS"
                 : view === "login"
-                  ? "Login"
+                  ? t("auth.login_title", {}, "Login")
                 : view === "ranking"
-                  ? "Ranking"
-                : tool?.name ??
-                  (view === "historico" || view === "lixeira" ? "Histórico & Lixeira" : "Configuração")}
+                  ? t("ranking.title", {}, "Ranking")
+                : tool
+                  ? t(`tools.${tool.id}.name`, {}, tool.name)
+                  : (view === "historico" || view === "lixeira" ? t("nav.history", {}, "Histórico & Lixeira") : t("tools.config.name", {}, "Configuração"))}
             </span>
             <button
               onClick={() => go("rank")}
-              className="ml-auto rounded border border-signal-400/40 bg-signal-400/10 px-2.5 py-1 font-mono text-[9.5px] tracking-[0.14em] text-signal-400 uppercase"
+              className="ml-auto rounded border border-signal-400/40 bg-signal-400/10 px-2.5 py-1 font-mono text-[9.5px] tracking-[0.14em] text-signal-400 uppercase cursor-pointer"
             >
-              ranquear
+              {t("common.rank", {}, "ranquear")}
             </button>
           </div>
 
@@ -797,7 +812,8 @@ export default function App() {
 /* ------------------------------------------------------- prev/next nav */
 
 function ToolNav({ view, onGo }: { view: string; onGo: (id: string) => void }) {
-  const idx = TOOLS.findIndex((t) => t.id === view);
+  const { t } = useI18n();
+  const idx = TOOLS.findIndex((tTool) => tTool.id === view);
   if (idx === -1) {
     return (
       <div className="flex justify-center border-t border-ink-800 pt-6">
@@ -806,7 +822,7 @@ function ToolNav({ view, onGo }: { view: string; onGo: (id: string) => void }) {
           className="group inline-flex items-center gap-2 font-mono text-[10.5px] tracking-[0.18em] text-ink-400 uppercase transition-colors hover:text-signal-400"
         >
           <Icon name="arrow" className="h-3.5 w-3.5 rotate-180 transition-transform group-hover:-translate-x-1" strokeWidth={2} />
-          voltar à visão geral
+          {t("common.back_to_overview", undefined, "voltar à visão geral")}
         </button>
       </div>
     );
@@ -821,8 +837,8 @@ function ToolNav({ view, onGo }: { view: string; onGo: (id: string) => void }) {
       >
         <Icon name="arrow" className="h-4 w-4 rotate-180 text-ink-500 transition-all group-hover:-translate-x-1 group-hover:text-signal-400" strokeWidth={2} />
         <span className="min-w-0">
-          <span className="block font-mono text-[9px] tracking-[0.16em] text-ink-500 uppercase">anterior</span>
-          <span className="block truncate font-display text-[14px] font-bold text-bone-200">{prev.name}</span>
+          <span className="block font-mono text-[9px] tracking-[0.16em] text-ink-500 uppercase">{t("common.previous", undefined, "anterior")}</span>
+          <span className="block truncate font-display text-[14px] font-bold text-bone-200">{t(`tools.${prev.id}.name`, undefined, prev.name)}</span>
         </span>
       </button>
       <button
@@ -830,8 +846,8 @@ function ToolNav({ view, onGo }: { view: string; onGo: (id: string) => void }) {
         className="group flex items-center justify-end gap-3 rounded-lg border border-ink-800 bg-ink-900/50 p-4 text-right transition-all duration-300 hover:-translate-y-0.5 hover:border-ink-600"
       >
         <span className="min-w-0">
-          <span className="block font-mono text-[9px] tracking-[0.16em] text-ink-500 uppercase">próxima</span>
-          <span className="block truncate font-display text-[14px] font-bold text-bone-200">{next.name}</span>
+          <span className="block font-mono text-[9px] tracking-[0.16em] text-ink-500 uppercase">{t("common.next", undefined, "próxima")}</span>
+          <span className="block truncate font-display text-[14px] font-bold text-bone-200">{t(`tools.${next.id}.name`, undefined, next.name)}</span>
         </span>
         <Icon name="arrow" className="h-4 w-4 text-ink-500 transition-all group-hover:translate-x-1 group-hover:text-signal-400" strokeWidth={2} />
       </button>

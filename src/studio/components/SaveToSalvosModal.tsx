@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Icon } from "./ui";
 import { cn } from "../utils/cn";
 import { supabase, useAuth } from "../auth";
+import { useI18n } from "../i18n";
 
 export interface SaveItemProps {
   title: string;
@@ -19,6 +20,7 @@ interface SaveToSalvosModalProps {
 
 export function SaveToSalvosModal({ isOpen, onClose, item, onSaveSuccess }: SaveToSalvosModalProps) {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [categories, setCategories] = useState<{ id: string; name: string; color: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -93,7 +95,7 @@ export function SaveToSalvosModal({ isOpen, onClose, item, onSaveSuccess }: Save
 
     setSavingId(null);
     if (error) {
-      alert("Erro ao salvar: " + error.message);
+      alert(t("save_salvos_modal.error", undefined, "Erro ao salvar: ") + error.message);
     } else {
       if (onSaveSuccess && data) {
         onSaveSuccess(data);
@@ -115,7 +117,9 @@ export function SaveToSalvosModal({ isOpen, onClose, item, onSaveSuccess }: Save
                 <Icon name="bookmark" className="h-3.5 w-3.5 text-signal-400" strokeWidth={2} />
               </div>
               <div>
-                <h2 className="font-display text-lg font-bold text-bone-50">Salvar em...</h2>
+                <h2 className="font-display text-lg font-bold text-bone-50">
+                  {t("save_salvos_modal.title", undefined, "Salvar em...")}
+                </h2>
                 <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase truncate max-w-[200px]">
                   {item.title}
                 </p>
@@ -137,7 +141,7 @@ export function SaveToSalvosModal({ isOpen, onClose, item, onSaveSuccess }: Save
             </div>
           ) : categories.length === 0 ? (
             <div className="text-center py-8 text-ink-400 text-sm">
-              Você ainda não tem nenhuma guia criada em Salvos.
+              {t("save_salvos_modal.no_categories", undefined, "Você ainda não tem nenhuma guia criada em Salvos.")}
             </div>
           ) : (
             <div className="flex flex-col gap-2">

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { Icon, Panel, Reveal, Button, Input, VipBadge } from "../components/ui";
 import { useAuth, supabase } from "../auth";
 import { cn } from "../utils/cn";
+import { useI18n, getLocalizedFallbackCreators } from "../i18n";
 
 export interface CreatorRankItem {
   id: string;
@@ -66,6 +67,7 @@ const FALLBACK_CREATORS: CreatorRankItem[] = [
 
 export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => void }) {
   const { user } = useAuth();
+  const { t, language } = useI18n();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creators, setCreators] = useState<CreatorRankItem[]>([]);
@@ -75,15 +77,15 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
   const [likingId, setLikingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 100);
-    return () => clearTimeout(t);
+    const tTimer = setTimeout(() => setMounted(true), 100);
+    return () => clearTimeout(tTimer);
   }, []);
 
   // Busca criadores e dados do ranking
   const fetchRanking = useCallback(async () => {
     setLoading(true);
     if (!supabase) {
-      setCreators(FALLBACK_CREATORS);
+      setCreators(getLocalizedFallbackCreators(language));
       setLoading(false);
       return;
     }
@@ -144,7 +146,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
           });
           setCreators(mapped);
         } else {
-          setCreators(FALLBACK_CREATORS);
+          setCreators(getLocalizedFallbackCreators(language));
         }
       }
 
@@ -177,18 +179,18 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
   // Curtir ou descurtir perfil diretamente do ranking
   const handleToggleLike = async (creator: CreatorRankItem) => {
     if (!user || user.provider === "demo") {
-      alert("Apenas criadores autenticados com conta podem curtir perfis no StudioOS.");
+      alert(t("ranking.auth_required_to_like", {}, "Apenas criadores autenticados com conta podem curtir perfis no StudioOS."));
       onGo("login");
       return;
     }
 
     if (user.is_temporary) {
-      alert("Contas de teste não podem curtir perfis. Crie uma conta definitiva para interagir.");
+      alert(t("ranking.test_cannot_like", {}, "Contas de teste não podem curtir perfis. Crie uma conta definitiva para interagir."));
       return;
     }
 
     if (creator.id === user.id) {
-      alert("Você não pode curtir o seu próprio perfil.");
+      alert(t("ranking.cannot_like_self", {}, "Você não pode curtir o seu próprio perfil."));
       return;
     }
 
@@ -301,14 +303,13 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/30 bg-signal-500/10 px-3 py-1 font-mono text-[10.5px] font-semibold tracking-[0.2em] text-signal-400 uppercase">
               <Icon name="trophy" className="h-3.5 w-3.5 text-signal-400" />
-              Classificação Geral do StudioOS
+              {t("ranking.overall_badge", undefined, "Classificação Geral do StudioOS")}
             </div>
             <h1 className="mt-3.5 font-display text-[clamp(2rem,5vw,3.2rem)] font-extrabold tracking-[-0.03em] text-bone-50">
-              Ranking de Criadores
+              {t("ranking.title", undefined, "Ranking de Criadores")}
             </h1>
             <p className="mt-2.5 max-w-2xl text-[14.5px] leading-relaxed text-bone-400">
-              Acompanhe os criadores que estão liderando a comunidade em reputação, entrega de projetos
-              finalizados e ideação contínua no estúdio.
+              {t("ranking.subtitle", undefined, "Acompanhe os criadores que estão liderando a comunidade em reputação, entrega de projetos finalizados e ideação contínua no estúdio.")}
             </p>
           </div>
 
@@ -318,10 +319,10 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
               onClick={fetchRanking}
               disabled={loading}
               className="inline-flex items-center gap-2 rounded-lg border border-ink-800 bg-ink-900/80 px-3.5 py-2.5 font-mono text-[11px] font-medium tracking-[0.14em] text-bone-300 uppercase transition-all hover:border-ink-700 hover:text-bone-50 active:scale-95 disabled:opacity-50"
-              title="Atualizar dados do ranking"
+              title={t("ranking.refresh_hint", undefined, "Atualizar dados do ranking")}
             >
               <Icon name="refresh" className={cn("h-3.5 w-3.5", loading && "animate-spin text-signal-400")} />
-              Atualizar
+              {t("common.refresh", undefined, "Atualizar")}
             </button>
             {user && (
               <button
@@ -329,7 +330,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                 className="inline-flex items-center gap-2 rounded-lg border border-signal-400/40 bg-signal-400/10 px-4 py-2.5 font-mono text-[11px] font-bold tracking-[0.14em] text-signal-400 uppercase transition-all hover:bg-signal-400 hover:text-ink-950"
               >
                 <Icon name="user" className="h-3.5 w-3.5" />
-                Meu Perfil
+                {t("ranking.my_profile", undefined, "Meu Perfil")}
               </button>
             )}
           </div>
@@ -348,35 +349,35 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-display text-[17px] font-bold text-bone-50">
-                      Você está na {currentUserIndex + 1}ª posição
+                      {t("ranking.your_position", { position: currentUserIndex + 1 }, `Você está na ${currentUserIndex + 1}ª posição`)}
                     </span>
                     <span className="rounded bg-signal-500/20 px-2 py-0.5 font-mono text-[10px] font-semibold text-signal-300 uppercase">
-                      Seu Perfil
+                      {t("ranking.your_profile_badge", undefined, "Seu Perfil")}
                     </span>
                   </div>
                   <p className="mt-0.5 text-xs text-bone-400">
-                    Continue ranqueando ideias e concluindo projetos para subir rumo ao Top 3!
+                    {t("ranking.keep_ranking", undefined, "Continue ranqueando ideias e concluindo projetos para subir rumo ao Top 3!")}
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-4 border-t border-ink-800/80 pt-3 sm:border-t-0 sm:pt-0">
                 <div className="text-right">
-                  <div className="font-mono text-[9px] tracking-wider text-ink-400 uppercase">Suas Curtidas</div>
+                  <div className="font-mono text-[9px] tracking-wider text-ink-400 uppercase">{t("ranking.your_likes", undefined, "Suas Curtidas")}</div>
                   <div className="font-display text-lg font-bold text-signal-400">
                     {sortedCreators[currentUserIndex]?.likes_count || 0}
                   </div>
                 </div>
                 <div className="h-7 w-px bg-ink-800" />
                 <div className="text-right">
-                  <div className="font-mono text-[9px] tracking-wider text-ink-400 uppercase">Concluídos</div>
+                  <div className="font-mono text-[9px] tracking-wider text-ink-400 uppercase">{t("ranking.completed", undefined, "Concluídos")}</div>
                   <div className="font-display text-lg font-bold text-mint-400">
                     {sortedCreators[currentUserIndex]?.completed_projects || 0}
                   </div>
                 </div>
                 <div className="h-7 w-px bg-ink-800" />
                 <div className="text-right">
-                  <div className="font-mono text-[9px] tracking-wider text-ink-400 uppercase">Ideias</div>
+                  <div className="font-mono text-[9px] tracking-wider text-ink-400 uppercase">{t("ranking.ideas", undefined, "Ideias")}</div>
                   <div className="font-display text-lg font-bold text-sun-400">
                     {sortedCreators[currentUserIndex]?.ideias_ranqueadas || 0}
                   </div>
@@ -392,16 +393,16 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
         {/* Navigation Tabs */}
         <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-ink-800 bg-ink-950/70 p-1">
           {[
-            { id: "global", label: "Score Global", icon: "trophy", hint: "Equilíbrio geral" },
-            { id: "likes", label: "Mais Curtidos", icon: "heart", hint: "Por curtidas no perfil" },
-            { id: "projects", label: "Projetos Concluídos", icon: "check", hint: "Por entregas finalizadas" },
-            { id: "ideas", label: "Ideias Ranqueadas", icon: "target", hint: "Por ideação no estúdio" },
-          ].map((t) => {
-            const isTabActive = activeTab === t.id;
+            { id: "global", label: t("ranking.tab_global", undefined, "Score Global"), icon: "trophy", hint: t("ranking.tab_global_hint", undefined, "Equilíbrio geral") },
+            { id: "likes", label: t("ranking.tab_likes", undefined, "Mais Curtidos"), icon: "heart", hint: t("ranking.tab_likes_hint", undefined, "Por curtidas no perfil") },
+            { id: "projects", label: t("ranking.tab_projects", undefined, "Projetos Concluídos"), icon: "check", hint: t("ranking.tab_projects_hint", undefined, "Por entregas finalizadas") },
+            { id: "ideas", label: t("ranking.tab_ideas", undefined, "Ideias Ranqueadas"), icon: "target", hint: t("ranking.tab_ideas_hint", undefined, "Por ideação no estúdio") },
+          ].map((tTab) => {
+            const isTabActive = activeTab === tTab.id;
             return (
               <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id as SortTab)}
+                key={tTab.id}
+                onClick={() => setActiveTab(tTab.id as SortTab)}
                 className={cn(
                   "flex items-center gap-2 rounded-md px-3.5 py-2 text-xs font-semibold transition-all",
                   isTabActive
@@ -409,8 +410,8 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                     : "text-bone-400 hover:bg-ink-900 hover:text-bone-100"
                 )}
               >
-                <Icon name={t.icon} className={cn("h-3.5 w-3.5", isTabActive ? "text-ink-950" : "text-ink-400")} />
-                <span>{t.label}</span>
+                <Icon name={tTab.icon} className={cn("h-3.5 w-3.5", isTabActive ? "text-ink-950" : "text-ink-400")} />
+                <span>{tTab.label}</span>
               </button>
             );
           })}
@@ -422,7 +423,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por criador ou @canal…"
+            placeholder={t("ranking.search_placeholder", undefined, "Buscar por criador ou @canal…")}
             className="w-full rounded-lg border border-ink-800 bg-ink-900/90 px-3.5 py-2 pl-9 text-xs text-bone-100 placeholder-ink-500 transition-colors focus:border-signal-400/50 focus:outline-none"
           />
           <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-500">
@@ -447,11 +448,11 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
         <div className="mt-10">
           <div className="mb-4 flex items-center justify-between">
             <div className="font-mono text-[10.5px] font-semibold tracking-[0.2em] text-ink-400 uppercase">
-              Destaques do Pódio · Top 3
+              {t("ranking.podium_top3", undefined, "Destaques do Pódio · Top 3")}
             </div>
             <div className="font-mono text-[10.5px] text-ink-500">
-              Ordenado por: <span className="font-bold text-bone-200">
-                {activeTab === "global" ? "Score Global" : activeTab === "likes" ? "Curtidas" : activeTab === "projects" ? "Projetos Concluídos" : "Ideias Ranqueadas"}
+              {t("ranking.sorted_by", undefined, "Ordenado por:")} <span className="font-bold text-bone-200">
+                {activeTab === "global" ? t("ranking.tab_global", undefined, "Score Global") : activeTab === "likes" ? t("ranking.tab_likes", undefined, "Curtidas") : activeTab === "projects" ? t("ranking.tab_projects", undefined, "Projetos Concluídos") : t("ranking.tab_ideas", undefined, "Ideias Ranqueadas")}
               </span>
             </div>
           </div>
@@ -500,12 +501,12 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                         {isGold && <Icon name="crown" className="h-3.5 w-3.5 text-amber-300" />}
                         {isSilver && <Icon name="medal" className="h-3.5 w-3.5 text-bone-200" />}
                         {isBronze && <Icon name="award" className="h-3.5 w-3.5 text-signal-300" />}
-                        {idx + 1}º Lugar
+                        {t("ranking.place", { place: idx + 1 }, `${idx + 1}º Lugar`)}
                       </div>
 
                       {isSelf && (
                         <span className="rounded bg-signal-400/10 px-2 py-0.5 font-mono text-[9.5px] font-bold text-signal-400 uppercase">
-                          Você
+                          {t("ranking.you", undefined, "Você")}
                         </span>
                       )}
                     </div>
@@ -573,12 +574,12 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                         <div>
                           <div className="font-mono text-[9px] tracking-widest text-ink-400 uppercase">
                             {activeTab === "global"
-                              ? "SCORE GLOBAL"
+                              ? t("ranking.metric_global", undefined, "SCORE GLOBAL")
                               : activeTab === "likes"
-                                ? "CURTIDAS NO PERFIL"
+                                ? t("ranking.metric_likes", undefined, "CURTIDAS NO PERFIL")
                                 : activeTab === "projects"
-                                  ? "PROJETOS CONCLUÍDOS"
-                                  : "IDEIAS RANQUEADAS"}
+                                  ? t("ranking.metric_projects", undefined, "PROJETOS CONCLUÍDOS")
+                                  : t("ranking.metric_ideas", undefined, "IDEIAS RANQUEADAS")}
                           </div>
                           <div
                             className={cn(
@@ -609,12 +610,12 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                           )}
                           title={
                             isSelf
-                              ? "Você não pode curtir seu próprio perfil"
+                              ? t("ranking.cannot_like_self", undefined, "Você não pode curtir seu próprio perfil")
                               : user?.is_temporary
-                              ? "Contas de teste não podem curtir perfis"
+                              ? t("ranking.test_cannot_like", undefined, "Contas de teste não podem curtir perfis")
                               : hasLiked
-                              ? "Descurtir perfil"
-                              : "Curtir este criador"
+                              ? t("ranking.unlike", undefined, "Descurtir perfil")
+                              : t("ranking.like", undefined, "Curtir este criador")
                           }
                         >
                           <Icon
@@ -628,15 +629,15 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                       {/* Mini Breakdown das 3 métricas essenciais */}
                       <div className="mt-3 grid grid-cols-3 gap-2 border-t border-ink-800/80 pt-2.5 text-center">
                         <div>
-                          <div className="font-mono text-[8.5px] text-ink-500 uppercase">Curtidas</div>
+                          <div className="font-mono text-[8.5px] text-ink-500 uppercase">{t("ranking.breakdown_likes", undefined, "Curtidas")}</div>
                           <div className="mt-0.5 font-mono text-xs font-bold text-signal-400">{creator.likes_count}</div>
                         </div>
                         <div>
-                          <div className="font-mono text-[8.5px] text-ink-500 uppercase">Projetos</div>
+                          <div className="font-mono text-[8.5px] text-ink-500 uppercase">{t("ranking.breakdown_projects", undefined, "Projetos")}</div>
                           <div className="mt-0.5 font-mono text-xs font-bold text-mint-400">{creator.completed_projects}</div>
                         </div>
                         <div>
-                          <div className="font-mono text-[8.5px] text-ink-500 uppercase">Ideias</div>
+                          <div className="font-mono text-[8.5px] text-ink-500 uppercase">{t("ranking.breakdown_ideas", undefined, "Ideias")}</div>
                           <div className="mt-0.5 font-mono text-xs font-bold text-sun-400">{creator.ideias_ranqueadas}</div>
                         </div>
                       </div>
@@ -649,7 +650,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                       onClick={() => onGo("perfil", creator.channel)}
                       className="flex w-full items-center justify-center gap-2 rounded-lg border border-ink-800 bg-ink-900/90 py-2.5 text-xs font-bold text-bone-200 transition-all hover:border-signal-400/50 hover:bg-signal-400/10 hover:text-signal-300"
                     >
-                      <span>Ver Perfil Público</span>
+                      <span>{t("ranking.view_public_profile", undefined, "Ver Perfil Público")}</span>
                       <Icon name="arrow" className="h-3 w-3" />
                     </button>
                   </div>
@@ -664,10 +665,10 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
       <div className="mt-12">
         <div className="mb-4 flex items-center justify-between">
           <div className="font-mono text-[10.5px] font-semibold tracking-[0.2em] text-ink-400 uppercase">
-            {search ? `Resultados da busca (${sortedCreators.length})` : `Classificação Geral (${sortedCreators.length} criadores)`}
+            {search ? t("ranking.search_results", { count: sortedCreators.length }, `Resultados da busca (${sortedCreators.length})`) : t("ranking.overall_creators", { count: sortedCreators.length }, `Classificação Geral (${sortedCreators.length} criadores)`)}
           </div>
           <div className="font-mono text-[10px] text-ink-500">
-            Atualização em tempo real · StudioOS
+            {t("ranking.realtime_update", undefined, "Atualização em tempo real · StudioOS")}
           </div>
         </div>
 
@@ -675,14 +676,14 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
           <div className="flex h-48 items-center justify-center rounded-xl border border-ink-800 bg-ink-950/60">
             <div className="flex items-center gap-3 font-mono text-xs text-bone-400">
               <Icon name="refresh" className="h-4 w-4 animate-spin text-signal-400" />
-              Carregando classificação dos criadores…
+              {t("ranking.loading", undefined, "Carregando classificação dos criadores…")}
             </div>
           </div>
         ) : sortedCreators.length === 0 ? (
           <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-dashed border-ink-800 bg-ink-950/30 p-8 text-center">
             <Icon name="target" className="h-8 w-8 text-ink-500" />
-            <p className="mt-3 text-sm font-semibold text-bone-300">Nenhum criador encontrado</p>
-            <p className="mt-1 text-xs text-ink-500">Tente buscar por outro termo ou limpe o filtro.</p>
+            <p className="mt-3 text-sm font-semibold text-bone-300">{t("ranking.empty_title", undefined, "Nenhum criador encontrado")}</p>
+            <p className="mt-1 text-xs text-ink-500">{t("ranking.empty_desc", undefined, "Tente buscar por outro termo ou limpe o filtro.")}</p>
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-ink-800 bg-ink-950/90">
@@ -748,7 +749,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                           </button>
                           {isSelf && (
                             <span className="rounded bg-signal-400/20 px-1.5 py-0.2 font-mono text-[9px] font-bold text-signal-300 uppercase">
-                              Você
+                              {t("ranking.you", undefined, "Você")}
                             </span>
                           )}
                         </div>
@@ -776,7 +777,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                         <div className="text-right">
                           <div className="flex items-center justify-end gap-1 font-mono text-[9px] text-ink-400 uppercase">
                             <Icon name="heart" className="h-2.5 w-2.5 text-signal-400" />
-                            <span>Curtidas</span>
+                            <span>{t("ranking.breakdown_likes", undefined, "Curtidas")}</span>
                           </div>
                           <div className="mt-0.5 font-mono text-xs font-bold text-signal-400 tabular-nums">
                             {creator.likes_count}
@@ -787,7 +788,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                         <div className="text-right">
                           <div className="flex items-center justify-end gap-1 font-mono text-[9px] text-ink-400 uppercase">
                             <Icon name="check" className="h-2.5 w-2.5 text-mint-400" />
-                            <span>Concluídos</span>
+                            <span>{t("ranking.breakdown_projects", undefined, "Concluídos")}</span>
                           </div>
                           <div className="mt-0.5 font-mono text-xs font-bold text-mint-400 tabular-nums">
                             {creator.completed_projects}
@@ -798,7 +799,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                         <div className="text-right">
                           <div className="flex items-center justify-end gap-1 font-mono text-[9px] text-ink-400 uppercase">
                             <Icon name="target" className="h-2.5 w-2.5 text-sun-400" />
-                            <span>Ideias</span>
+                            <span>{t("ranking.breakdown_ideas", undefined, "Ideias")}</span>
                           </div>
                           <div className="mt-0.5 font-mono text-xs font-bold text-sun-400 tabular-nums">
                             {creator.ideias_ranqueadas}
@@ -807,7 +808,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
 
                         {/* Score Global */}
                         <div className="hidden text-right lg:block">
-                          <div className="font-mono text-[9px] text-ink-400 uppercase">Score Global</div>
+                          <div className="font-mono text-[9px] text-ink-400 uppercase">{t("ranking.tab_global", undefined, "Score Global")}</div>
                           <div className="mt-0.5 font-mono text-xs font-bold text-bone-200 tabular-nums">
                             {calculateScore(creator)}
                           </div>
@@ -829,12 +830,12 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                           )}
                           title={
                             isSelf
-                              ? "Seu perfil"
+                              ? t("ranking.cannot_like_self", undefined, "Seu perfil")
                               : user?.is_temporary
-                              ? "Contas de teste não podem curtir perfis"
+                              ? t("ranking.test_cannot_like", undefined, "Contas de teste não podem curtir perfis")
                               : hasLiked
-                              ? "Descurtir"
-                              : "Curtir"
+                              ? t("ranking.unlike", undefined, "Descurtir")
+                              : t("ranking.like", undefined, "Curtir")
                           }
                         >
                           <Icon
@@ -849,7 +850,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
                           onClick={() => onGo("perfil", creator.channel)}
                           className="flex h-8 items-center gap-1.5 rounded-md border border-ink-800 bg-ink-900/80 px-3 font-mono text-[11px] font-semibold text-bone-300 transition-colors hover:border-bone-400 hover:text-bone-50"
                         >
-                          <span>Perfil</span>
+                          <span>{t("ranking.profile_button", undefined, "Perfil")}</span>
                           <Icon name="arrow" className="h-2.5 w-2.5" />
                         </button>
                       </div>
@@ -867,19 +868,18 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div className="max-w-xl">
             <div className="font-mono text-[10px] font-bold tracking-[0.2em] text-signal-400 uppercase">
-              Metodologia de Medição · StudioOS
+              {t("ranking.methodology_kicker", undefined, "Metodologia de Medição · StudioOS")}
             </div>
             <h2 className="mt-2 font-display text-xl font-extrabold text-bone-100 sm:text-2xl">
-              Como medimos e ranqueamos os criadores?
+              {t("ranking.methodology_title", undefined, "Como medimos e ranqueamos os criadores?")}
             </h2>
             <p className="mt-2 text-xs leading-relaxed text-bone-400">
-              O ecossistema StudioOS foi estruturado para valorizar não apenas a popularidade superficial,
-              mas o ciclo completo de um criador profissional de conteúdo: da idealização à audiência.
+              {t("ranking.methodology_desc", undefined, "O ecossistema StudioOS foi estruturado para valorizar não apenas a popularidade superficial, mas o ciclo completo de um criador profissional de conteúdo: da idealização à audiência.")}
             </p>
           </div>
 
           <div className="rounded-lg border border-signal-500/20 bg-signal-500/5 px-4 py-3 font-mono text-xs text-signal-300">
-            Funil: <span className="font-bold text-bone-50">Ideação</span> → <span className="font-bold text-bone-50">Execução</span> → <span className="font-bold text-bone-50">Reconhecimento</span>
+            {t("ranking.funnel", undefined, "Funil:")} <span className="font-bold text-bone-50">{t("ranking.funnel_ideation", undefined, "Ideação")}</span> → <span className="font-bold text-bone-50">{t("ranking.funnel_execution", undefined, "Execução")}</span> → <span className="font-bold text-bone-50">{t("ranking.funnel_recognition", undefined, "Reconhecimento")}</span>
           </div>
         </div>
 
@@ -890,10 +890,10 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
               <Icon name="heart" className="h-4.5 w-4.5" />
             </div>
             <h3 className="mt-3.5 font-display text-base font-bold text-bone-100">
-              1. Curtidas no Perfil
+              {t("ranking.pillar1_title", undefined, "1. Curtidas no Perfil")}
             </h3>
             <p className="mt-1.5 text-xs leading-relaxed text-bone-400">
-              <strong>Mede a autoridade social e reconhecimento da comunidade.</strong> Apenas criadores com conta ativa podem curtir outros perfis, protegendo contra automações.
+              {t("ranking.pillar1_desc", undefined, "Mede a autoridade social e reconhecimento da comunidade. Apenas criadores com conta ativa podem curtir outros perfis, protegendo contra automações.")}
             </p>
           </div>
 
@@ -903,10 +903,10 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
               <Icon name="check" className="h-4.5 w-4.5" />
             </div>
             <h3 className="mt-3.5 font-display text-base font-bold text-bone-100">
-              2. Projetos Concluídos
+              {t("ranking.pillar2_title", undefined, "2. Projetos Concluídos")}
             </h3>
             <p className="mt-1.5 text-xs leading-relaxed text-bone-400">
-              <strong>Mede a capacidade de execução e entrega.</strong> Avalia quantos projetos saíram do planejamento, cumpriram todas as etapas de roteiro e gravação, e chegaram ao status de concluído.
+              {t("ranking.pillar2_desc", undefined, "Mede a capacidade de execução e entrega. Avalia quantos projetos saíram do planejamento, cumpriram todas as etapas de roteiro e gravação, e chegaram ao status de concluído.")}
             </p>
           </div>
 
@@ -916,10 +916,10 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
               <Icon name="target" className="h-4.5 w-4.5" />
             </div>
             <h3 className="mt-3.5 font-display text-base font-bold text-bone-100">
-              3. Ideias Ranqueadas
+              {t("ranking.pillar3_title", undefined, "3. Ideias Ranqueadas")}
             </h3>
             <p className="mt-1.5 text-xs leading-relaxed text-bone-400">
-              <strong>Mede a exploração criativa e rigor de validação.</strong> O motor do StudioOS avalia ideias com nota preditiva de 0 a 100 antes de investir horas de produção, garantindo que o canal só produza o melhor.
+              {t("ranking.pillar3_desc", undefined, "Mede a exploração criativa e rigor de validação. O motor do StudioOS avalia ideias com nota preditiva de 0 a 100 antes de investir horas de produção, garantindo que o canal só produza o melhor.")}
             </p>
           </div>
         </div>

@@ -8,6 +8,8 @@ import { useExampleMode } from "../auth";
 import { useToolRestore } from "../utils/toolStateRestore";
 import { getDynamicSuggestions, isCalibrated, type Calib } from "../calibration";
 import { CalibrationNotice } from "../components/CalibrationNotice";
+import { useI18n, getCurrentLanguage } from "../i18n";
+import { getLocalizedToolExamples, getLocalizedExampleCalib } from "../i18n/examples";
 
 const STOP = new Set([
   "a","o","as","os","um","uma","de","do","da","dos","das","em","no","na","nos","nas","com","sem",
@@ -33,7 +35,7 @@ type Crit = {
   accent: "signal" | "sky" | "mint" | "plum" | "oxide";
 };
 
-export function evaluate(idea: string, niche: string): { crits: Crit[]; total: number } {
+export function evaluate(idea: string, niche: string, tFn?: (k: string, p?: any, fb?: string) => string): { crits: Crit[]; total: number } {
   const text = idea.trim();
   const words = text.split(/\s+/).filter(Boolean);
   const kw = keywords(text);
@@ -73,56 +75,56 @@ export function evaluate(idea: string, niche: string): { crits: Crit[]; total: n
   const crits: Crit[] = [
     {
       key: "pool",
-      label: "Pool de Atenção",
+      label: tFn ? tFn("tools.rank.crit_pool", undefined, "Pool de Atenção") : "Pool de Atenção",
       score: pool,
       accent: "signal",
       why: money
-        ? "Dinheiro amplia o teto de espectadores."
-        : "Sem interesse universal (dinheiro, tempo, status). Teto baixo.",
+        ? (tFn ? tFn("tools.rank.why_pool_money", undefined, "Dinheiro amplia o teto de espectadores.") : "Dinheiro amplia o teto de espectadores.")
+        : (tFn ? tFn("tools.rank.why_pool_nomoney", undefined, "Sem interesse universal (dinheiro, tempo, status). Teto baixo.") : "Sem interesse universal (dinheiro, tempo, status). Teto baixo."),
     },
     {
       key: "prova",
-      label: "Prova Visual",
+      label: tFn ? tFn("tools.rank.crit_proof", undefined, "Prova Visual") : "Prova Visual",
       score: prova,
       accent: "sky",
       why: proof
-        ? "Tem algo que dá para mostrar na tela — retenção sobe."
-        : "Nada visível na tela. Adicione print, extrato, gráfico ou teste ao vivo.",
+        ? (tFn ? tFn("tools.rank.why_proof_yes", undefined, "Tem algo que dá para mostrar na tela — retenção sobe.") : "Tem algo que dá para mostrar na tela — retenção sobe.")
+        : (tFn ? tFn("tools.rank.why_proof_no", undefined, "Nada visível na tela. Adicione print, extrato, gráfico ou teste ao vivo.") : "Nada visível na tela. Adicione print, extrato, gráfico ou teste ao vivo."),
     },
     {
       key: "conexao",
-      label: "Conexão Pessoal",
+      label: tFn ? tFn("tools.rank.crit_connection", undefined, "Conexão Pessoal") : "Conexão Pessoal",
       score: conexao,
       accent: "mint",
       why: first
-        ? "1ª pessoa + consequência: parece história, não aula."
-        : "Falta 1ª pessoa. Troque “como fazer” por “o que aconteceu comigo”.",
+        ? (tFn ? tFn("tools.rank.why_connection_first", undefined, "1ª pessoa + consequência: parece história, não aula.") : "1ª pessoa + consequência: parece história, não aula.")
+        : (tFn ? tFn("tools.rank.why_connection_nofirst", undefined, "Falta 1ª pessoa. Troque “como fazer” por “o que aconteceu comigo”.") : "Falta 1ª pessoa. Troque “como fazer” por “o que aconteceu comigo”."),
     },
     {
       key: "fit",
-      label: "Fit com o Canal",
+      label: tFn ? tFn("tools.rank.crit_fit", undefined, "Fit com o Canal") : "Fit com o Canal",
       score: fit,
       accent: "plum",
       why: nkw.size
         ? overlap.length
-          ? `${overlap.length} palavra(s) do nicho calibrado: ${overlap.slice(0, 3).join(", ")}.`
-          : "Fora do vocabulário do nicho calibrado."
-        : "Calibre o nicho para medir o fit de verdade.",
+          ? (tFn ? tFn("tools.rank.why_fit_overlap", { count: overlap.length, words: overlap.slice(0, 3).join(", ") }, `${overlap.length} palavra(s) do nicho calibrado: ${overlap.slice(0, 3).join(", ")}.`) : `${overlap.length} palavra(s) do nicho calibrado: ${overlap.slice(0, 3).join(", ")}.`)
+          : (tFn ? tFn("tools.rank.why_fit_no_overlap", undefined, "Fora do vocabulário do nicho calibrado.") : "Fora do vocabulário do nicho calibrado.")
+        : (tFn ? tFn("tools.rank.why_fit_not_calibrated", undefined, "Calibre o nicho para medir o fit de verdade.") : "Calibre o nicho para medir o fit de verdade."),
     },
     {
       key: "outlier",
-      label: "Fator Outlier",
+      label: tFn ? tFn("tools.rank.crit_outlier", undefined, "Fator Outlier") : "Fator Outlier",
       score: outlier,
       accent: "oxide",
       why: tension
-        ? "Tem tensão/confissão — quebra o padrão do feed."
-        : "Previsível demais. Adicione uma quebra de expectativa.",
+        ? (tFn ? tFn("tools.rank.why_outlier_tension", undefined, "Tem tensão/confissão — quebra o padrão do feed.") : "Tem tensão/confissão — quebra o padrão do feed.")
+        : (tFn ? tFn("tools.rank.why_outlier_notension", undefined, "Previsível demais. Adicione uma quebra de expectativa.") : "Previsível demais. Adicione uma quebra de expectativa."),
     },
   ];
 
   if (!text) {
     return {
-      crits: crits.map((crit) => ({ ...crit, score: 0, why: "Adicione uma ideia para avaliar este critério." })),
+      crits: crits.map((crit) => ({ ...crit, score: 0, why: tFn ? tFn("tools.rank.why_empty_crit", undefined, "Adicione uma ideia para avaliar este critério.") : "Adicione uma ideia para avaliar este critério." })),
       total: 0,
     };
   }
@@ -133,11 +135,31 @@ export function evaluate(idea: string, niche: string): { crits: Crit[]; total: n
   return { crits, total: Math.round(total * 10) / 10 };
 }
 
-export function verdict(total: number) {
-  if (total >= 8) return { tag: "Potencial altíssimo", act: "Produzir agora", tone: "mint", note: "Coloque na frente da fila de gravação." };
-  if (total >= 6) return { tag: "Boa ideia", act: "Ajustar ângulo", tone: "signal", note: "Um critério puxa a média para baixo. Corrija antes de gravar." };
-  if (total >= 4) return { tag: "Morna", act: "Reempacotar", tone: "oxide", note: "O tema pode funcionar, o ângulo não. Troque a variável." };
-  return { tag: "Fraca", act: "Descartar", tone: "oxide", note: "Teto baixo e sem prova. Volte ao banco de ideias." };
+export function verdict(total: number, tFn?: (k: string, p?: any, fb?: string) => string) {
+  if (total >= 8) return {
+    tag: tFn ? tFn("tools.rank.verdict_ultra_tag", undefined, "Potencial altíssimo") : "Potencial altíssimo",
+    act: tFn ? tFn("tools.rank.verdict_ultra_act", undefined, "Produzir agora") : "Produzir agora",
+    tone: "mint",
+    note: tFn ? tFn("tools.rank.verdict_ultra_note", undefined, "Coloque na frente da fila de gravação.") : "Coloque na frente da fila de gravação."
+  };
+  if (total >= 6) return {
+    tag: tFn ? tFn("tools.rank.verdict_good_tag", undefined, "Boa ideia") : "Boa ideia",
+    act: tFn ? tFn("tools.rank.verdict_good_act", undefined, "Ajustar ângulo") : "Ajustar ângulo",
+    tone: "signal",
+    note: tFn ? tFn("tools.rank.verdict_good_note", undefined, "Um critério puxa a média para baixo. Corrija antes de gravar.") : "Um critério puxa a média para baixo. Corrija antes de gravar."
+  };
+  if (total >= 4) return {
+    tag: tFn ? tFn("tools.rank.verdict_warm_tag", undefined, "Morna") : "Morna",
+    act: tFn ? tFn("tools.rank.verdict_warm_act", undefined, "Reempacotar") : "Reempacotar",
+    tone: "oxide",
+    note: tFn ? tFn("tools.rank.verdict_warm_note", undefined, "O tema pode funcionar, o ângulo não. Troque a variável.") : "O tema pode funcionar, o ângulo não. Troque a variável."
+  };
+  return {
+    tag: tFn ? tFn("tools.rank.verdict_weak_tag", undefined, "Fraca") : "Fraca",
+    act: tFn ? tFn("tools.rank.verdict_weak_act", undefined, "Descartar") : "Descartar",
+    tone: "oxide",
+    note: tFn ? tFn("tools.rank.verdict_weak_note", undefined, "Teto baixo e sem prova. Volte ao banco de ideias.") : "Teto baixo e sem prova. Volte ao banco de ideias."
+  };
 }
 
 export function RankIdeia({
@@ -155,10 +177,11 @@ export function RankIdeia({
   profileName?: string;
   profileColor?: string;
 }) {
+  const { t } = useI18n();
   const examples = useExampleMode();
   const effectiveNiche = niche ?? calib?.niche ?? "";
   const [localNiche, setLocalNiche] = useState(effectiveNiche);
-  const [idea, setIdea] = useState(examples ? "Eu parei de investir R$100 por mês em FIIs e mostrei o extrato na tela" : "");
+  const [idea, setIdea] = useState(examples ? getLocalizedToolExamples(getCurrentLanguage()).rankIdea : "");
   const [show, setShow] = useState(true);
 
   useEffect(() => {
@@ -167,7 +190,7 @@ export function RankIdeia({
     }
   }, [effectiveNiche]);
 
-  const activeSuggestions = useMemo(() => getDynamicSuggestions(calib), [calib]);
+  const activeSuggestions = useMemo(() => getDynamicSuggestions(calib, t), [calib, t]);
   const calibrated = isCalibrated(calib);
 
   const restore = (content: string) => {
@@ -188,21 +211,21 @@ export function RankIdeia({
     }
   });
 
-  const { crits, total } = useMemo(() => evaluate(idea, localNiche), [idea, localNiche]);
-  const v = verdict(total);
+  const { crits, total } = useMemo(() => evaluate(idea, localNiche, t), [idea, localNiche, t]);
+  const v = verdict(total, t);
 
-  const friendlySummary = `Classificação: ${v.tag} (Nota ${total.toFixed(1)}/10) · Próximo passo: ${v.act}`;
+  const friendlySummary = t("tools.rank.friendly_summary", { tag: v.tag, score: total.toFixed(1), act: v.act }, `Classificação: ${v.tag} (Nota ${total.toFixed(1)}/10) · Próximo passo: ${v.act}`);
 
   useAutosave(
     () => ({
       tool: "rank",
-      toolName: "Rank de Ideia",
+      toolName: t("tools.rank.name", undefined, "Rank de Ideia"),
       title: idea.slice(0, 90),
       summary: friendlySummary,
       tag: `${total.toFixed(1)}/10`,
       content: `RATING: ${total.toFixed(1)}/10 — ${v.tag} (${v.act})\nIDEIA: ${idea}\nNICHO: ${localNiche || "(não calibrado)"}\n\nCRITÉRIOS\n${crits.map((c) => `${c.label.padEnd(18, " ")} ${c.score}/10 — ${c.why}`).join("\n")}\n\nPESOS\npool 26% · prova 20% · conexão 18% · fit 20% · outlier 16%`,
     }),
-    [idea, localNiche, total, friendlySummary],
+    [idea, localNiche, total, friendlySummary, t],
     6
   );
 
@@ -216,21 +239,21 @@ export function RankIdeia({
   return (
     <ToolShell
       id="rank"
-      title="Rank de Ideia"
+      title={t("tools.rank.name", undefined, "Rank de Ideia")}
       accent="signal"
-      lede="Régua de 0 a 10 calibrada no seu canal. Cinco critérios, pesos fixos, zero achismo: a ideia passa, ajusta ou morre antes de você gastar um dia de gravação."
+      lede={t("tools.rank.lede", undefined, "Régua de 0 a 10 calibrada no seu canal. Cinco critérios, pesos fixos, zero achismo: a ideia passa, ajusta ou morre antes de você gastar um dia de gravação.")}
       meta={[
-        { k: "Critérios", v: "5" },
-        { k: "Escala", v: "0–10" },
-        { k: "Corte", v: "≥ 8.0" },
-        { k: "Avaliadas", v: "128" },
+        { k: t("tools.rank.meta_crits", undefined, "Critérios"), v: "5" },
+        { k: t("tools.rank.meta_scale", undefined, "Escala"), v: "0–10" },
+        { k: t("tools.rank.meta_cutoff", undefined, "Corte"), v: "≥ 8.0" },
+        { k: t("tools.rank.meta_evaluated", undefined, "Avaliadas"), v: "128" },
       ]}
       onBack={onBack}
       onGo={onGo}
       saveItem={idea.trim() ? {
         type: "rank",
-        group: "Criação",
-        toolName: "Rank de Ideia",
+        group: "Criação" as const,
+        toolName: t("tools.rank.name", undefined, "Rank de Ideia"),
         title: idea.slice(0, 90),
         summary: friendlySummary,
         tag: `${total.toFixed(1)}/10`,
@@ -242,7 +265,7 @@ export function RankIdeia({
       } : null}
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
-          <Card title="Veredito" note="tempo real">
+          <Card title={t("tools.rank.verdict_title", undefined, "Veredito")} note={t("tools.rank.realtime", undefined, "tempo real")}>
             <div className="flex items-center gap-5">
               <div className="relative h-[124px] w-[124px] shrink-0">
                 <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
@@ -296,12 +319,12 @@ export function RankIdeia({
             </div>
           </Card>
 
-          <Card title="Histórico do avaliador" note={examples ? "acesso com conta" : `${recentRuns.length} recente(s)`} accent="bone">
+          <Card title={t("tools.rank.evaluator_history", undefined, "Histórico do avaliador")} note={examples ? t("tools.rank.account_access", undefined, "acesso com conta") : `${recentRuns.length} ${t("tools.rank.recent", undefined, "recente(s)")}`} accent="bone">
             {examples ? (
               <div>
-                <p className="text-[12px] leading-relaxed text-bone-400">Entre para consultar e restaurar suas análises.</p>
+                <p className="text-[12px] leading-relaxed text-bone-400">{t("tools.rank.login_desc", undefined, "Entre para consultar e restaurar suas análises.")}</p>
                 <Button size="sm" variant="outline" className="mt-3" icon="login" onClick={() => onGo("historico")}>
-                  Entrar para acessar
+                  {t("tools.rank.login_button", undefined, "Entrar para acessar")}
                 </Button>
               </div>
             ) : recentRuns.length ? (
@@ -314,7 +337,7 @@ export function RankIdeia({
                       <button
                         onClick={() => restore(run.content)}
                         className="group flex w-full items-center gap-2.5 rounded-md border border-ink-800 bg-ink-950/60 px-2.5 py-2 text-left transition-all duration-200 hover:border-signal-400/40 hover:bg-ink-850"
-                        title="Restaurar análise"
+                        title={t("tools.rank.restore_tooltip", undefined, "Restaurar análise")}
                       >
                         <Icon name="historico" className="h-3.5 w-3.5 shrink-0 text-ink-500 transition-colors group-hover:text-signal-400" />
                         <span className="min-w-0 flex-1 truncate text-[12px] text-bone-300 transition-colors group-hover:text-bone-50">
@@ -337,7 +360,7 @@ export function RankIdeia({
               </ul>
             ) : (
               <p className="py-2 text-center font-mono text-[10px] tracking-[0.14em] text-ink-400 uppercase">
-                cada análise vira registro aqui
+                {t("tools.rank.each_analysis_log", undefined, "cada análise vira registro aqui")}
               </p>
             )}
             {!examples && (
@@ -345,22 +368,22 @@ export function RankIdeia({
                 onClick={() => onGo("historico")}
                 className="mt-3 flex items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] text-ink-400 uppercase transition-colors hover:text-signal-400"
               >
-                ver todo o histórico
+                {t("tools.rank.see_full_history", undefined, "ver todo o histórico")}
                 <Icon name="arrow" className="h-3 w-3" strokeWidth={2.4} />
               </button>
             )}
           </Card>
 
-          <Card title="Próximo passo" accent="mint">
+          <Card title={t("tools.rank.next_step_title", undefined, "Próximo passo")} accent="mint">
             <p className="mb-3 text-[12.5px] leading-relaxed text-bone-400">
-              Ideia aprovada vira empacotamento. Leve o tema direto para o título e o hook.
+              {t("tools.rank.next_step_desc", undefined, "Ideia aprovada vira empacotamento. Leve o tema direto para o título e o hook.")}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" icon="type" onClick={() => onGo("titulos")}>
-                Gerar títulos
+                {t("tools.rank.gen_titles", undefined, "Gerar títulos")}
               </Button>
               <Button size="sm" variant="outline" icon="bolt" onClick={() => onGo("hooks")}>
-                Gerar hooks
+                {t("tools.rank.gen_hooks", undefined, "Gerar hooks")}
               </Button>
             </div>
           </Card>
@@ -372,13 +395,13 @@ export function RankIdeia({
         calibrated={calibrated}
         profileName={profileName}
         profileColor={profileColor}
-        toolName="Rank de Ideia"
+        toolName={t("tools.rank.name", undefined, "Rank de Ideia")}
         onGo={onGo}
         onGoCalib={() => onGo("calibracao")}
       />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]">
-        <Card title="Descreva a ideia do vídeo" note="análise ao digitar" accent="signal">
+        <Card title={t("tools.rank.input_card_title", undefined, "Descreva a ideia do vídeo")} note={t("tools.rank.typing_analysis", undefined, "análise ao digitar")} accent="signal">
           <Textarea
             rows={5}
             value={idea}
@@ -386,30 +409,30 @@ export function RankIdeia({
               setIdea(e.target.value);
               setShow(true);
             }}
-            placeholder="Ex.: Eu parei de investir R$100 em FIIs e o resultado foi pior que a poupança"
+            placeholder={t("tools.rank.input_placeholder", undefined, "Ex.: Eu parei de investir R$100 em FIIs e o resultado foi pior que a poupança")}
           />
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="font-mono text-[10px] tracking-[0.14em] text-ink-400 uppercase">
-              {idea.trim() ? idea.trim().split(/\s+/).length : 0} palavras
+              {idea.trim() ? idea.trim().split(/\s+/).length : 0} {t("tools.rank.words", undefined, "palavras")}
             </span>
             <span className="h-3 w-px bg-ink-700" />
             <span className="font-mono text-[10px] tracking-[0.14em] text-ink-400 uppercase">
-              {idea.length} caracteres
+              {idea.length} {t("tools.rank.chars", undefined, "caracteres")}
             </span>
             <span className="ml-auto font-mono text-[10px] tracking-[0.14em] text-mint-400 uppercase">
-              {show && idea.trim() ? "● analisado" : "○ aguardando"}
+              {show && idea.trim() ? t("tools.rank.analyzed", undefined, "● analisado") : t("tools.rank.waiting", undefined, "○ aguardando")}
             </span>
           </div>
 
           <div className="mt-5 space-y-2 border-t border-ink-800 pt-4">
             <div className="flex items-center justify-between pb-1">
               <span className="font-mono text-[9px] uppercase tracking-wider text-ink-400">
-                {calibrated ? `Sugestões para ${profileName || "este perfil"}` : "Sugestões de teste"}
+                {calibrated ? t("tools.rank.sugg_profile", { profile: profileName || t("tools.rank.this_profile", undefined, "este perfil") }, `Sugestões para ${profileName || "este perfil"}`) : t("tools.rank.test_sugg", undefined, "Sugestões de teste")}
               </span>
               {calibrated && (
                 <span className="flex items-center gap-1 font-mono text-[8.5px] uppercase tracking-wider text-mint-400">
                   <span className="h-1.5 w-1.5 rounded-full bg-mint-400" />
-                  calibradas
+                  {t("tools.rank.calibrated_badge", undefined, "calibradas")}
                 </span>
               )}
             </div>
@@ -428,9 +451,9 @@ export function RankIdeia({
           </div>
         </Card>
 
-        <Card title="Calibração" note={profileName ? `perfil: ${profileName}` : "base"} accent="bone">
+        <Card title={t("tools.rank.calib_card_title", undefined, "Calibração")} note={profileName ? `${t("tools.rank.profile_prefix", undefined, "perfil:")} ${profileName}` : t("tools.rank.base", undefined, "base")} accent="bone">
           <div className="mb-2 flex items-center justify-between">
-            <Label hint="1 frase">Nicho do canal</Label>
+            <Label hint={t("tools.rank.one_phrase", undefined, "1 frase")}>{t("tools.rank.channel_niche", undefined, "Nicho do canal")}</Label>
             {profileName && (
               <span className="font-mono text-[9px] uppercase tracking-wider text-bone-400 flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: profileColor || "#F2B33D" }} />
@@ -442,7 +465,7 @@ export function RankIdeia({
             rows={3}
             value={localNiche}
             onChange={(e) => setLocalNiche(e.target.value)}
-            placeholder="Finanças pessoais para quem começa com pouco dinheiro"
+            placeholder={getLocalizedExampleCalib(getCurrentLanguage()).niche}
           />
           <div className="mt-3 flex flex-wrap gap-1.5">
             {keywords(localNiche)
@@ -457,25 +480,24 @@ export function RankIdeia({
               ))}
             {!keywords(localNiche).length && (
               <div className="flex flex-col gap-1 w-full pt-1">
-                <span className="font-mono text-[10px] text-ink-400">sem vocabulário calibrado</span>
+                <span className="font-mono text-[10px] text-ink-400">{t("tools.rank.no_vocab", undefined, "sem vocabulário calibrado")}</span>
                 <button
                   type="button"
                   onClick={() => onGo("calibracao")}
                   className="self-start font-mono text-[9.5px] uppercase tracking-wider text-signal-400 underline hover:text-signal-300 cursor-pointer"
                 >
-                  Calibrar canal agora →
+                  {t("tools.rank.calibrate_now", undefined, "Calibrar canal agora →")}
                 </button>
               </div>
             )}
           </div>
           <p className="mt-3 border-t border-ink-800 pt-3 text-[11.5px] leading-relaxed text-ink-400">
-            O <strong className="text-bone-300">Fit com o Canal</strong> mede a sobreposição entre as
-            palavras da ideia e o vocabulário do nicho declarado aqui.
+            {t("tools.rank.fit_explanation", undefined, "O Fit com o Canal mede a sobreposição entre as palavras da ideia e o vocabulário do nicho declarado aqui.")}
           </p>
         </Card>
       </div>
 
-      <Card title="Leitura crítica" note="5 critérios" accent="sky" className="mt-6">
+      <Card title={t("tools.rank.crit_read_title", undefined, "Leitura crítica")} note={t("tools.rank.crit_5", undefined, "5 critérios")} accent="sky" className="mt-6">
         <div className="grid gap-px overflow-hidden rounded-md border border-ink-800 bg-ink-800 sm:grid-cols-2 lg:grid-cols-5">
           {crits.map((c) => (
             <div
@@ -507,7 +529,7 @@ export function RankIdeia({
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <CopyButton text={`Rank de Ideia — ${total.toFixed(1)}/10\n${idea}\n\n${crits.map((c) => `${c.label}: ${c.score}/10 — ${c.why}`).join("\n")}`} />
           <span className="font-mono text-[10px] tracking-[0.12em] text-ink-400 uppercase">
-            pesos: pool 26% · prova 20% · conexão 18% · fit 20% · outlier 16%
+            {t("tools.rank.weights_info", undefined, "pesos: pool 26% · prova 20% · conexão 18% · fit 20% · outlier 16%")}
           </span>
         </div>
       </Card>

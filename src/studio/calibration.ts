@@ -1,4 +1,5 @@
 import { CALIBRATION_QUESTIONS } from "./data";
+import { getCurrentLanguage, getLocalizedExampleCalib } from "./i18n";
 
 export type Calib = {
   niche: string;
@@ -106,7 +107,7 @@ export function loadCalibProfiles(isGuest: boolean): {
     }
 
     // Migrate from legacy single calibration if exists
-    let initialCalib = isGuest ? exampleCalib : emptyCalib;
+    let initialCalib = isGuest ? getLocalizedExampleCalib(getCurrentLanguage()) : emptyCalib;
     const rawLegacy = localStorage.getItem(LS_LEGACY_CALIB);
     if (rawLegacy) {
       try {
@@ -182,9 +183,10 @@ export function deleteCalibProfile(
   profiles: CalibProfile[],
   idToDelete: string,
   activeId: string
-): { profiles: CalibProfile[]; activeId: string } {
+): { profiles: CalibProfile[]; activeProfileId: string; activeCalib: Calib } {
   if (profiles.length <= 1) {
-    return { profiles, activeId };
+    const active = profiles.find((p) => p.id === activeId) || profiles[0];
+    return { profiles, activeProfileId: active.id, activeCalib: active.calib };
   }
 
   const remaining = profiles.filter((p) => p.id !== idToDelete);
@@ -194,17 +196,29 @@ export function deleteCalibProfile(
   }
 
   saveCalibProfiles(remaining, nextActiveId);
-  return { profiles: remaining, activeId: nextActiveId };
+  const nextActive = remaining.find((p) => p.id === nextActiveId) || remaining[0];
+  return { profiles: remaining, activeProfileId: nextActiveId, activeCalib: nextActive.calib };
 }
 
 /* ---------------------------------------------------------------- DYNAMIC SUGGESTIONS */
 
-export function getDynamicSuggestions(calib: Calib | undefined | null): string[] {
-  const DEFAULT_SUGGESTIONS = [
-    "R$100 em FIIs não vale mais a pena em 2026",
-    "Testei o método do vídeo flopado por 30 dias",
-    "Mostrei meu extrato real depois de 2 anos aportando",
-  ];
+export function getDynamicSuggestions(
+  calib: Calib | undefined | null,
+  tFn?: (key: string, params?: Record<string, string | number>, fallback?: string) => string
+): string[] {
+  const nextYear = new Date().getFullYear() + 1;
+
+  const default1 = tFn
+    ? tFn("tools.rank.sugg_default_1", { year: nextYear }, `R$100 em FIIs não vale mais a pena em ${nextYear}`)
+    : `R$100 em FIIs não vale mais a pena em ${nextYear}`;
+  const default2 = tFn
+    ? tFn("tools.rank.sugg_default_2", undefined, "Testei o método do vídeo flopado por 30 dias")
+    : "Testei o método do vídeo flopado por 30 dias";
+  const default3 = tFn
+    ? tFn("tools.rank.sugg_default_3", undefined, "Mostrei meu extrato real depois de 2 anos aportando")
+    : "Mostrei meu extrato real depois de 2 anos aportando";
+
+  const DEFAULT_SUGGESTIONS = [default1, default2, default3];
 
   if (!calib) return DEFAULT_SUGGESTIONS;
 
@@ -219,7 +233,6 @@ export function getDynamicSuggestions(calib: Calib | undefined | null): string[]
     .filter((t) => t.length > 4);
 
   const niche = (calib.niche || "").trim();
-  const nextYear = new Date().getFullYear() + 1;
 
   // Clean niche into a concise phrase for headlines
   const shortNiche = niche
@@ -233,20 +246,36 @@ export function getDynamicSuggestions(calib: Calib | undefined | null): string[]
     const t1 = tops[1];
     const t2 = tops[2] || (flops.length ? flops[0] : null);
 
-    const s1 = `Testei o método de "${t0}" por 30 dias`;
+    const s1 = tFn
+      ? tFn("tools.rank.sugg_template_test_30d", { title: t0 }, `Testei o método de "${t0}" por 30 dias`)
+      : `Testei o método de "${t0}" por 30 dias`;
+
     const s2 = t1.includes("—") || t1.includes(":") 
-      ? `A verdade que ninguém contou em "${t1.split(/[:—]/)[0].trim()}"`
-      : `Mostrei o resultado real de "${t1}" depois de 1 ano`;
+      ? (tFn
+          ? tFn("tools.rank.sugg_template_truth", { title: t1.split(/[:—]/)[0].trim() }, `A verdade que ninguém contou em "${t1.split(/[:—]/)[0].trim()}"`)
+          : `A verdade que ninguém contou em "${t1.split(/[:—]/)[0].trim()}"`)
+      : (tFn
+          ? tFn("tools.rank.sugg_template_result_1y", { title: t1 }, `Mostrei o resultado real de "${t1}" depois de 1 ano`)
+          : `Mostrei o resultado real de "${t1}" depois de 1 ano`);
 
     let s3 = "";
     if (flops.length > 0) {
-      s3 = `Por que meu vídeo sobre "${flops[0]}" flopou feio (e o que mudei)`;
+      s3 = tFn
+        ? tFn("tools.rank.sugg_template_flop", { title: flops[0] }, `Por que meu vídeo sobre "${flops[0]}" flopou feio (e o que mudei)`)
+        : `Por que meu vídeo sobre "${flops[0]}" flopou feio (e o que mudei)`;
     } else if (t2) {
-      s3 = `O maior erro que quase cometi com "${t2}"`;
+      s3 = tFn
+        ? tFn("tools.rank.sugg_template_biggest_error", { title: t2 }, `O maior erro que quase cometi com "${t2}"`)
+        : `O maior erro que quase cometi com "${t2}"`;
     } else if (shortNiche) {
-      s3 = `O que aprendi depois de focar 100% em ${shortNiche.slice(0, 40)}`;
+      const trimmedNiche = shortNiche.slice(0, 40);
+      s3 = tFn
+        ? tFn("tools.rank.sugg_template_learned_niche", { niche: trimmedNiche }, `O que aprendi depois de focar 100% em ${trimmedNiche}`)
+        : `O que aprendi depois de focar 100% em ${trimmedNiche}`;
     } else {
-      s3 = `3 segredos de "${t0}" que mudaram as métricas do canal`;
+      s3 = tFn
+        ? tFn("tools.rank.sugg_template_secrets", { title: t0 }, `3 segredos de "${t0}" que mudaram as métricas do canal`)
+        : `3 segredos de "${t0}" que mudaram as métricas do canal`;
     }
 
     return [s1, s2, s3];
@@ -254,13 +283,23 @@ export function getDynamicSuggestions(calib: Calib | undefined | null): string[]
 
   if (tops.length === 1) {
     const t0 = tops[0];
-    const s1 = `Testei o método de "${t0}" por 30 dias`;
+    const s1 = tFn
+      ? tFn("tools.rank.sugg_template_test_30d", { title: t0 }, `Testei o método de "${t0}" por 30 dias`)
+      : `Testei o método de "${t0}" por 30 dias`;
     const s2 = shortNiche
-      ? `Por que parei com o modelo tradicional de ${shortNiche.slice(0, 40)} em ${nextYear}`
-      : `O maior erro que cometi gravando "${t0}"`;
+      ? (tFn
+          ? tFn("tools.rank.sugg_template_stopped_model", { niche: shortNiche.slice(0, 40), year: nextYear }, `Por que parei com o modelo tradicional de ${shortNiche.slice(0, 40)} em ${nextYear}`)
+          : `Por que parei com o modelo tradicional de ${shortNiche.slice(0, 40)} em ${nextYear}`)
+      : (tFn
+          ? tFn("tools.rank.sugg_template_error_recording", { title: t0 }, `O maior erro que cometi gravando "${t0}"`)
+          : `O maior erro que cometi gravando "${t0}"`);
     const s3 = flops.length
-      ? `Por que "${flops[0]}" não performou e como vou refazer`
-      : `Mostrei meus números reais e bastidores de "${t0}"`;
+      ? (tFn
+          ? tFn("tools.rank.sugg_template_flop_remake", { title: flops[0] }, `Por que "${flops[0]}" não performou e como vou refazer`)
+          : `Por que "${flops[0]}" não performou e como vou refazer`)
+      : (tFn
+          ? tFn("tools.rank.sugg_template_backstage", { title: t0 }, `Mostrei meus números reais e bastidores de "${t0}"`)
+          : `Mostrei meus números reais e bastidores de "${t0}"`);
 
     return [s1, s2, s3];
   }
@@ -268,9 +307,15 @@ export function getDynamicSuggestions(calib: Calib | undefined | null): string[]
   // Scenario 2: Niche is calibrated but no tops yet
   if (shortNiche && shortNiche.length > 4) {
     return [
-      `A verdade sobre ${shortNiche.slice(0, 45)} que ninguém tem coragem de falar em ${nextYear}`,
-      `Testei a estratégia mais polêmica de ${shortNiche.slice(0, 42)} por 30 dias`,
-      `Mostrei meus números reais depois de começar em ${shortNiche.slice(0, 45)}`,
+      tFn
+        ? tFn("tools.rank.sugg_template_niche_truth", { niche: shortNiche.slice(0, 45), year: nextYear }, `A verdade sobre ${shortNiche.slice(0, 45)} que ninguém tem coragem de falar em ${nextYear}`)
+        : `A verdade sobre ${shortNiche.slice(0, 45)} que ninguém tem coragem de falar em ${nextYear}`,
+      tFn
+        ? tFn("tools.rank.sugg_template_niche_polemic", { niche: shortNiche.slice(0, 42) }, `Testei a estratégia mais polêmica de ${shortNiche.slice(0, 42)} por 30 dias`)
+        : `Testei a estratégia mais polêmica de ${shortNiche.slice(0, 42)} por 30 dias`,
+      tFn
+        ? tFn("tools.rank.sugg_template_niche_numbers", { niche: shortNiche.slice(0, 45) }, `Mostrei meus números reais depois de começar em ${shortNiche.slice(0, 45)}`)
+        : `Mostrei meus números reais depois de começar em ${shortNiche.slice(0, 45)}`,
     ];
   }
 

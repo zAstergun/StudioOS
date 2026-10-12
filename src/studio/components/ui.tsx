@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ButtonHTMLAttributes,
+  type CSSProperties,
   type InputHTMLAttributes,
   type ReactNode,
   type TextareaHTMLAttributes,
@@ -116,11 +117,13 @@ export function Icon({
   className,
   strokeWidth = 1.6,
   fill,
+  style,
 }: {
   name: keyof typeof P | string;
   className?: string;
   strokeWidth?: number;
   fill?: string;
+  style?: CSSProperties;
 }) {
   return (
     <svg
@@ -131,6 +134,7 @@ export function Icon({
       strokeLinecap="round"
       strokeLinejoin="round"
       className={cn("h-5 w-5", className)}
+      style={style}
       aria-hidden="true"
     >
       {P[name] ?? P.spark}

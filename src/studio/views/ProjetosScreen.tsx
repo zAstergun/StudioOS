@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Icon, Panel, Reveal, SectionHead } from "../components/ui";
 import { cn } from "../utils/cn";
+import { useI18n } from "../i18n";
 
 import { ProjetoDetailScreen } from "./ProjetoDetailScreen";
 import { useAuth, supabase } from "../auth";
@@ -60,6 +61,7 @@ const PALETTE = ["#F2604C", "#F2B33D", "#2FD4A0", "#6E93F5", "#D946EF", "#A855F7
 
 export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [mounted, setMounted] = useState(false);
   const [filter, setFilter] = useState<"all" | "active" | "completed">("all");
   const [showSharedOnly, setShowSharedOnly] = useState(false);
@@ -453,14 +455,14 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                 <Icon name="layers" className="h-4 w-4 text-signal-400" strokeWidth={2} />
               </div>
               <span className="font-mono text-[10px] tracking-[0.22em] text-signal-400 uppercase">
-                Workspace · Projetos
+                {t("projects.kicker", undefined, "Workspace · Projetos")}
               </span>
             </div>
             <h1 className="font-display text-[2.6rem] leading-[0.95] font-extrabold tracking-[-0.03em] text-bone-50">
-              Meus Projetos
+              {t("projects.my_projects", undefined, "Meus Projetos")}
             </h1>
             <p className="mt-3 max-w-lg text-[14px] leading-relaxed text-ink-300">
-              Gerencie roteiros, produção e andamento de cada projeto. 
+              {t("projects.my_projects_desc", undefined, "Gerencie roteiros, produção e andamento de cada projeto.")}
             </p>
           </div>
           
@@ -469,7 +471,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
             className="group flex h-11 items-center justify-center gap-2.5 rounded-lg bg-signal-400 px-6 font-mono text-[11px] font-bold tracking-[0.12em] text-ink-950 uppercase shadow-[0_8px_30px_-10px_rgba(242,179,61,0.5)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_40px_-10px_rgba(242,179,61,0.6)]"
           >
             <Icon name="plus" className="h-3.5 w-3.5 transition-transform duration-300 group-hover:rotate-90" strokeWidth={2.5} />
-            Novo Projeto
+            {t("projects.new_project", undefined, "Novo Projeto")}
           </button>
         </div>
       </Reveal>
@@ -478,11 +480,11 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
       <Reveal delay={80} className="mb-8">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            { label: "Total", value: stats.total, icon: "layers" },
-            { label: "Ativos", value: stats.active, icon: "bolt" },
-            { label: "Concluídos", value: stats.completed, icon: "check" },
-            { label: "Progresso Médio", value: `${stats.avgProgress}%`, icon: "gauge" },
-          ].map((s, i) => (
+            { label: t("common.total", undefined, "Total"), value: stats.total, icon: "layers" },
+            { label: t("projects.active", undefined, "Ativos"), value: stats.active, icon: "bolt" },
+            { label: t("projects.completed", undefined, "Concluídos"), value: stats.completed, icon: "check" },
+            { label: t("projects.avg_progress", undefined, "Progresso Médio"), value: `${stats.avgProgress}%`, icon: "gauge" },
+          ].map((s) => (
             <div 
               key={s.label}
               className="flex items-center gap-3.5 rounded-lg border border-ink-800/60 bg-ink-900/30 px-4 py-3.5"
@@ -508,26 +510,26 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex gap-1 rounded-lg border border-ink-800/50 bg-ink-900/20 p-1">
             {[
-              { id: "all", label: "Todos", count: stats.total },
-              { id: "active", label: "Em Andamento", count: stats.active },
-              { id: "completed", label: "Concluídos", count: stats.completed },
-            ].map((t) => (
+              { id: "all", label: t("common.view_all", undefined, "Todos"), count: stats.total },
+              { id: "active", label: t("projects.active", undefined, "Em Andamento"), count: stats.active },
+              { id: "completed", label: t("projects.completed", undefined, "Concluídos"), count: stats.completed },
+            ].map((tTab) => (
               <button
-                key={t.id}
-                onClick={() => setFilter(t.id as any)}
+                key={tTab.id}
+                onClick={() => setFilter(tTab.id as any)}
                 className={cn(
                   "flex items-center gap-2 rounded-md px-4 py-2 font-mono text-[10px] tracking-[0.12em] uppercase transition-all duration-200",
-                  filter === t.id 
+                  filter === tTab.id 
                     ? "bg-ink-800/80 text-bone-50 shadow-sm" 
                     : "text-bone-300 hover:text-ink-300"
                 )}
               >
-                {t.label}
+                {tTab.label}
                 <span className={cn(
                   "rounded px-1.5 py-0.5 text-[9px] tabular-nums",
-                  filter === t.id ? "bg-signal-400/15 text-signal-400" : "bg-ink-800/50 text-ink-400"
+                  filter === tTab.id ? "bg-signal-400/15 text-signal-400" : "bg-ink-800/50 text-ink-400"
                 )}>
-                  {t.count}
+                  {tTab.count}
                 </span>
               </button>
             ))}
@@ -552,7 +554,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
               )} />
             </div>
             <span className="font-mono text-[10px] tracking-[0.12em] uppercase">
-              Projetos Compartilhados
+              {t("projects.shared_projects", undefined, "Projetos Compartilhados")}
             </span>
           </button>
         </div>
@@ -566,9 +568,9 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
               <div className="absolute inset-0 rounded-full bg-signal-400/8 blur-2xl" />
               <Icon name="layers" className="relative h-10 w-10 text-bone-300" strokeWidth={1.2} />
             </div>
-            <p className="font-display text-lg font-bold text-bone-300">Nenhum projeto aqui</p>
+            <p className="font-display text-lg font-bold text-bone-300">{t("projects.empty_title", undefined, "Nenhum projeto aqui")}</p>
             <p className="max-w-xs text-[13px] text-bone-300">
-              {filter === "active" ? "Seus projetos ativos aparecerão aqui." : "Projetos concluídos aparecerão aqui."}
+              {filter === "active" ? t("projects.empty_active_desc", undefined, "Seus projetos ativos aparecerão aqui.") : t("projects.empty_completed_desc", undefined, "Projetos concluídos aparecerão aqui.")}
             </p>
           </div>
         ) : (
@@ -593,7 +595,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                       <div className="flex items-center gap-2">
                         <span className={cn("h-1.5 w-1.5 rounded-full", st.dot)} />
                         <span className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">
-                          {st.label}
+                          {t(`projects.status_${proj.status}`, undefined, st.label)}
                         </span>
                       </div>
 
@@ -617,7 +619,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                                   ? "text-signal-400 opacity-100 hover:bg-signal-400/10"
                                   : "text-ink-400 opacity-0 hover:bg-signal-400/10 hover:text-signal-400 group-hover:opacity-100"
                               )}
-                              title={isSaved ? "Remover dos Salvos" : "Salvar em Salvos"}
+                              title={isSaved ? t("saved.delete", undefined, "Remover dos Salvos") : t("saved.save_to_saved", undefined, "Salvar em Salvos")}
                             >
                               <Icon 
                                 name="bookmark" 
@@ -639,7 +641,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                               setEditProjectColor(proj.color || "#F2604C");
                             }}
                             className="flex h-7 w-7 items-center justify-center rounded-md text-ink-400 opacity-0 transition-all duration-200 hover:bg-ink-800 hover:text-bone-200 group-hover:opacity-100"
-                            title="Editar Projeto"
+                            title={t("common.edit", undefined, "Editar Projeto")}
                           >
                             <Icon name="edit" className="h-3 w-3" strokeWidth={1.8} />
                           </button>
@@ -653,7 +655,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                             setProjectToDelete(proj);
                           }}
                           className="flex h-7 w-7 items-center justify-center rounded-md text-ink-400 opacity-0 transition-all duration-200 hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100 cursor-pointer"
-                          title="Mover para Lixeira"
+                          title={t("common.delete", undefined, "Mover para Lixeira")}
                         >
                           <Icon name="trash" className="h-3 w-3" strokeWidth={1.8} />
                         </button>
@@ -667,7 +669,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                             setProjectToLeave(proj);
                           }}
                           className="flex h-7 w-7 items-center justify-center rounded-md text-red-400/80 transition-all duration-200 hover:bg-red-500/15 hover:text-red-300 cursor-pointer"
-                          title="Sair deste projeto compartilhado"
+                          title={t("projects.leave_shared_hint", undefined, "Sair deste projeto compartilhado")}
                         >
                           <Icon name="login" className="h-3 w-3" strokeWidth={1.8} />
                         </button>
@@ -694,13 +696,13 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                     {/* TASKS */}
                     <div className="mb-4 flex items-center gap-2 font-mono text-[10px] text-bone-300">
                       <Icon name="check" className="h-3 w-3 text-ink-400" strokeWidth={1.8} />
-                      <span>{proj.completedTasks}/{proj.tasksCount} tarefas</span>
+                      <span>{proj.completedTasks}/{proj.tasksCount} {t("projects.tasks_suffix", undefined, "tarefas")}</span>
                     </div>
 
                     {/* PROGRESS BAR */}
                     <div>
                       <div className="mb-1.5 flex items-center justify-between">
-                        <span className="font-mono text-[8px] tracking-[0.16em] text-ink-400 uppercase">Progresso</span>
+                        <span className="font-mono text-[8px] tracking-[0.16em] text-ink-400 uppercase">{t("projects.progress_label", undefined, "Progresso")}</span>
                         <span className="font-mono text-[10px] font-bold tabular-nums text-bone-300">{proj.progress}%</span>
                       </div>
                       <div className="h-1 w-full overflow-hidden rounded-full bg-ink-800/60">
@@ -735,8 +737,8 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                   <Icon name="plus" className="h-5 w-5" strokeWidth={1.5} />
                 </div>
                 <div>
-                  <div className="font-display text-[14px] font-bold text-bone-400 transition-colors group-hover:text-signal-400">Novo Projeto</div>
-                  <div className="mt-1 font-mono text-[9px] tracking-[0.14em] text-ink-400 uppercase">Comece do zero</div>
+                  <div className="font-display text-[14px] font-bold text-bone-400 transition-colors group-hover:text-signal-400">{t("projects.new_project", undefined, "Novo Projeto")}</div>
+                  <div className="mt-1 font-mono text-[9px] tracking-[0.14em] text-ink-400 uppercase">{t("projects.start_from_scratch", undefined, "Comece do zero")}</div>
                 </div>
               </article>
             )}
@@ -759,8 +761,8 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                     <Icon name="plus" className="h-3.5 w-3.5 text-signal-400" strokeWidth={2} />
                   </div>
                   <div>
-                    <h2 className="font-display text-lg font-bold text-bone-50">Novo Projeto</h2>
-                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">Configuração base</p>
+                    <h2 className="font-display text-lg font-bold text-bone-50">{t("projects.new_project", undefined, "Novo Projeto")}</h2>
+                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">{t("projects.base_config", undefined, "Configuração base")}</p>
                   </div>
                 </div>
                 <button 
@@ -776,13 +778,13 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
             <form onSubmit={handleCreate} className="p-6">
               <div className="mb-6">
                 <label className="mb-2 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Nome do Projeto
+                  {t("projects.project_name", undefined, "Nome do Projeto")}
                 </label>
                 <input 
                   type="text" 
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
-                  placeholder="Ex: Série sobre Investimentos"
+                  placeholder={t("projects.project_name_placeholder", undefined, "Ex: Série sobre Investimentos")}
                   autoFocus
                   className="w-full rounded-lg border border-ink-800/60 bg-ink-950/50 px-4 py-3 text-[14px] text-bone-100 placeholder:text-ink-400 transition-colors focus:border-signal-400/60 focus:outline-none focus:ring-1 focus:ring-signal-400/20"
                   required
@@ -793,7 +795,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                 <VipRgbColorPicker
                   value={newProjectColor}
                   onChange={(color) => setNewProjectColor(color)}
-                  label="Cor de Destaque"
+                  label={t("projects.highlight_color", undefined, "Cor de Destaque")}
                   palette={PALETTE}
                 />
               </div>
@@ -826,14 +828,14 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                   onClick={() => setShowModal(false)}
                   className="rounded-lg px-4 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-300 uppercase transition-colors hover:text-bone-200"
                 >
-                  Cancelar
+                  {t("common.cancel", undefined, "Cancelar")}
                 </button>
                 <button 
                   type="submit"
                   disabled={!newProjectName.trim()}
                   className="rounded-lg bg-signal-400 px-6 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-950 uppercase shadow-[0_6px_20px_-8px_rgba(242,179,61,0.6)] transition-all duration-200 disabled:opacity-40 disabled:shadow-none hover:bg-signal-300 hover:shadow-[0_8px_25px_-8px_rgba(242,179,61,0.7)]"
                 >
-                  Criar Projeto
+                  {t("projects.create_button", undefined, "Criar Projeto")}
                 </button>
               </div>
             </form>
@@ -856,8 +858,8 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                     <Icon name="edit" className="h-3.5 w-3.5 text-signal-400" strokeWidth={2} />
                   </div>
                   <div>
-                    <h2 className="font-display text-lg font-bold text-bone-50">Editar Projeto</h2>
-                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">Atualizar configurações</p>
+                    <h2 className="font-display text-lg font-bold text-bone-50">{t("projects.edit_project", undefined, "Editar Projeto")}</h2>
+                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">{t("projects.update_config", undefined, "Atualizar configurações")}</p>
                   </div>
                 </div>
                 <button 
@@ -873,7 +875,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
             <form onSubmit={handleEditProject} className="p-6">
               <div className="mb-6">
                 <label className="mb-2 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Nome do Projeto
+                  {t("projects.project_name", undefined, "Nome do Projeto")}
                 </label>
                 <input 
                   type="text" 
@@ -889,7 +891,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                 <VipRgbColorPicker
                   value={editProjectColor}
                   onChange={(color) => setEditProjectColor(color)}
-                  label="Cor de Destaque"
+                  label={t("projects.highlight_color", undefined, "Cor de Destaque")}
                   palette={PALETTE}
                 />
               </div>
@@ -922,14 +924,14 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                   onClick={() => setEditingProject(null)}
                   className="rounded-lg px-4 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-300 uppercase transition-colors hover:text-bone-200"
                 >
-                  Cancelar
+                  {t("common.cancel", undefined, "Cancelar")}
                 </button>
                 <button 
                   type="submit"
                   disabled={!editProjectName.trim()}
                   className="rounded-lg bg-signal-400 px-6 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-950 uppercase shadow-[0_6px_20px_-8px_rgba(242,179,61,0.6)] transition-all duration-200 disabled:opacity-40 disabled:shadow-none hover:bg-signal-300 hover:shadow-[0_8px_25px_-8px_rgba(242,179,61,0.7)]"
                 >
-                  Salvar Alterações
+                  {t("projects.save_changes", undefined, "Salvar Alterações")}
                 </button>
               </div>
             </form>
@@ -948,10 +950,12 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-500">
                 <Icon name="trash" className="h-6 w-6" strokeWidth={1.5} />
               </div>
-              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Excluir Projeto</h2>
+              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">
+                {t("projects.delete_project", undefined, "Excluir Projeto")}
+              </h2>
               <p className="text-[13px] leading-relaxed text-bone-300">
-                Tem certeza que deseja excluir <strong className="text-bone-100">{projectToDelete.name}</strong>? 
-                Ele será movido para a <strong className="text-red-400">Lixeira (em Histórico & Lixeira)</strong> e você poderá restaurá-lo depois se quiser.
+                {t("projects.delete_confirm", undefined, "Tem certeza que deseja excluir")} <strong className="text-bone-100">{projectToDelete.name}</strong>?{" "}
+                {t("projects.delete_desc", undefined, "Ele será movido para a Lixeira (em Histórico & Lixeira) e você poderá restaurá-lo depois se quiser.")}
               </p>
             </div>
             
@@ -960,7 +964,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                 onClick={() => setProjectToDelete(null)}
                 className="flex-1 rounded-lg border border-ink-800 bg-transparent px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-50"
               >
-                Cancelar
+                {t("common.cancel", undefined, "Cancelar")}
               </button>
               <button 
                 onClick={async () => {
@@ -994,7 +998,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                 }}
                 className="flex-1 rounded-lg bg-red-500/10 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-red-500 uppercase transition-colors hover:bg-red-500 hover:text-white"
               >
-                Mover p/ Lixeira
+                {t("projects.move_to_trash", undefined, "Mover p/ Lixeira")}
               </button>
             </div>
           </div>
@@ -1012,10 +1016,12 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-400">
                 <Icon name="login" className="h-6 w-6" strokeWidth={1.5} />
               </div>
-              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Sair do Projeto</h2>
+              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">
+                {t("projects.leave_project", undefined, "Sair do Projeto")}
+              </h2>
               <p className="text-[13px] leading-relaxed text-bone-300">
-                Tem certeza que deseja sair do projeto <strong className="text-bone-100">{projectToLeave.name}</strong>? 
-                Você deixará de ser participante deste projeto e não terá mais acesso às tarefas, ferramentas salvas e anotações.
+                {t("projects.leave_confirm", undefined, "Tem certeza que deseja sair do projeto")} <strong className="text-bone-100">{projectToLeave.name}</strong>?{" "}
+                {t("projects.leave_desc", undefined, "Você deixará de ser participante deste projeto e não terá mais acesso às tarefas, ferramentas salvas e anotações.")}
               </p>
             </div>
             
@@ -1025,7 +1031,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                 disabled={isLeaving}
                 className="flex-1 rounded-xl border border-ink-800 bg-ink-900 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-100 disabled:opacity-40 cursor-pointer"
               >
-                Cancelar
+                {t("common.cancel", undefined, "Cancelar")}
               </button>
               <button 
                 onClick={async () => {
@@ -1074,7 +1080,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                 disabled={isLeaving}
                 className="flex-1 rounded-xl bg-red-500 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-white uppercase shadow-[0_8px_20px_-6px_rgba(239,68,68,0.5)] transition-all hover:bg-red-600 disabled:opacity-40 cursor-pointer"
               >
-                {isLeaving ? "Saindo..." : "Confirmar e Sair"}
+                {isLeaving ? t("projects.leaving", undefined, "Saindo...") : t("projects.confirm_leave", undefined, "Confirmar e Sair")}
               </button>
             </div>
           </div>
@@ -1097,12 +1103,11 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
               </div>
               
               <h3 className="mb-2 font-display text-xl font-bold text-bone-100">
-                Remover dos Salvos?
+                {t("projects.remove_from_saved_title", undefined, "Remover dos Salvos?")}
               </h3>
               
               <p className="mb-7 text-[13px] leading-relaxed text-bone-300">
-                Tem certeza que deseja remover o projeto <strong className="text-bone-100">{projectToRemoveFromSalvos.name}</strong> da sua lista de salvos? 
-                O projeto continuará existindo normalmente, apenas o atalho salvo será retirado.
+                {t("projects.remove_from_saved_confirm", undefined, "Tem certeza que deseja remover o projeto")} <strong className="text-bone-100">{projectToRemoveFromSalvos.name}</strong> {t("projects.remove_from_saved_desc", undefined, "da sua lista de salvos? O projeto continuará existindo normalmente, apenas o atalho salvo será retirado.")}
               </p>
               
               <div className="flex gap-3">
@@ -1111,7 +1116,7 @@ export function ProjetosScreen({ onGo }: { onGo: (id: string) => void }) {
                   onClick={() => setProjectToRemoveFromSalvos(null)}
                   className="flex-1 rounded-lg border border-ink-800/60 bg-ink-950/60 px-4 py-3.5 font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-100"
                 >
-                  Cancelar
+                  {t("common.cancel", undefined, "Cancelar")}
                 </button>
                 <button
                   type="button"

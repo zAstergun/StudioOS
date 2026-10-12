@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Icon, Panel, Reveal, Button, VipBadge } from "../components/ui";
 import { cn } from "../utils/cn";
+import { useI18n } from "../i18n";
 
 import { type Project, computeProjectStatus } from "./ProjetosScreen";
 import { useAuth, supabase } from "../auth";
@@ -70,6 +71,12 @@ export function ProjetoDetailScreen({
   onGo?: (view: string) => void,
 }) {
   const { user } = useAuth();
+  const { t } = useI18n();
+  const getColLabel = useCallback((status: string) => {
+    if (status === "in_progress") return t("project_detail.col_in_progress", undefined, "Em Andamento");
+    if (status === "done") return t("project_detail.col_done", undefined, "Concluído");
+    return t("project_detail.col_todo", undefined, "A Fazer");
+  }, [t]);
   const [mounted, setMounted] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const tasksRef = useRef<Task[]>(tasks);
@@ -784,7 +791,7 @@ export function ProjetoDetailScreen({
       }
     }
 
-    const colLabel = COL_CONFIG[validStatus]?.label || validStatus;
+    const colLabel = getColLabel(validStatus);
     return { success: true, message: `Tarefa "${newTask.title}" adicionada em "${colLabel}".` };
   };
 
@@ -818,7 +825,7 @@ export function ProjetoDetailScreen({
       }
     }
 
-    const colLabel = COL_CONFIG[newStatus]?.label || newStatus;
+    const colLabel = getColLabel(newStatus);
     return { success: true, message: `Tarefa "${task.title}" movida para "${colLabel}".` };
   };
 
@@ -1109,9 +1116,9 @@ export function ProjetoDetailScreen({
   };
 
   const columns = [
-    { id: "todo", label: "A Fazer" },
-    { id: "in_progress", label: "Em Andamento" },
-    { id: "done", label: "Concluído" },
+    { id: "todo", label: t("project_detail.col_todo", undefined, "A Fazer") },
+    { id: "in_progress", label: t("project_detail.col_in_progress", undefined, "Em Andamento") },
+    { id: "done", label: t("project_detail.col_done", undefined, "Concluído") },
   ];
 
   const todoCount = tasks.filter(t => t.status === "todo").length;
@@ -1131,7 +1138,7 @@ export function ProjetoDetailScreen({
           className="group mb-5 flex items-center gap-2 font-mono text-[10px] tracking-[0.14em] text-bone-300 uppercase transition-colors hover:text-signal-400"
         >
           <Icon name="arrow" className="h-3 w-3 rotate-180 transition-transform group-hover:-translate-x-1" strokeWidth={2} />
-          Voltar para Projetos
+          {t("project_detail.back_to_projects", undefined, "Voltar para Projetos")}
         </button>
 
         <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
@@ -1161,7 +1168,7 @@ export function ProjetoDetailScreen({
                     currentStatus === 'trashed' ? "bg-red-400" :
                     "bg-ink-500"
                   )} />
-                  {currentStatus === 'active' ? 'Em Andamento' : currentStatus === 'planning' ? 'Planejamento' : currentStatus === 'trashed' ? 'Na Lixeira' : 'Concluído'}
+                  {currentStatus === 'active' ? t("project_detail.status_active", undefined, 'Em Andamento') : currentStatus === 'planning' ? t("project_detail.status_planning", undefined, 'Planejamento') : currentStatus === 'trashed' ? t("project_detail.status_trashed", undefined, 'Na Lixeira') : t("project_detail.status_completed", undefined, 'Concluído')}
                 </span>
                 <span className="font-mono text-[9px] text-ink-400">·</span>
                 <span className="font-mono text-[9px] text-bone-300">{project.lastUpdate}</span>
@@ -1181,14 +1188,14 @@ export function ProjetoDetailScreen({
                   className="flex h-9 items-center gap-2 rounded-lg border border-ink-700/50 bg-ink-900/40 px-4 font-mono text-[10px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-all hover:border-ink-600 hover:text-white"
                 >
                   <Icon name="restore" className="h-3.5 w-3.5 text-ink-300" />
-                  Restaurar
+                  {t("project_detail.restore", undefined, "Restaurar")}
                 </button>
                 <button 
                   onClick={handleDeleteProject}
                   className="flex h-9 items-center gap-2 rounded-lg border border-red-500/25 bg-red-500/8 px-4 font-mono text-[10px] font-bold tracking-[0.1em] text-red-400 uppercase transition-all hover:bg-red-500/15 hover:text-red-300"
                 >
                   <Icon name="trash" className="h-3.5 w-3.5" />
-                  Excluir
+                  {t("project_detail.delete", undefined, "Excluir")}
                 </button>
               </>
             )}
@@ -1197,7 +1204,7 @@ export function ProjetoDetailScreen({
               <button 
                 onClick={() => setShowMembersModal(true)}
                 className="group relative flex h-9 items-center gap-2 rounded-lg border border-ink-800/60 bg-ink-900/40 px-3 font-mono text-[10px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-all hover:border-signal-400/40 hover:text-white cursor-pointer"
-                title="Ver participantes deste projeto"
+                title={t("project_detail.members_title", undefined, "Ver participantes deste projeto")}
               >
                 {members.length > 0 && (
                   <div className="flex -space-x-1.5 overflow-hidden py-0.5">
@@ -1217,7 +1224,7 @@ export function ProjetoDetailScreen({
                     ))}
                   </div>
                 )}
-                <span>Participantes</span>
+                <span>{t("project_detail.members_btn", undefined, "Participantes")}</span>
                 <span className="rounded-full bg-signal-400/15 border border-signal-400/30 px-1.5 py-0.2 text-[8.5px] text-signal-400">
                   {members.length}
                 </span>
@@ -1230,7 +1237,7 @@ export function ProjetoDetailScreen({
                 <button 
                   onClick={handleDeleteProject}
                   className="flex h-9 w-9 items-center justify-center rounded-lg border border-ink-800/50 text-bone-300 transition-all hover:border-red-500/40 hover:bg-red-500/8 hover:text-red-400 cursor-pointer"
-                  title="Mover para Lixeira"
+                  title={t("project_detail.move_to_trash", undefined, "Mover para Lixeira")}
                 >
                   <Icon name="trash" className="h-3.5 w-3.5" />
                 </button>
@@ -1244,7 +1251,7 @@ export function ProjetoDetailScreen({
                     </span>
                   )}
                   <Icon name="user" className="h-3.5 w-3.5 text-ink-300" />
-                  Compartilhar
+                  {t("project_detail.share_btn", undefined, "Compartilhar")}
                 </button>
               </>
             )}
@@ -1254,10 +1261,10 @@ export function ProjetoDetailScreen({
               <button 
                 onClick={() => setShowLeaveModal(true)}
                 className="flex h-9 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 font-mono text-[10px] font-bold tracking-[0.1em] text-red-400 uppercase transition-all hover:bg-red-500/20 hover:border-red-500/50 cursor-pointer"
-                title="Sair deste projeto compartilhado"
+                title={t("project_detail.leave_project_title", undefined, "Sair deste projeto compartilhado")}
               >
                 <Icon name="login" className="h-3.5 w-3.5" />
-                <span>Sair do Projeto</span>
+                <span>{t("project_detail.leave_project_btn", undefined, "Sair do Projeto")}</span>
               </button>
             )}
             {project.status !== "trashed" && (
@@ -1280,7 +1287,7 @@ export function ProjetoDetailScreen({
                         }
                         setIsEditingExternalLink(false);
                       }}
-                      placeholder="Link do vídeo"
+                      placeholder={t("project_detail.video_link_placeholder", undefined, "Link do vídeo")}
                       className="h-full w-full bg-transparent text-[10px] font-mono text-white focus:outline-none"
                       autoFocus
                     />
@@ -1293,9 +1300,9 @@ export function ProjetoDetailScreen({
                     <div className="absolute inset-0 -z-10 rounded-lg bg-signal-400/20 blur-md opacity-0 transition-opacity duration-500 group-hover:opacity-100"></div>
                     <a href={localExternalLink} target="_blank" rel="noopener noreferrer" className="flex h-9 items-center gap-2 rounded-l-lg border border-r-0 border-signal-400/40 bg-signal-400/10 px-4 font-mono text-[10px] font-bold tracking-[0.1em] text-signal-400 uppercase transition-all hover:bg-signal-400/20 hover:text-signal-300">
                       <Icon name="play" className="h-3.5 w-3.5 fill-signal-400/20" />
-                      Assistir Vídeo
+                      {t("project_detail.watch_video", undefined, "Assistir Vídeo")}
                     </a>
-                    <button onClick={() => { setTempExternalLink(localExternalLink); setIsEditingExternalLink(true); }} className="flex h-9 items-center justify-center rounded-r-lg border border-l-0 border-signal-400/40 bg-signal-400/10 px-2.5 text-signal-400/60 transition-all hover:bg-signal-400/20 hover:text-signal-400" title="Editar Link">
+                    <button onClick={() => { setTempExternalLink(localExternalLink); setIsEditingExternalLink(true); }} className="flex h-9 items-center justify-center rounded-r-lg border border-l-0 border-signal-400/40 bg-signal-400/10 px-2.5 text-signal-400/60 transition-all hover:bg-signal-400/20 hover:text-signal-400" title={t("project_detail.edit_link", undefined, "Editar Link")}>
                       <Icon name="edit" className="h-3 w-3" />
                     </button>
                   </div>
@@ -1305,7 +1312,7 @@ export function ProjetoDetailScreen({
                     className="flex h-9 items-center gap-2 rounded-lg border border-ink-800/50 bg-ink-900/30 px-4 font-mono text-[10px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-all hover:border-ink-600 hover:text-white"
                   >
                     <Icon name="link" className="h-3 w-3 text-ink-300" />
-                    Link do Vídeo
+                    {t("project_detail.video_link_btn", undefined, "Link do Vídeo")}
                   </button>
                 )}
                 <button 
@@ -1313,7 +1320,7 @@ export function ProjetoDetailScreen({
                   className="group flex h-9 items-center gap-2 rounded-lg bg-signal-400 px-5 font-mono text-[10px] font-bold tracking-[0.1em] text-ink-950 uppercase shadow-[0_6px_20px_-8px_rgba(242,179,61,0.5)] transition-all hover:-translate-y-0.5 hover:shadow-[0_10px_30px_-8px_rgba(242,179,61,0.6)]"
                 >
                   <Icon name="plus" className="h-3 w-3 transition-transform group-hover:rotate-90" strokeWidth={2.5} />
-                  Nova Tarefa
+                  {t("project_detail.new_task", undefined, "Nova Tarefa")}
                 </button>
               </>
             )}
@@ -1328,7 +1335,7 @@ export function ProjetoDetailScreen({
             {/* Progress bar */}
             <div className="min-w-0 flex-1">
               <div className="mb-2 flex items-center justify-between">
-                <span className="font-mono text-[9px] tracking-[0.16em] text-bone-300 uppercase">Progresso Geral</span>
+                <span className="font-mono text-[9px] tracking-[0.16em] text-bone-300 uppercase">{t("project_detail.general_progress", undefined, "Progresso Geral")}</span>
                 <span className="font-display text-[18px] font-extrabold tabular-nums text-bone-100">{progressPercent}%</span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-ink-800/50">
@@ -1345,9 +1352,9 @@ export function ProjetoDetailScreen({
             {/* Mini stats */}
             <div className="flex gap-6 shrink-0">
               {[
-                { label: "A Fazer", value: todoCount, color: "text-bone-400" },
-                { label: "Andamento", value: inProgressCount, color: "text-signal-400" },
-                { label: "Concluídas", value: doneCount, color: "text-emerald-400" },
+                { label: t("project_detail.col_todo", undefined, "A Fazer"), value: todoCount, color: "text-bone-400" },
+                { label: t("project_detail.col_in_progress", undefined, "Andamento"), value: inProgressCount, color: "text-signal-400" },
+                { label: t("project_detail.col_done", undefined, "Concluídas"), value: doneCount, color: "text-emerald-400" },
               ].map(s => (
                 <div key={s.label} className="text-center">
                   <div className={cn("font-display text-[22px] font-extrabold leading-none tabular-nums", s.color)}>
@@ -1417,7 +1424,7 @@ export function ProjetoDetailScreen({
                           <button 
                             onClick={(e) => handleDeleteTask(task, e)}
                             className="shrink-0 rounded p-1 text-ink-400 transition-colors hover:bg-red-500/20 hover:text-red-400"
-                            title="Excluir tarefa"
+                            title={t("project_detail.delete_task_title", undefined, "Excluir tarefa")}
                           >
                             <Icon name="trash" className="h-3 w-3" strokeWidth={1.8} />
                           </button>
@@ -1440,7 +1447,7 @@ export function ProjetoDetailScreen({
                     className="group flex h-10 items-center justify-center gap-2 rounded-lg border border-dashed border-ink-800/40 text-ink-400 transition-all duration-200 hover:border-signal-400/30 hover:bg-signal-400/[0.03] hover:text-signal-400 mt-1"
                   >
                     <Icon name="plus" className="h-3.5 w-3.5" strokeWidth={1.5} />
-                    <span className="font-mono text-[9px] tracking-[0.1em] uppercase opacity-70 group-hover:opacity-100 transition-opacity">Adicionar</span>
+                    <span className="font-mono text-[9px] tracking-[0.1em] uppercase opacity-70 group-hover:opacity-100 transition-opacity">{t("project_detail.add_btn", undefined, "Adicionar")}</span>
                   </button>
                 </div>
               </div>
@@ -1459,7 +1466,7 @@ export function ProjetoDetailScreen({
               <div className="flex items-center gap-2.5">
                 <Icon name="bookmark" className="h-3.5 w-3.5 text-signal-400" strokeWidth={2} />
                 <h3 className="font-mono text-[10px] font-bold tracking-[0.14em] text-bone-200 uppercase">
-                  Itens Salvos do Projeto
+                  {t("project_detail.saved_items_title", undefined, "Itens Salvos do Projeto")}
                 </h3>
                 <span className="rounded-full bg-signal-400/15 border border-signal-400/30 px-2 py-0.5 font-mono text-[9px] font-bold text-signal-400">
                   {savedItems.length}
@@ -1470,17 +1477,17 @@ export function ProjetoDetailScreen({
                 <button 
                   onClick={() => setShowAddToolModal(true)} 
                   className="flex items-center gap-1.5 rounded-lg border border-signal-400/40 bg-signal-400/10 px-2.5 py-1 font-mono text-[9.5px] font-bold tracking-[0.1em] text-signal-400 uppercase hover:bg-signal-400 hover:text-ink-950 transition-all cursor-pointer"
-                  title="Salvar ou vincular execuções de Criação, Publicação e Estratégia"
+                  title={t("project_detail.link_tool_title", undefined, "Salvar ou vincular execuções de Criação, Publicação e Estratégia")}
                 >
                   <Icon name="plus" className="h-3 w-3" strokeWidth={2.5} />
-                  Vincular Ferramenta
+                  {t("project_detail.link_tool", undefined, "Vincular Ferramenta")}
                 </button>
                 <button 
                   onClick={() => setShowAddLink(true)} 
                   className="flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-800/60 px-2.5 py-1 font-mono text-[9.5px] tracking-[0.1em] text-bone-300 uppercase hover:bg-ink-700 hover:text-bone-100 transition-colors cursor-pointer"
                 >
                   <Icon name="link" className="h-3 w-3" />
-                  Link
+                  {t("project_detail.link_btn", undefined, "Link")}
                 </button>
               </div>
             </div>
@@ -1489,11 +1496,11 @@ export function ProjetoDetailScreen({
             {savedItems.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 border-b border-ink-800/30 px-4 py-2.5 bg-ink-950/20">
                 {[
-                  { id: "todos", label: "Todos", count: savedItems.length },
-                  { id: "Criação", label: "Criação", count: savedItems.filter(i => i.group === "Criação").length },
-                  { id: "Publicação", label: "Publicação", count: savedItems.filter(i => i.group === "Publicação").length },
-                  { id: "Estratégia", label: "Estratégia", count: savedItems.filter(i => i.group === "Estratégia").length },
-                  { id: "Link", label: "Links", count: savedItems.filter(i => i.group === "Link" || i.type === "link").length },
+                  { id: "todos", label: t("project_detail.tab_all", undefined, "Todos"), count: savedItems.length },
+                  { id: "Criação", label: t("project_detail.tab_creation", undefined, "Criação"), count: savedItems.filter(i => i.group === "Criação").length },
+                  { id: "Publicação", label: t("project_detail.tab_publishing", undefined, "Publicação"), count: savedItems.filter(i => i.group === "Publicação").length },
+                  { id: "Estratégia", label: t("project_detail.tab_strategy", undefined, "Estratégia"), count: savedItems.filter(i => i.group === "Estratégia").length },
+                  { id: "Link", label: t("project_detail.tab_links", undefined, "Links"), count: savedItems.filter(i => i.group === "Link" || i.type === "link").length },
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -1517,7 +1524,7 @@ export function ProjetoDetailScreen({
                 <form onSubmit={handleSaveLink} className="flex flex-col gap-2 rounded-lg bg-ink-900/50 p-3 border border-ink-800">
                   <input 
                     type="text" 
-                    placeholder="Título do link (ex: Roteiro, Figma)" 
+                    placeholder={t("project_detail.link_title_placeholder", undefined, "Título do link (ex: Roteiro, Figma)")} 
                     value={newLinkTitle}
                     onChange={(e) => setNewLinkTitle(e.target.value)}
                     className="w-full rounded bg-ink-950 px-2 py-1.5 text-[11px] text-bone-300 border border-ink-800 focus:outline-none focus:border-signal-400/50"
@@ -1531,8 +1538,8 @@ export function ProjetoDetailScreen({
                     className="w-full rounded bg-ink-950 px-2 py-1.5 text-[11px] text-bone-300 border border-ink-800 focus:outline-none focus:border-signal-400/50"
                   />
                   <div className="flex justify-end gap-2 mt-1">
-                    <button type="button" onClick={() => setShowAddLink(false)} className="text-[10px] text-ink-400 hover:text-bone-300 transition-colors cursor-pointer">Cancelar</button>
-                    <button type="submit" className="text-[10px] text-signal-400 hover:text-signal-300 font-bold transition-colors cursor-pointer">Salvar</button>
+                    <button type="button" onClick={() => setShowAddLink(false)} className="text-[10px] text-ink-400 hover:text-bone-300 transition-colors cursor-pointer">{t("project_detail.cancel", undefined, "Cancelar")}</button>
+                    <button type="submit" className="text-[10px] text-signal-400 hover:text-signal-300 font-bold transition-colors cursor-pointer">{t("project_detail.save", undefined, "Salvar")}</button>
                   </div>
                 </form>
               )}
@@ -1547,17 +1554,17 @@ export function ProjetoDetailScreen({
                     <Icon name="bookmark" className="h-5 w-5" strokeWidth={1.5} />
                   </div>
                   <p className="font-mono text-[10px] tracking-[0.12em] text-ink-400 uppercase font-medium">
-                    {itemsFilter === "todos" ? "Nenhum item salvo no projeto" : `Nenhum item de ${itemsFilter} salvo`}
+                    {itemsFilter === "todos" ? t("project_detail.no_saved_items", undefined, "Nenhum item salvo no projeto") : t("project_detail.no_saved_category", { cat: itemsFilter }, `Nenhum item de ${itemsFilter} salvo`)}
                   </p>
                   <p className="max-w-xs text-[11px] text-ink-500">
-                    Salve avaliações de ideias, roteiros, títulos, receitas virais ou links externos para organizar este projeto.
+                    {t("project_detail.no_saved_desc", undefined, "Salve avaliações de ideias, roteiros, títulos, receitas virais ou links externos para organizar este projeto.")}
                   </p>
                   <div className="mt-2 flex gap-2">
                     <button 
                       onClick={() => setShowAddToolModal(true)} 
                       className="rounded-lg bg-signal-400/10 border border-signal-400/25 px-3 py-1.5 font-mono text-[9px] font-bold uppercase tracking-wider text-signal-400 hover:bg-signal-400/20 transition-colors cursor-pointer"
                     >
-                      + Vincular Ferramenta
+                      + {t("project_detail.link_tool", undefined, "Vincular Ferramenta")}
                     </button>
                   </div>
                 </div>
@@ -1626,7 +1633,7 @@ export function ProjetoDetailScreen({
                                       onGo(item.type);
                                     }}
                                     className="rounded p-1.5 text-signal-400 hover:text-signal-300 hover:bg-ink-800 transition-colors cursor-pointer"
-                                    title="Abrir ferramenta com estes dados carregados"
+                                    title={t("project_detail.open_tool_tooltip", undefined, "Abrir ferramenta com estes dados carregados")}
                                   >
                                     <Icon name="arrow" className="h-3.5 w-3.5" />
                                   </button>
@@ -1637,7 +1644,7 @@ export function ProjetoDetailScreen({
                                     setViewingSavedItem(item);
                                   }}
                                   className="rounded p-1.5 text-ink-400 hover:text-signal-300 hover:bg-ink-800 transition-colors cursor-pointer"
-                                  title="Visualizar conteúdo"
+                                  title={t("project_detail.view_content_tooltip", undefined, "Visualizar conteúdo")}
                                 >
                                   <Icon name="eye" className="h-3.5 w-3.5" />
                                 </button>
@@ -1655,19 +1662,19 @@ export function ProjetoDetailScreen({
                                 "rounded p-1.5 transition-colors cursor-pointer",
                                 copiedItemId === item.id ? "text-emerald-400" : "text-ink-400 hover:text-signal-300 hover:bg-ink-800"
                               )}
-                              title="Copiar conteúdo"
+                              title={t("project_detail.copy_content_tooltip", undefined, "Copiar conteúdo")}
                             >
                               <Icon name={copiedItemId === item.id ? "check" : "copy"} className="h-3.5 w-3.5" />
                             </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (window.confirm(`Remover "${item.title}" dos salvos do projeto?`)) {
+                                if (window.confirm(t("project_detail.remove_confirm", { title: item.title }, `Remover "${item.title}" dos salvos do projeto?`))) {
                                   handleDeleteSavedItem(item.id);
                                 }
                               }}
                               className="rounded p-1.5 text-ink-500 hover:text-red-400 hover:bg-ink-800 transition-colors cursor-pointer"
-                              title="Remover do projeto"
+                              title={t("project_detail.remove_from_project_tooltip", undefined, "Remover do projeto")}
                             >
                               <Icon name="trash" className="h-3.5 w-3.5" />
                             </button>
@@ -1687,14 +1694,14 @@ export function ProjetoDetailScreen({
             <div className="flex items-center gap-2.5 border-b border-ink-800/30 px-5 py-3.5">
               <Icon name="edit" className="h-3.5 w-3.5 text-bone-300" strokeWidth={1.8} />
               <h3 className="font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase">
-                Bloco de Notas
+                {t("project_detail.notes_title", undefined, "Bloco de Notas")}
               </h3>
             </div>
             <div className="p-5 flex flex-col flex-1 overflow-hidden">
               <textarea
                 value={newNoteContent}
                 onChange={(e) => setNewNoteContent(e.target.value)}
-                placeholder="Escreva algo importante sobre este projeto..."
+                placeholder={t("project_detail.notes_placeholder", undefined, "Escreva algo importante sobre este projeto...")}
                 className="min-h-[80px] w-full resize-none rounded-lg border border-ink-800/40 bg-ink-950/30 p-3 text-[13px] leading-relaxed text-bone-200 placeholder:text-ink-400 transition-colors focus:border-signal-400/40 focus:outline-none"
               />
               <div className="mt-3 flex justify-end">
@@ -1703,7 +1710,7 @@ export function ProjetoDetailScreen({
                   disabled={!newNoteContent.trim()}
                   className="rounded-lg bg-signal-400 px-4 py-2 font-mono text-[9px] font-bold tracking-[0.12em] text-ink-950 uppercase shadow-[0_4px_14px_-6px_rgba(242,179,61,0.5)] transition-all hover:bg-signal-300 disabled:opacity-40 disabled:shadow-none"
                 >
-                  Salvar Nota
+                  {t("project_detail.save_note_btn", undefined, "Salvar Nota")}
                 </button>
               </div>
               
@@ -1724,13 +1731,13 @@ export function ProjetoDetailScreen({
                               onClick={() => setEditingNote(null)}
                               className="rounded px-2 py-1 font-mono text-[9px] uppercase text-ink-400 hover:text-bone-300"
                             >
-                              Cancelar
+                              {t("project_detail.cancel", undefined, "Cancelar")}
                             </button>
                             <button 
                               onClick={() => handleUpdateNote(note.id)}
                               className="rounded bg-signal-400/10 px-2 py-1 font-mono text-[9px] font-bold uppercase text-signal-400 hover:bg-signal-400/20"
                             >
-                              Salvar
+                              {t("project_detail.save", undefined, "Salvar")}
                             </button>
                           </div>
                         </div>
@@ -1741,7 +1748,7 @@ export function ProjetoDetailScreen({
                               <button 
                                 onClick={() => { setEditingNote(note.id); setEditNoteContent(note.content); }}
                                 className="flex h-6 w-6 items-center justify-center rounded-md bg-signal-400/20 text-signal-400 shadow-[0_2px_8px_-2px_rgba(242,179,61,0.3)] backdrop-blur-md transition-all hover:bg-signal-400 hover:text-ink-950"
-                                title="Editar"
+                                title={t("project_detail.edit", undefined, "Editar")}
                               >
                                 <Icon name="edit" className="h-3 w-3" />
                               </button>
@@ -1750,7 +1757,7 @@ export function ProjetoDetailScreen({
                               <button 
                                 onClick={() => handleDeleteNote(note.id)}
                                 className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500/20 text-red-400 shadow-[0_2px_8px_-2px_rgba(239,68,68,0.3)] backdrop-blur-md transition-all hover:bg-red-500 hover:text-white"
-                                title="Excluir"
+                                title={t("project_detail.delete", undefined, "Excluir")}
                               >
                                 <Icon name="trash" className="h-3 w-3" />
                               </button>
@@ -1821,10 +1828,11 @@ export function ProjetoDetailScreen({
             <div className="border-b border-ink-800/60 px-6 py-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="font-display text-lg font-bold text-bone-50">Nova Tarefa</h2>
+                  <h2 className="font-display text-lg font-bold text-bone-50">{t("project_detail.modal_new_task", undefined, "Nova Tarefa")}</h2>
                   <p className="mt-0.5 font-mono text-[9px] tracking-[0.12em] text-bone-300 uppercase">
-                    Em: <span className="text-signal-400">
-                      {COL_CONFIG[showTaskModal].label}
+                    {t("project_detail.in_column", undefined, "Em:")}{" "}
+                    <span className="text-signal-400">
+                      {getColLabel(showTaskModal)}
                     </span>
                   </p>
                 </div>
@@ -1840,13 +1848,13 @@ export function ProjetoDetailScreen({
             <form onSubmit={handleCreateTask} className="p-6">
               <div className="mb-6">
                 <label className="mb-2 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Título da Tarefa
+                  {t("project_detail.task_title_label", undefined, "Título da Tarefa")}
                 </label>
                 <input 
                   type="text" 
                   value={newTaskTitle}
                   onChange={(e) => setNewTaskTitle(e.target.value)}
-                  placeholder="Ex: Roteirizar o vídeo"
+                  placeholder={t("project_detail.task_title_placeholder", undefined, "Ex: Roteirizar o vídeo")}
                   autoFocus
                   className="w-full rounded-lg border border-ink-800/60 bg-ink-950/50 px-4 py-3 text-[14px] text-bone-100 placeholder:text-ink-400 transition-colors focus:border-signal-400/60 focus:outline-none focus:ring-1 focus:ring-signal-400/20"
                   required
@@ -1855,12 +1863,12 @@ export function ProjetoDetailScreen({
 
               <div className="mb-6">
                 <label className="mb-2 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Descrição (Opcional)
+                  {t("project_detail.task_desc_label", undefined, "Descrição (Opcional)")}
                 </label>
                 <textarea 
                   value={newTaskDescription}
                   onChange={(e) => setNewTaskDescription(e.target.value)}
-                  placeholder="Detalhes adicionais..."
+                  placeholder={t("project_detail.task_desc_placeholder", undefined, "Detalhes adicionais...")}
                   rows={3}
                   className="w-full resize-none rounded-lg border border-ink-800/60 bg-ink-950/50 px-4 py-3 text-[13px] text-bone-100 placeholder:text-ink-400 transition-colors focus:border-signal-400/60 focus:outline-none focus:ring-1 focus:ring-signal-400/20"
                 />
@@ -1872,14 +1880,14 @@ export function ProjetoDetailScreen({
                   onClick={() => { setShowTaskModal(null); setNewTaskTitle(""); setNewTaskDescription(""); }}
                   className="rounded-lg px-4 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-300 uppercase transition-colors hover:text-bone-200"
                 >
-                  Cancelar
+                  {t("project_detail.cancel", undefined, "Cancelar")}
                 </button>
                 <button 
                   type="submit"
                   disabled={!newTaskTitle.trim()}
                   className="rounded-lg bg-signal-400 px-6 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-950 uppercase shadow-[0_6px_20px_-8px_rgba(242,179,61,0.6)] transition-all disabled:opacity-40 disabled:shadow-none hover:bg-signal-300"
                 >
-                  Adicionar
+                  {t("project_detail.add_btn", undefined, "Adicionar")}
                 </button>
               </div>
             </form>
@@ -1903,7 +1911,7 @@ export function ProjetoDetailScreen({
               <div className="flex items-center gap-2.5">
                 <Icon name={COL_CONFIG[viewTaskModal.status].icon as any} className="h-3.5 w-3.5 text-bone-300" strokeWidth={1.8} />
                 <h3 className="font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase">
-                  Detalhes da Tarefa
+                  {t("project_detail.modal_task_details", undefined, "Detalhes da Tarefa")}
                 </h3>
               </div>
               <div className="flex items-center gap-3">
@@ -1911,7 +1919,7 @@ export function ProjetoDetailScreen({
                   "rounded bg-ink-800/40 px-2 py-0.5 font-mono text-[8px] font-bold tracking-[0.1em] uppercase",
                   COL_CONFIG[viewTaskModal.status].accent
                 )}>
-                  {COL_CONFIG[viewTaskModal.status].label}
+                  {getColLabel(viewTaskModal.status)}
                 </span>
                 <button 
                   onClick={() => {
@@ -1928,7 +1936,7 @@ export function ProjetoDetailScreen({
             <div className="p-6">
               <div className="mb-5">
                 <h3 className="mb-2 font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Título
+                  {t("project_detail.task_title_label", undefined, "Título")}
                 </h3>
                 <p className="break-words text-[15px] font-medium leading-snug text-bone-50">
                   {viewTaskModal.title}
@@ -1937,7 +1945,7 @@ export function ProjetoDetailScreen({
               <div className="group">
                 <div className="mb-2 flex items-center justify-between min-h-[28px]">
                   <h3 className="font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                    Descrição
+                    {t("project_detail.task_desc_label", undefined, "Descrição")}
                   </h3>
                   {!isEditingTaskDesc && (
                     <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -1951,7 +1959,7 @@ export function ProjetoDetailScreen({
                           }
                         }}
                         className="rounded p-1.5 text-ink-400 transition-all hover:bg-ink-800 hover:text-bone-200 active:scale-90"
-                        title="Copiar"
+                        title={t("project_detail.copy", undefined, "Copiar")}
                       >
                         <Icon name={copied ? "check" : "copy"} className={copied ? "h-3.5 w-3.5 text-emerald-400" : "h-3.5 w-3.5"} />
                       </button>
@@ -1962,7 +1970,7 @@ export function ProjetoDetailScreen({
                           setIsEditingTaskDesc(true);
                         }}
                         className="rounded p-1.5 text-signal-400/70 transition-all hover:bg-signal-400/10 hover:text-signal-400 active:scale-90" 
-                        title="Editar"
+                        title={t("project_detail.edit", undefined, "Editar")}
                       >
                         <Icon name="edit" className="h-3.5 w-3.5" />
                       </button>
@@ -1975,7 +1983,7 @@ export function ProjetoDetailScreen({
                       value={editTaskDescContent}
                       onChange={(e) => setEditTaskDescContent(e.target.value)}
                       className="w-full min-h-[120px] resize-none rounded-xl border border-signal-400 bg-ink-950 p-4 text-[13px] leading-relaxed text-bone-100 placeholder:text-ink-500 outline-none ring-4 ring-signal-400/15 shadow-[0_0_30px_-5px_rgba(242,179,61,0.2)] transition-all duration-300 selection:bg-signal-400/20"
-                      placeholder="Adicione uma descrição para a tarefa..."
+                      placeholder={t("project_detail.task_desc_placeholder2", undefined, "Adicione uma descrição para a tarefa...")}
                       autoFocus
                     />
                     <div className="mt-3 flex items-center justify-end gap-2">
@@ -1983,13 +1991,13 @@ export function ProjetoDetailScreen({
                         onClick={() => setIsEditingTaskDesc(false)}
                         className="rounded-lg px-4 py-2 font-mono text-[9px] font-bold uppercase text-ink-400 transition-colors hover:bg-ink-800/50 hover:text-bone-200"
                       >
-                        Cancelar
+                        {t("project_detail.cancel", undefined, "Cancelar")}
                       </button>
                       <button
                         onClick={() => handleUpdateTaskDesc(viewTaskModal.id)}
                         className="rounded-lg bg-signal-400 px-4 py-2 font-mono text-[9px] font-bold uppercase text-ink-950 shadow-[0_4px_14px_-6px_rgba(242,179,61,0.5)] transition-all hover:bg-signal-300 hover:shadow-[0_6px_20px_-6px_rgba(242,179,61,0.6)]"
                       >
-                        Salvar
+                        {t("project_detail.save", undefined, "Salvar")}
                       </button>
                     </div>
                   </div>
@@ -2002,7 +2010,7 @@ export function ProjetoDetailScreen({
                     className="cursor-pointer rounded-xl border border-ink-800/60 bg-ink-950/50 p-4 min-h-[120px] transition-colors hover:border-signal-400/30 hover:bg-signal-400/[0.02]"
                   >
                     <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-bone-200">
-                      {viewTaskModal.description || <span className="italic text-ink-500">Adicionar descrição...</span>}
+                      {viewTaskModal.description || <span className="italic text-ink-500">{t("project_detail.add_desc_prompt", undefined, "Adicionar descrição...")}</span>}
                     </p>
                   </div>
                 )}
@@ -2022,8 +2030,8 @@ export function ProjetoDetailScreen({
             <div className="border-b border-ink-800/60 px-6 py-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="font-display text-lg font-bold text-bone-50">Compartilhar Projeto</h2>
-                  <p className="mt-0.5 font-mono text-[9px] tracking-[0.12em] text-bone-300 uppercase">Convide alguém para colaborar</p>
+                  <h2 className="font-display text-lg font-bold text-bone-50">{t("project_detail.modal_share_title", undefined, "Compartilhar Projeto")}</h2>
+                  <p className="mt-0.5 font-mono text-[9px] tracking-[0.12em] text-bone-300 uppercase">{t("project_detail.modal_share_subtitle", undefined, "Convide alguém para colaborar")}</p>
                 </div>
                 <button 
                   onClick={() => { setShowShareModal(false); setShareChannel(""); }}
@@ -2039,10 +2047,10 @@ export function ProjetoDetailScreen({
                 <div className="rounded-xl border border-signal-400/20 bg-signal-400/[0.04] p-5 text-center">
                   <Icon name="target" className="mx-auto mb-3 h-6 w-6 text-signal-400/70" strokeWidth={1.5} />
                   <h3 className="mb-1.5 font-mono text-[10px] font-bold tracking-[0.14em] text-signal-400 uppercase">
-                    Nome de usuário ausente
+                    {t("project_detail.no_username_title", undefined, "Nome de usuário ausente")}
                   </h3>
                   <p className="text-[12px] leading-relaxed text-ink-300">
-                    Configure um <strong className="text-bone-300">@usuario</strong> no seu perfil para compartilhar projetos.
+                    {t("project_detail.no_username_desc", undefined, "Configure um @usuario no seu perfil para compartilhar projetos.")}
                   </p>
                 </div>
               ) : (
@@ -2050,7 +2058,7 @@ export function ProjetoDetailScreen({
                   <form onSubmit={handleSubmitShare} className="space-y-5">
                     <div>
                       <label className="mb-2 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                        @canal do usuário
+                        {t("project_detail.user_channel_label", undefined, "@canal do usuário")}
                       </label>
                       <input 
                         type="text" 
@@ -2065,12 +2073,12 @@ export function ProjetoDetailScreen({
 
                     <div>
                       <label className="mb-3 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                        Nível de Permissão
+                        {t("project_detail.permission_level_label", undefined, "Nível de Permissão")}
                       </label>
                       <div className="grid grid-cols-2 gap-2.5">
                         {[
-                          { id: "editor" as const, icon: "edit", label: "Editor", desc: "Criar, alterar e deletar" },
-                          { id: "viewer" as const, icon: "eye", label: "Visualizador", desc: "Somente leitura" },
+                          { id: "editor" as const, icon: "edit", label: t("project_detail.role_editor_label", undefined, "Editor"), desc: t("project_detail.role_editor_desc", undefined, "Criar, alterar e deletar") },
+                          { id: "viewer" as const, icon: "eye", label: t("project_detail.role_viewer_label", undefined, "Visualizador"), desc: t("project_detail.role_viewer_desc", undefined, "Somente leitura") },
                         ].map(r => (
                           <button
                             key={r.id}
@@ -2103,14 +2111,14 @@ export function ProjetoDetailScreen({
                         onClick={() => { setShowShareModal(false); setShareChannel(""); }}
                         className="rounded-lg px-4 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-300 uppercase transition-colors hover:text-bone-200"
                       >
-                        Cancelar
+                        {t("project_detail.cancel", undefined, "Cancelar")}
                       </button>
                       <button 
                         type="submit"
                         disabled={!shareChannel.trim()}
                         className="rounded-lg bg-signal-400 px-6 py-2.5 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-950 uppercase shadow-[0_6px_20px_-8px_rgba(242,179,61,0.6)] transition-all disabled:opacity-40 disabled:shadow-none hover:bg-signal-300"
                       >
-                        Convidar
+                        {t("project_detail.invite_btn", undefined, "Convidar")}
                       </button>
                     </div>
                   </form>
@@ -2118,8 +2126,8 @@ export function ProjetoDetailScreen({
                   {/* SHARE LINK */}
                   <div className="mt-5 border-t border-ink-800/40 pt-5">
                     <label className="mb-2.5 flex items-center justify-between font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">
-                      <span>Ou compartilhe via link</span>
-                      <span className={cn("transition-all duration-300", copied ? "text-signal-400 opacity-100" : "opacity-0")}>Copiado!</span>
+                      <span>{t("project_detail.or_share_link", undefined, "Ou compartilhe via link")}</span>
+                      <span className={cn("transition-all duration-300", copied ? "text-signal-400 opacity-100" : "opacity-0")}>{t("project_detail.copied", undefined, "Copiado!")}</span>
                     </label>
                     <div className="relative">
                       <input 
@@ -2143,7 +2151,7 @@ export function ProjetoDetailScreen({
                             ? "bg-signal-400 text-ink-950 scale-105" 
                             : "bg-ink-800/50 text-bone-300 hover:text-bone-200"
                         )}
-                        title="Copiar link"
+                        title={t("project_detail.copy_link_title", undefined, "Copiar link")}
                       >
                         <Icon name={copied ? "check" : "copy"} className="h-3 w-3" strokeWidth={copied ? 2.5 : 1.5} />
                       </button>
@@ -2157,7 +2165,7 @@ export function ProjetoDetailScreen({
                 <div className="mt-5 border-t border-ink-800/40 pt-5">
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="font-mono text-[9px] tracking-[0.14em] text-signal-400 uppercase">
-                      Aplicações Pendentes ({applications.length})
+                      {t("project_detail.pending_applications", { count: applications.length }, `Aplicações Pendentes (${applications.length})`)}
                     </h3>
                   </div>
                   <div className="space-y-2">
@@ -2179,7 +2187,8 @@ export function ProjetoDetailScreen({
                               </div>
                               <div className="font-mono text-[9px] text-bone-300 truncate">
                                 {app.channel && <span className="text-bone-400 mr-1">{app.channel} •</span>}
-                                quer acesso de <span className="text-signal-400 font-bold uppercase">{app.role === 'viewer' ? 'Leitor' : 'Editor'}</span>
+                                {t("project_detail.wants_access", undefined, "quer acesso de")}{" "}
+                                <span className="text-signal-400 font-bold uppercase">{app.role === 'viewer' ? t("project_detail.role_viewer", undefined, 'Leitor') : t("project_detail.role_editor", undefined, 'Editor')}</span>
                               </div>
                             </div>
                           </div>
@@ -2189,9 +2198,9 @@ export function ProjetoDetailScreen({
                               onClick={() => handleRejectApplication(app.id)}
                               disabled={isProcessing}
                               className="rounded-md border border-ink-800/80 bg-ink-900/60 px-2.5 py-1.5 font-mono text-[9px] font-bold tracking-[0.1em] text-bone-400 uppercase hover:bg-ink-800 hover:text-bone-200 disabled:opacity-40 transition-colors cursor-pointer"
-                              title="Recusar solicitação"
+                              title={t("project_detail.reject_application_title", undefined, "Recusar solicitação")}
                             >
-                              Recusar
+                              {t("project_detail.reject_btn", undefined, "Recusar")}
                             </button>
                             <button 
                               onClick={() => handleAcceptApplication(app.id)}
@@ -2201,10 +2210,10 @@ export function ProjetoDetailScreen({
                               {isProcessing ? (
                                 <>
                                   <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-ink-950 border-t-transparent" />
-                                  <span>Aceitando...</span>
+                                  <span>{t("project_detail.accepting_btn", undefined, "Aceitando...")}</span>
                                 </>
                               ) : (
-                                "Aceitar"
+                                t("project_detail.accept_btn", undefined, "Aceitar")
                               )}
                             </button>
                           </div>
@@ -2219,7 +2228,7 @@ export function ProjetoDetailScreen({
               {members.length > 0 && (
                 <div className="mt-5 border-t border-ink-800/40 pt-5">
                   <h3 className="mb-3 font-mono text-[9px] tracking-[0.14em] text-signal-400 uppercase">
-                    Membros Atuais ({members.length})
+                    {t("project_detail.current_members", { count: members.length }, `Membros Atuais (${members.length})`)}
                   </h3>
                   <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
                     {members.map((m) => (
@@ -2235,10 +2244,10 @@ export function ProjetoDetailScreen({
                           <div className="min-w-0 flex-1">
                             <div className="text-[12px] font-medium text-bone-200 truncate">
                               {m.profile?.full_name || m.profile?.channel || 'Membro'}
-                              {m.userId === user?.id && <span className="ml-1 text-[9px] text-signal-400 font-bold">(Você)</span>}
+                              {m.userId === user?.id && <span className="ml-1 text-[9px] text-signal-400 font-bold">{t("project_detail.you_badge", undefined, "(Você)")}</span>}
                             </div>
                             <div className="font-mono text-[8.5px] text-bone-400">
-                              {m.isOwner ? '👑 Proprietário' : (m.role === 'viewer' ? 'Leitor' : 'Editor')}
+                              {m.isOwner ? t("project_detail.role_owner_tag", undefined, '👑 Proprietário') : (m.role === 'viewer' ? t("project_detail.role_viewer", undefined, 'Leitor') : t("project_detail.role_editor", undefined, 'Editor'))}
                             </div>
                           </div>
                         </div>
@@ -2246,7 +2255,7 @@ export function ProjetoDetailScreen({
                           <button
                             onClick={() => handleRemoveMember(m.userId)}
                             className="text-ink-500 hover:text-red-400 p-1 transition-colors cursor-pointer"
-                            title="Remover membro"
+                            title={t("project_detail.remove_member_title", undefined, "Remover membro")}
                           >
                             <Icon name="trash" className="h-3 w-3" />
                           </button>
@@ -2275,9 +2284,9 @@ export function ProjetoDetailScreen({
                   <Icon name="user" className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="font-display text-lg font-bold text-bone-50">Participantes do Projeto</h2>
+                  <h2 className="font-display text-lg font-bold text-bone-50">{t("project_detail.modal_members_title", undefined, "Participantes do Projeto")}</h2>
                   <p className="font-mono text-[9px] tracking-[0.12em] text-bone-300 uppercase">
-                    {members.length} {members.length === 1 ? 'pessoa participando' : 'pessoas participando'}
+                    {members.length} {members.length === 1 ? t("project_detail.person_participating", undefined, 'pessoa participando') : t("project_detail.people_participating", undefined, 'pessoas participando')}
                   </p>
                 </div>
               </div>
@@ -2293,7 +2302,7 @@ export function ProjetoDetailScreen({
             <div className="p-6 max-h-[380px] overflow-y-auto space-y-2.5">
               {members.length === 0 ? (
                 <div className="py-8 text-center text-ink-400 font-mono text-[11px]">
-                  Nenhum participante encontrado.
+                  {t("project_detail.no_members_found", undefined, "Nenhum participante encontrado.")}
                 </div>
               ) : (
                 members.map((m) => {
@@ -2328,11 +2337,11 @@ export function ProjetoDetailScreen({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-[13px] font-semibold text-bone-100 truncate">
-                              {m.profile?.full_name || m.profile?.channel || (isOwner ? 'Proprietário' : 'Colaborador')}
+                              {m.profile?.full_name || m.profile?.channel || (isOwner ? t("project_detail.role_owner", undefined, 'Proprietário') : t("project_detail.collaborator", undefined, 'Colaborador'))}
                             </span>
                             {isCurrentUser && (
                               <span className="rounded bg-signal-400/15 border border-signal-400/30 px-1 py-0.2 font-mono text-[8px] font-bold text-signal-400">
-                                VOCÊ
+                                {t("project_detail.you_uppercase", undefined, "VOCÊ")}
                               </span>
                             )}
                           </div>
@@ -2349,11 +2358,11 @@ export function ProjetoDetailScreen({
                         {isOwner ? (
                           <span className="flex items-center gap-1 rounded-md border border-signal-400/30 bg-signal-400/10 px-2 py-1 font-mono text-[9px] font-bold text-signal-400 uppercase">
                             <Icon name="crown" className="h-3 w-3" />
-                            Proprietário
+                            {t("project_detail.role_owner", undefined, "Proprietário")}
                           </span>
                         ) : (
                           <span className="rounded-md border border-ink-800 bg-ink-900 px-2 py-1 font-mono text-[9px] font-bold text-bone-400 uppercase">
-                            {m.role === 'viewer' ? 'Leitor' : 'Editor'}
+                            {m.role === 'viewer' ? t("project_detail.role_viewer", undefined, 'Leitor') : t("project_detail.role_editor", undefined, 'Editor')}
                           </span>
                         )}
 
@@ -2368,7 +2377,7 @@ export function ProjetoDetailScreen({
                                 });
                               }}
                               className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-400 hover:text-signal-400 hover:bg-signal-400/10 transition-colors cursor-pointer"
-                              title="Transferir propriedade do projeto"
+                              title={t("project_detail.transfer_ownership_title", undefined, "Transferir propriedade do projeto")}
                             >
                               <Icon name="crown" className="h-3.5 w-3.5" />
                             </button>
@@ -2380,7 +2389,7 @@ export function ProjetoDetailScreen({
                                 });
                               }}
                               className="flex h-7 w-7 items-center justify-center rounded-lg text-ink-400 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-                              title="Remover do projeto"
+                              title={t("project_detail.remove_from_project_tooltip", undefined, "Remover do projeto")}
                             >
                               <Icon name="trash" className="h-3.5 w-3.5" />
                             </button>
@@ -2395,10 +2404,10 @@ export function ProjetoDetailScreen({
                               setShowLeaveModal(true);
                             }}
                             className="flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 font-mono text-[9px] font-bold text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
-                            title="Sair do projeto"
+                            title={t("project_detail.leave_project_title", undefined, "Sair do projeto")}
                           >
                             <Icon name="login" className="h-3 w-3" />
-                            Sair
+                            {t("project_detail.leave_btn", undefined, "Sair")}
                           </button>
                         )}
                       </div>
@@ -2419,7 +2428,7 @@ export function ProjetoDetailScreen({
                   className="flex items-center gap-1.5 rounded-lg bg-signal-400/10 border border-signal-400/30 px-3 py-1.5 font-mono text-[9px] font-bold text-signal-400 uppercase hover:bg-signal-400 hover:text-ink-950 transition-all cursor-pointer"
                 >
                   <Icon name="plus" className="h-3 w-3" />
-                  Convidar pessoas
+                  {t("project_detail.invite_people_btn", undefined, "Convidar pessoas")}
                 </button>
               ) : (
                 <button
@@ -2430,7 +2439,7 @@ export function ProjetoDetailScreen({
                   className="flex items-center gap-1.5 rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-1.5 font-mono text-[9px] font-bold text-red-400 uppercase hover:bg-red-500/20 transition-all cursor-pointer"
                 >
                   <Icon name="login" className="h-3 w-3" />
-                  Sair deste projeto
+                  {t("project_detail.leave_this_project_btn", undefined, "Sair deste projeto")}
                 </button>
               )}
 
@@ -2438,7 +2447,7 @@ export function ProjetoDetailScreen({
                 onClick={() => setShowMembersModal(false)}
                 className="rounded-lg px-4 py-1.5 font-mono text-[10px] uppercase text-bone-400 hover:text-bone-200 cursor-pointer"
               >
-                Fechar
+                {t("project_detail.close", undefined, "Fechar")}
               </button>
             </div>
           </div>
@@ -2456,10 +2465,9 @@ export function ProjetoDetailScreen({
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-400">
                 <Icon name="trash" className="h-6 w-6" strokeWidth={1.5} />
               </div>
-              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Remover Participante</h2>
+              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">{t("project_detail.remove_participant_title", undefined, "Remover Participante")}</h2>
               <p className="text-[13px] leading-relaxed text-bone-300">
-                Tem certeza que deseja remover <strong className="text-bone-100">{memberToRemove.name}</strong> deste projeto? 
-                Essa pessoa não terá mais acesso às tarefas, ferramentas salvas e anotações.
+                {t("project_detail.remove_participant_desc", { name: memberToRemove.name }, `Tem certeza que deseja remover ${memberToRemove.name} deste projeto? Essa pessoa não terá mais acesso às tarefas, ferramentas salvas e anotações.`)}
               </p>
             </div>
             
@@ -2469,14 +2477,14 @@ export function ProjetoDetailScreen({
                 disabled={isRemovingMember}
                 className="flex-1 rounded-xl border border-ink-800 bg-ink-900 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-100 disabled:opacity-40 cursor-pointer"
               >
-                Cancelar
+                {t("project_detail.cancel", undefined, "Cancelar")}
               </button>
               <button 
                 onClick={confirmRemoveMember}
                 disabled={isRemovingMember}
                 className="flex-1 rounded-xl bg-red-500 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-white uppercase shadow-[0_8px_20px_-6px_rgba(239,68,68,0.5)] transition-all hover:bg-red-600 disabled:opacity-40 cursor-pointer"
               >
-                {isRemovingMember ? "Removendo..." : "Confirmar e Remover"}
+                {isRemovingMember ? t("project_detail.removing", undefined, "Removendo...") : t("project_detail.confirm_and_remove", undefined, "Confirmar e Remover")}
               </button>
             </div>
           </div>
@@ -2494,18 +2502,18 @@ export function ProjetoDetailScreen({
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-signal-400/10 text-signal-400 border border-signal-400/20">
                 <Icon name="crown" className="h-6 w-6" strokeWidth={1.5} />
               </div>
-              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Transferir Propriedade</h2>
+              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">{t("project_detail.transfer_ownership_modal_title", undefined, "Transferir Propriedade")}</h2>
               <p className="text-[13px] leading-relaxed text-bone-300">
-                Deseja transferir a propriedade de <strong className="text-bone-100">{project.name}</strong> para <strong className="text-signal-400">{memberToTransfer.name}</strong>?
+                {t("project_detail.transfer_ownership_desc", { project: project.name, name: memberToTransfer.name }, `Deseja transferir a propriedade de ${project.name} para ${memberToTransfer.name}?`)}
               </p>
               <div className="mt-4 rounded-xl border border-ink-800/80 bg-ink-900/60 p-3.5 text-left text-[11.5px] leading-relaxed text-bone-400">
                 <p className="flex items-start gap-2">
                   <span className="text-signal-400 font-bold shrink-0 mt-0.5">•</span>
-                  <span>O novo proprietário terá controle total do projeto, incluindo exclusão e gestão de participantes.</span>
+                  <span>{t("project_detail.transfer_bullet1", undefined, "O novo proprietário terá controle total do projeto, incluindo exclusão e gestão de participantes.")}</span>
                 </p>
                 <p className="flex items-start gap-2 mt-2">
                   <span className="text-signal-400 font-bold shrink-0 mt-0.5">•</span>
-                  <span>Você continuará participando do projeto como <strong className="text-bone-200">Editor</strong>.</span>
+                  <span>{t("project_detail.transfer_bullet2", undefined, "Você continuará participando do projeto como Editor.")}</span>
                 </p>
               </div>
             </div>
@@ -2516,14 +2524,14 @@ export function ProjetoDetailScreen({
                 disabled={isTransferring}
                 className="flex-1 rounded-xl border border-ink-800 bg-ink-900 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-100 disabled:opacity-40 cursor-pointer"
               >
-                Cancelar
+                {t("project_detail.cancel", undefined, "Cancelar")}
               </button>
               <button 
                 onClick={confirmTransferOwnership}
                 disabled={isTransferring}
                 className="flex-1 rounded-xl bg-signal-400 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-ink-950 uppercase shadow-[0_8px_20px_-6px_rgba(242,179,61,0.5)] transition-all hover:bg-signal-300 disabled:opacity-40 cursor-pointer"
               >
-                {isTransferring ? "Transferindo..." : "Transferir Posse"}
+                {isTransferring ? t("project_detail.transferring", undefined, "Transferindo...") : t("project_detail.confirm_transfer_btn", undefined, "Transferir Posse")}
               </button>
             </div>
           </div>
@@ -2541,10 +2549,9 @@ export function ProjetoDetailScreen({
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-400">
                 <Icon name="login" className="h-6 w-6" strokeWidth={1.5} />
               </div>
-              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Sair do Projeto</h2>
+              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">{t("project_detail.leave_project_title", undefined, "Sair do Projeto")}</h2>
               <p className="text-[13px] leading-relaxed text-bone-300">
-                Tem certeza que deseja sair de <strong className="text-bone-100">{project.name}</strong>? 
-                Você deixará de ser participante deste projeto e não terá mais acesso às tarefas, ferramentas salvas e anotações.
+                {t("project_detail.leave_project_desc", { project: project.name }, `Tem certeza que deseja sair de ${project.name}? Você deixará de ser participante deste projeto e não terá mais acesso às tarefas, ferramentas salvas e anotações.`)}
               </p>
             </div>
             
@@ -2554,14 +2561,14 @@ export function ProjetoDetailScreen({
                 disabled={isLeaving}
                 className="flex-1 rounded-xl border border-ink-800 bg-ink-900 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-100 disabled:opacity-40 cursor-pointer"
               >
-                Cancelar
+                {t("project_detail.cancel", undefined, "Cancelar")}
               </button>
               <button 
                 onClick={handleLeaveProject}
                 disabled={isLeaving}
                 className="flex-1 rounded-xl bg-red-500 px-4 py-3 font-mono text-[11px] font-bold tracking-[0.1em] text-white uppercase shadow-[0_8px_20px_-6px_rgba(239,68,68,0.5)] transition-all hover:bg-red-600 disabled:opacity-40 cursor-pointer"
               >
-                {isLeaving ? "Saindo..." : "Confirmar e Sair"}
+                {isLeaving ? t("project_detail.leaving", undefined, "Saindo...") : t("project_detail.confirm_leave_btn", undefined, "Confirmar e Sair")}
               </button>
             </div>
           </div>
@@ -2579,10 +2586,9 @@ export function ProjetoDetailScreen({
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-500">
                 <Icon name="trash" className="h-6 w-6" strokeWidth={1.5} />
               </div>
-              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Excluir Projeto</h2>
+              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">{t("project_detail.delete_project_title", undefined, "Excluir Projeto")}</h2>
               <p className="text-[13px] leading-relaxed text-bone-300">
-                Tem certeza que deseja excluir <strong className="text-bone-100">{project.name}</strong>? 
-                Ele será movido para a <strong className="text-red-400">Lixeira (em Histórico & Lixeira)</strong> e você poderá restaurá-lo depois se quiser.
+                {t("project_detail.delete_project_desc", { project: project.name }, `Tem certeza que deseja excluir ${project.name}? Ele será movido para a Lixeira (em Histórico & Lixeira) e você poderá restaurá-lo depois se quiser.`)}
               </p>
             </div>
             
@@ -2591,7 +2597,7 @@ export function ProjetoDetailScreen({
                 onClick={() => setShowDeleteModal(false)}
                 className="flex-1 rounded-lg border border-ink-800 bg-transparent px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-50"
               >
-                Cancelar
+                {t("project_detail.cancel", undefined, "Cancelar")}
               </button>
               <button 
                 onClick={async () => {
@@ -2608,7 +2614,7 @@ export function ProjetoDetailScreen({
                 }}
                 className="flex-1 rounded-lg bg-red-500/10 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-red-500 uppercase transition-colors hover:bg-red-500 hover:text-white"
               >
-                Mover p/ Lixeira
+                {t("project_detail.move_to_trash_btn", undefined, "Mover p/ Lixeira")}
               </button>
             </div>
           </div>
@@ -2626,10 +2632,9 @@ export function ProjetoDetailScreen({
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-500">
                 <Icon name="trash" className="h-6 w-6" strokeWidth={1.5} />
               </div>
-              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">Excluir Tarefa</h2>
+              <h2 className="mb-2 font-display text-2xl font-bold text-bone-50">{t("project_detail.delete_task_modal_title", undefined, "Excluir Tarefa")}</h2>
               <p className="text-[13px] leading-relaxed text-bone-300">
-                Tem certeza que deseja excluir a tarefa <strong className="text-bone-100">{taskToDelete.title}</strong>? 
-                Isso não pode ser desfeito.
+                {t("project_detail.delete_task_desc", { task: taskToDelete.title }, `Tem certeza que deseja excluir a tarefa ${taskToDelete.title}? Isso não pode ser desfeito.`)}
               </p>
             </div>
             
@@ -2638,13 +2643,13 @@ export function ProjetoDetailScreen({
                 onClick={() => setTaskToDelete(null)}
                 className="flex-1 rounded-lg border border-ink-800 bg-transparent px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-50"
               >
-                Cancelar
+                {t("project_detail.cancel", undefined, "Cancelar")}
               </button>
               <button 
                 onClick={confirmDeleteTask}
                 className="flex-1 rounded-lg bg-red-500/10 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-red-500 uppercase transition-colors hover:bg-red-500 hover:text-white"
               >
-                Excluir
+                {t("project_detail.delete", undefined, "Excluir")}
               </button>
             </div>
           </div>
@@ -2662,10 +2667,9 @@ export function ProjetoDetailScreen({
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-red-500">
                 <Icon name="close" className="h-6 w-6" strokeWidth={2} />
               </div>
-              <h2 className="mb-2 font-display text-2xl font-bold text-red-400">Excluir Permanentemente</h2>
+              <h2 className="mb-2 font-display text-2xl font-bold text-red-400">{t("project_detail.delete_forever_title", undefined, "Excluir Permanentemente")}</h2>
               <p className="text-[13px] leading-relaxed text-bone-300">
-                Tem certeza que deseja excluir <strong className="text-bone-100">{project.name}</strong> em definitivo? 
-                Isso apagará todas as tarefas, notas e arquivos. <strong className="text-red-400">Isso não pode ser desfeito.</strong>
+                {t("project_detail.delete_forever_desc", { project: project.name }, `Tem certeza que deseja excluir ${project.name} em definitivo? Isso apagará todas as tarefas, notas e arquivos. Isso não pode ser desfeito.`)}
               </p>
             </div>
             
@@ -2674,7 +2678,7 @@ export function ProjetoDetailScreen({
                 onClick={() => setShowDeleteForeverModal(false)}
                 className="flex-1 rounded-lg border border-ink-800 bg-transparent px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-50"
               >
-                Cancelar
+                {t("project_detail.cancel", undefined, "Cancelar")}
               </button>
               <button 
                 onClick={async () => {
@@ -2692,7 +2696,7 @@ export function ProjetoDetailScreen({
                 }}
                 className="flex-1 rounded-lg bg-red-600 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.12em] text-white uppercase transition-colors hover:bg-red-700"
               >
-                Excluir de vez
+                {t("project_detail.delete_forever_btn", undefined, "Excluir de vez")}
               </button>
             </div>
           </div>
@@ -2747,7 +2751,7 @@ export function ProjetoDetailScreen({
               {viewingSavedItem.summary && (
                 <div className="rounded-lg border border-ink-800/80 bg-ink-950/60 p-3.5">
                   <span className="block font-mono text-[9px] uppercase tracking-wider text-ink-400 mb-1 font-bold">
-                    Resumo
+                    {t("project_detail.summary_label", undefined, "Resumo")}
                   </span>
                   <p className="text-[12.5px] text-bone-200 leading-relaxed">
                     {formatFriendlySummary(viewingSavedItem.type, viewingSavedItem.summary, viewingSavedItem.content)}
@@ -2772,7 +2776,7 @@ export function ProjetoDetailScreen({
                     rel="noopener noreferrer" 
                     className="flex items-center gap-1 rounded bg-signal-400/15 border border-signal-400/30 px-2.5 py-1 font-mono text-[9.5px] text-signal-400 uppercase hover:bg-signal-400 hover:text-ink-950 transition-all shrink-0"
                   >
-                    Acessar Link
+                    {t("project_detail.open_link_btn", undefined, "Acessar Link")}
                     <Icon name="arrow" className="h-3 w-3" />
                   </a>
                 </div>
@@ -2782,7 +2786,7 @@ export function ProjetoDetailScreen({
             {/* Modal Footer */}
             <div className="flex items-center justify-between border-t border-ink-800/80 px-6 py-3.5 bg-ink-950/40 shrink-0">
               <span className="font-mono text-[9.5px] text-ink-500 uppercase">
-                Salvo em {new Date(viewingSavedItem.createdAt).toLocaleDateString("pt-BR")}
+                {t("project_detail.saved_on", { date: new Date(viewingSavedItem.createdAt).toLocaleDateString() }, `Salvo em ${new Date(viewingSavedItem.createdAt).toLocaleDateString()}`)}
               </span>
 
               <div className="flex items-center gap-2">
@@ -2797,7 +2801,7 @@ export function ProjetoDetailScreen({
                   className="font-mono text-[10px] uppercase tracking-wider gap-1.5"
                 >
                   <Icon name={copiedModalContent ? "check" : "copy"} className="h-3.5 w-3.5" />
-                  {copiedModalContent ? "Copiado!" : "Copiar Tudo"}
+                  {copiedModalContent ? t("project_detail.copied", undefined, "Copiado!") : t("project_detail.copy_all", undefined, "Copiar Tudo")}
                 </Button>
 
                 {onGo && viewingSavedItem.type !== "link" && (
@@ -2810,7 +2814,7 @@ export function ProjetoDetailScreen({
                     }}
                     className="font-mono text-[10px] uppercase tracking-wider gap-1.5 shadow-[0_0_15px_rgba(242,179,61,0.25)]"
                   >
-                    Abrir Ferramenta
+                    {t("project_detail.open_tool", undefined, "Abrir Ferramenta")}
                     <Icon name="arrow" className="h-3 w-3" />
                   </Button>
                 )}
@@ -2834,10 +2838,10 @@ export function ProjetoDetailScreen({
             <div className="flex items-center justify-between border-b border-ink-800/80 px-6 py-4 shrink-0">
               <div>
                 <h3 className="font-display text-base font-bold text-bone-100">
-                  Vincular Ferramenta ao Projeto
+                  {t("project_detail.link_tool_modal_title", undefined, "Vincular Ferramenta ao Projeto")}
                 </h3>
                 <p className="font-mono text-[10.5px] text-ink-400">
-                  Importe execuções do histórico de Criação, Publicação e Estratégia ou acesse a ferramenta
+                  {t("project_detail.link_tool_modal_subtitle", undefined, "Importe execuções do histórico de Criação, Publicação e Estratégia ou acesse a ferramenta")}
                 </p>
               </div>
               <button 
@@ -2852,7 +2856,7 @@ export function ProjetoDetailScreen({
             <div className="p-5 border-b border-ink-800/60 bg-ink-950/30 space-y-3 shrink-0">
               <input
                 type="text"
-                placeholder="Buscar execuções no histórico (título, ferramenta, conteúdo)..."
+                placeholder={t("project_detail.search_history_placeholder", undefined, "Buscar execuções no histórico (título, ferramenta, conteúdo)...")}
                 value={toolSearch}
                 onChange={(e) => setToolSearch(e.target.value)}
                 className="w-full rounded-lg border border-ink-800 bg-ink-950 px-3.5 py-2 text-[12px] text-bone-100 placeholder:text-ink-500 focus:border-signal-400/50 focus:outline-none"
@@ -2860,10 +2864,10 @@ export function ProjetoDetailScreen({
 
               <div className="flex flex-wrap items-center gap-1.5">
                 {[
-                  { id: "todos", label: "Todas Ferramentas" },
-                  { id: "Criação", label: "01 Criação" },
-                  { id: "Publicação", label: "02 Publicação" },
-                  { id: "Estratégia", label: "03 Estratégia" },
+                  { id: "todos", label: t("project_detail.all_tools", undefined, "Todas Ferramentas") },
+                  { id: "Criação", label: t("project_detail.cat_creation", undefined, "01 Criação") },
+                  { id: "Publicação", label: t("project_detail.cat_publishing", undefined, "02 Publicação") },
+                  { id: "Estratégia", label: t("project_detail.cat_strategy", undefined, "03 Estratégia") },
                 ].map((g) => (
                   <button
                     key={g.id}
@@ -2904,9 +2908,11 @@ export function ProjetoDetailScreen({
                   return (
                     <div className="rounded-xl border border-dashed border-ink-800 p-8 text-center">
                       <Icon name="layers" className="mx-auto h-8 w-8 text-ink-600 mb-2" />
-                      <p className="text-[13px] font-semibold text-bone-300">Nenhuma execução encontrada no histórico</p>
+                      <p className="text-[13px] font-semibold text-bone-300">
+                        {t("projects.detail.add_modal.no_runs", undefined, "Nenhuma execução encontrada no histórico")}
+                      </p>
                       <p className="text-[11.5px] text-ink-400 mt-1 max-w-sm mx-auto">
-                        Abra uma das ferramentas abaixo para gerar conteúdo e ele poderá ser salvo neste projeto com 1 clique.
+                        {t("projects.detail.add_modal.no_runs_desc", undefined, "Abra uma das ferramentas abaixo para gerar conteúdo e ele poderá ser salvo neste projeto com 1 clique.")}
                       </p>
                     </div>
                   );
@@ -2914,8 +2920,10 @@ export function ProjetoDetailScreen({
 
                 return runs.map((run) => {
                   const grp = TOOL_GROUP_MAP[run.tool] || "Criação";
+                  const grpLabel = grp === "Criação" ? t("nav.groups.creation", undefined, "Criação") : grp === "Publicação" ? t("nav.groups.publishing", undefined, "Publicação") : grp === "Estratégia" ? t("nav.groups.strategy", undefined, "Estratégia") : t("nav.groups.panel", undefined, "Painel");
                   const style = TOOL_ACCENT_STYLES[run.tool] || TOOL_ACCENT_STYLES.link;
                   const isAlreadySaved = savedItems.some(s => s.title === run.title || (s.summary && s.summary === run.summary));
+                  const localizedToolName = t(`tools.${run.tool}.name`, undefined, run.toolName);
 
                   return (
                     <div
@@ -2929,7 +2937,7 @@ export function ProjetoDetailScreen({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-0.5">
                             <span className="font-mono text-[9px] font-bold text-signal-400 uppercase">
-                              {grp} · {run.toolName}
+                              {grpLabel} · {localizedToolName}
                             </span>
                             {run.tag && (
                               <span className="rounded bg-signal-400/10 border border-signal-400/20 px-1.5 py-0.2 font-mono text-[8.5px] font-bold text-signal-300">
@@ -2952,7 +2960,7 @@ export function ProjetoDetailScreen({
                         {isAlreadySaved ? (
                           <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 font-mono text-[9px] font-bold text-emerald-400 uppercase">
                             <Icon name="check" className="h-3 w-3" />
-                            Já Salvo
+                            {t("projects.detail.add_modal.already_saved", undefined, "Já Salvo")}
                           </span>
                         ) : (
                           <button
@@ -2963,7 +2971,7 @@ export function ProjetoDetailScreen({
                             className="flex items-center gap-1.5 rounded-lg border border-signal-400/40 bg-signal-400/10 px-3 py-1.5 font-mono text-[9.5px] font-bold tracking-wider text-signal-400 uppercase hover:bg-signal-400 hover:text-ink-950 transition-all cursor-pointer shadow-sm"
                           >
                             <Icon name="plus" className="h-3 w-3" strokeWidth={2.5} />
-                            Vincular ao Projeto
+                            {t("projects.detail.add_modal.link_to_project", undefined, "Vincular ao Projeto")}
                           </button>
                         )}
                       </div>
@@ -2975,25 +2983,25 @@ export function ProjetoDetailScreen({
               {/* Seção Atalhos para Ferramentas */}
               <div className="pt-4 border-t border-ink-800/80">
                 <span className="block font-mono text-[10px] uppercase tracking-wider text-ink-400 mb-2.5 font-bold">
-                  Ou crie direto em uma ferramenta:
+                  {t("projects.detail.add_modal.or_create_in_tool", undefined, "Ou crie direto em uma ferramenta:")}
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {TOOLS.map((t) => (
+                  {TOOLS.map((tItem) => (
                     <button
-                      key={t.id}
+                      key={tItem.id}
                       onClick={() => {
                         setShowAddToolModal(false);
-                        onGo?.(t.id);
+                        onGo?.(tItem.id);
                       }}
                       className="flex items-center gap-2 rounded-lg border border-ink-800 bg-ink-950/40 p-2.5 text-left transition-all hover:border-signal-400/40 hover:bg-ink-800/50 cursor-pointer group"
                     >
-                      <Icon name={t.icon} className="h-3.5 w-3.5 text-signal-400 shrink-0" />
+                      <Icon name={tItem.icon} className="h-3.5 w-3.5 text-signal-400 shrink-0" />
                       <div className="min-w-0 flex-1">
                         <span className="block truncate text-[11px] font-bold text-bone-200 group-hover:text-signal-300">
-                          {t.name}
+                          {t(`tools.${tItem.id}.name`, undefined, tItem.name)}
                         </span>
                         <span className="font-mono text-[8.5px] text-ink-500 uppercase">
-                          {t.group}
+                          {tItem.group === "Criação" ? t("nav.groups.creation", undefined, "Criação") : tItem.group === "Publicação" ? t("nav.groups.publishing", undefined, "Publicação") : tItem.group === "Estratégia" ? t("nav.groups.strategy", undefined, "Estratégia") : t("nav.groups.panel", undefined, "Painel")}
                         </span>
                       </div>
                     </button>

@@ -1,5 +1,6 @@
 import { cn } from "../utils/cn";
 import { openVipModal } from "./VipModal";
+import { useI18n } from "../i18n";
 
 export interface VipBadgeProps {
   size?: "xs" | "sm" | "md" | "lg";
@@ -10,6 +11,7 @@ export interface VipBadgeProps {
 }
 
 export function VipBadge({ size = "sm", className, showStar, onClick, interactive = true }: VipBadgeProps) {
+  const { t } = useI18n();
   const sizeClasses = {
     xs: "text-[7px] px-1.5 py-[1px] -top-1 -right-1 gap-0.5 tracking-wider rounded-full",
     sm: "text-[8px] px-2 py-0.5 -top-1 -right-1 gap-1 tracking-wider rounded-full",
@@ -51,7 +53,7 @@ export function VipBadge({ size = "sm", className, showStar, onClick, interactiv
         sizeClasses[size],
         className
       )}
-      title="Membro VIP Aster Account · Clique para ver benefícios e como se tornar VIP"
+      title={t("vip.badge_tooltip", undefined, "Membro VIP Aster Account · Clique para ver benefícios e como se tornar VIP")}
     >
       {hasIcon && (
         <svg

@@ -17,6 +17,8 @@ import { Button, Icon, Input, Meter } from "../components/ui";
 import { Card, CopyButton } from "../components/ToolShell";
 import { SaveToSalvosModal } from "../components/SaveToSalvosModal";
 import { formatFriendlySummary } from "../utils/toolStateRestore";
+import { useAuth } from "../auth";
+import { useI18n } from "../i18n";
 
 const TOOL_ACCENTS: Record<string, Accent> = {
   rank: "signal",
@@ -37,16 +39,16 @@ function accentOf(entry: { tool: string }): Accent {
   return TOOL_ACCENTS[entry.tool] ?? "bone";
 }
 
-function timeAgo(ts: number) {
+function timeAgo(ts: number, tFn?: (k: string, p?: any, fb?: string) => string) {
   const diff = Date.now() - ts;
   const min = Math.floor(diff / 60000);
-  if (min < 1) return "agora";
+  if (min < 1) return tFn ? tFn("history.time.now", undefined, "agora") : "agora";
   if (min < 60) return `${min}min`;
   const h = Math.floor(min / 60);
   if (h < 24) return `${h}h`;
   const d = Math.floor(h / 24);
   if (d < 30) return `${d}d`;
-  return new Date(ts).toLocaleDateString("pt-BR");
+  return new Date(ts).toLocaleDateString();
 }
 
 const FILTERS = ["recentes", "salvos", "ideias", "títulos", "posts", "estratégia"] as const;
@@ -74,8 +76,6 @@ function matchesFilter(
   return true;
 }
 
-import { useAuth } from "../auth";
-
 export function HistoricoX({
   onBack,
   onGo,
@@ -85,6 +85,7 @@ export function HistoricoX({
   onGo: (id: string) => void;
   initialTab?: "historico" | "lixeira";
 }) {
+  const { t } = useI18n();
   const os = useStudioOS();
   const auth = useAuth();
   const [tab, setTab] = useState<"historico" | "lixeira">(initialTab);
@@ -205,32 +206,32 @@ export function HistoricoX({
         className="group mb-6 inline-flex items-center gap-2 font-mono text-[10.5px] tracking-[0.18em] text-ink-400 uppercase transition-colors hover:text-signal-400"
       >
         <Icon name="arrow" className="h-3.5 w-3.5 rotate-180 transition-transform duration-300 group-hover:-translate-x-1" strokeWidth={2} />
-        Visão geral
+        {t("history.back_overview", undefined, "Visão geral")}
       </button>
 
       <div className="mb-6 flex flex-col gap-5 border-b border-ink-800 pb-6 md:flex-row md:items-end md:justify-between">
         <div className="max-w-2xl">
           <div className="mb-3 flex items-center gap-3">
             <span className="font-mono text-[11px] tracking-[0.22em] text-signal-400 uppercase">
-              Sistema · dados locais
+              {t("history.system_kicker", undefined, "Sistema · dados locais")}
             </span>
           </div>
           <h1 className="font-display text-[clamp(2.1rem,5vw,3.4rem)] leading-[0.92] font-extrabold tracking-[-0.035em] text-bone-50">
-            Histórico & Lixeira
+            {t("history.title", undefined, "Histórico & Lixeira")}
           </h1>
           <p className="mt-3 text-[15px] leading-relaxed text-bone-400">
-            Toda execução é registrada localmente no seu dispositivo. O que você apaga vai para a lixeira e resiste até{` `}
-            <span className="text-bone-100">{retention === 1 ? "o fim do dia" : `${retention} dias`}</span>. 
-            Apenas os itens que você <b>salvar</b> serão sincronizados na nuvem para acesso em outros lugares.
+            {t("history.desc_part1", undefined, "Toda execução é registrada localmente no seu dispositivo. O que você apaga vai para a lixeira e resiste até ")}
+            <span className="text-bone-100">{retention === 1 ? t("history.end_of_day", undefined, "o fim do dia") : `${retention} ${t("history.days", undefined, "dias")}`}</span>. 
+            {t("history.desc_part2", undefined, " Apenas os itens que você salvar serão sincronizados na nuvem para acesso em outros lugares.")}
           </p>
         </div>
 
         <div className="grid shrink-0 grid-cols-2 gap-px overflow-hidden rounded-lg border border-ink-700/80 bg-ink-700/60">
           {[
-            { k: "Itens", v: `${os.history.length}${auth.user ? "" : `/${QUOTA}`}`, a: "text-signal-300" },
-            { k: "Salvos na Nuvem", v: String(cloudCount), a: "text-bone-100" },
-            { k: "Lixeira", v: `${os.trash.length}${auth.user ? "" : `/${TRASH_QUOTA}`}`, a: os.trash.length ? "text-oxide-400" : "text-mint-300" },
-            { k: "Expira em", v: retention === 1 ? "1d" : `${retention}d`, a: "text-sky-400" },
+            { k: t("history.metrics.items", undefined, "Itens"), v: `${os.history.length}${auth.user ? "" : `/${QUOTA}`}`, a: "text-signal-300" },
+            { k: t("history.metrics.saved_cloud", undefined, "Salvos na Nuvem"), v: String(cloudCount), a: "text-bone-100" },
+            { k: t("history.metrics.trash", undefined, "Lixeira"), v: `${os.trash.length}${auth.user ? "" : `/${TRASH_QUOTA}`}`, a: os.trash.length ? "text-oxide-400" : "text-mint-300" },
+            { k: t("history.metrics.expires_in", undefined, "Expira em"), v: retention === 1 ? "1d" : `${retention}d`, a: "text-sky-400" },
           ].map((m) => (
             <div key={m.k} className="bg-ink-900 px-4 py-3">
               <div className="font-mono text-[9px] tracking-[0.16em] text-ink-400 uppercase">{m.k}</div>
@@ -245,14 +246,14 @@ export function HistoricoX({
         <div className="inline-flex gap-1 rounded-md border border-ink-700 bg-ink-950/70 p-1">
           {(
             [
-              ["historico", "Histórico", "historico"],
-              ["lixeira", "Lixeira", "trash"],
+              ["historico", t("history.tabs.history", undefined, "Histórico"), "historico"],
+              ["lixeira", t("history.tabs.trash", undefined, "Lixeira"), "trash"],
             ] as const
           ).map(([id, label, ic]) => (
             <button
               key={id}
               onClick={() => {
-                setTab(id);
+                setTab(id as "historico" | "lixeira");
                 onGo(id);
               }}
               className={cn(
@@ -284,17 +285,17 @@ export function HistoricoX({
                 : "border-ink-700 bg-ink-900/60 text-bone-400 hover:border-ink-500 hover:text-bone-100"
             )}
           >
-            todos
+            {t("common.all", undefined, "todos")}
           </button>
-          {toolsInHistory.map((t) => {
-            const ttl = TOOL_BY_ID[t]?.name ?? (t === "ideia" ? "Ideias" : t);
+          {toolsInHistory.map((toolKey) => {
+            const ttl = t(`tools.${toolKey}.name`, undefined, TOOL_BY_ID[toolKey]?.name ?? (toolKey === "ideia" ? "Ideias" : toolKey));
             return (
               <button
-                key={t}
-                onClick={() => setFmt(t)}
+                key={toolKey}
+                onClick={() => setFmt(toolKey)}
                 className={cn(
                   "rounded border px-2.5 py-1.5 font-mono text-[10px] tracking-[0.12em] uppercase transition-colors",
-                  fmt === t
+                  fmt === toolKey
                     ? "border-signal-400/60 bg-signal-400/15 text-signal-300"
                     : "border-ink-700 bg-ink-900/60 text-bone-400 hover:border-ink-500 hover:text-bone-100"
                 )}
@@ -307,7 +308,12 @@ export function HistoricoX({
 
         <div className="relative ml-auto w-full sm:w-60">
           <Icon name="eye" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar no registro…" className="py-2 pl-8 text-[12.5px]" />
+          <Input 
+            value={q} 
+            onChange={(e) => setQ(e.target.value)} 
+            placeholder={t("history.search_placeholder", undefined, "Buscar no registro…")} 
+            className="py-2 pl-8 text-[12.5px]" 
+          />
         </div>
       </div>
 
@@ -323,7 +329,9 @@ export function HistoricoX({
                 : "border-ink-700 bg-ink-900/60 text-bone-400 hover:border-ink-500 hover:text-bone-100"
             )}
           >
-            <span className="font-mono text-[10px] tracking-[0.1em] uppercase">{f}</span>
+            <span className="font-mono text-[10px] tracking-[0.1em] uppercase">
+              {f === "recentes" ? t("history.pills.recent", undefined, "recentes") : f === "salvos" ? t("history.pills.saved", undefined, "salvos") : f === "ideias" ? t("history.pills.ideas", undefined, "ideias") : f === "títulos" ? t("history.pills.titles", undefined, "títulos") : f === "posts" ? t("history.pills.posts", undefined, "posts") : t("history.pills.strategy", undefined, "estratégia")}
+            </span>
             {f === "salvos" && (
               <span className="ml-1.5 text-[10px] text-ink-500 tabular-nums">{pillSavedCount}</span>
             )}
@@ -338,7 +346,7 @@ export function HistoricoX({
               "relative h-5 w-9 rounded-full border transition-all duration-300",
               showFav ? "border-signal-400/60 bg-signal-400/20" : "border-ink-700 bg-ink-900"
             )}
-            aria-label="Filtrar apenas salvos"
+            aria-label={t("history.filter_saved_only", undefined, "filtrar apenas salvos")}
           >
             <span
               className={cn(
@@ -351,7 +359,7 @@ export function HistoricoX({
             onClick={() => setShowFav((s) => !s)}
             className={cn("transition-colors select-none", showFav ? "text-signal-300" : "text-ink-400 hover:text-bone-200")}
           >
-            filtrar apenas salvos
+            {t("history.filter_saved_only", undefined, "filtrar apenas salvos")}
           </span>
         </div>
         <div className="ml-auto flex gap-1">
@@ -366,7 +374,7 @@ export function HistoricoX({
                   : "border-ink-800 text-ink-400 hover:text-bone-200"
               )}
             >
-              {s}
+              {s === "recentes" ? t("history.sort.recent", undefined, "recentes") : s === "antigos" ? t("history.sort.oldest", undefined, "antigos") : t("history.sort.score", undefined, "score")}
             </button>
           ))}
         </div>
@@ -382,20 +390,21 @@ export function HistoricoX({
                     <div className="absolute inset-0 rounded-full bg-signal-400/15 blur-2xl" />
                     <Icon name="historico" className="relative h-10 w-10 text-ink-400" />
                   </div>
-                  <p className="font-display text-xl font-extrabold text-bone-200">Nenhum histórico encontrado</p>
+                  <p className="font-display text-xl font-extrabold text-bone-200">
+                    {t("history.empty.history_title", undefined, "Nenhum histórico encontrado")}
+                  </p>
                   <p className="max-w-sm text-[13px] leading-relaxed text-ink-400">
-                    As execuções do painel aparecem aqui com título, resumo e conteúdo completo —
-                    visíveis de novo nas telas onde nasceram
+                    {t("history.empty.history_desc", undefined, "As execuções do painel aparecem aqui com título, resumo e conteúdo completo — visíveis de novo nas telas onde nasceram")}
                   </p>
                   <div className="flex flex-wrap justify-center gap-2">
                     <Button size="sm" variant="outline" icon="gauge" onClick={() => onGo("rank")}>
-                      Rank de Ideia
+                      {t("tools.rank.name", undefined, "Rank de Ideia")}
                     </Button>
                     <Button size="sm" variant="outline" icon="check" onClick={() => onGo("score")}>
-                      Score de Post
+                      {t("tools.score.name", undefined, "Score de Post")}
                     </Button>
                     <Button size="sm" variant="ghost" icon="brain" onClick={() => onGo("mentor")}>
-                      Mentor AI
+                      {t("tools.mentor.name", undefined, "Mentor AI")}
                     </Button>
                   </div>
                 </div>
@@ -417,18 +426,18 @@ export function HistoricoX({
                   <div className="flex flex-wrap items-center gap-3 rounded-lg border border-ink-800 bg-ink-900/40 px-4 py-3">
                     <Icon name="lock" className="h-3.5 w-3.5 text-mint-400" />
                     <span className="font-mono text-[10px] tracking-[0.14em] text-ink-400 uppercase">
-                      log local · nada sai do navegador
+                      {t("history.local_log_note", undefined, "log local · nada sai do navegador")}
                     </span>
                     <CopyButton className="ml-auto" text={list.map((h) => `[${new Date(h.createdAt).toISOString()}] ${h.toolName} — ${h.title}\n${h.summary}\n${h.content}\n`).join("\n---\n\n")} />
                     <button
                       onClick={() => {
-                        if (window.confirm("Apagar todo o histórico (não vai para a lixeira)?")) {
+                        if (window.confirm(t("history.clear_confirm", undefined, "Apagar todo o histórico (não vai para a lixeira)?"))) {
                           os.clearHistory();
                         }
                       }}
                       className="font-mono text-[10px] tracking-[0.14em] text-ink-400 uppercase transition-colors hover:text-oxide-400"
                     >
-                      esvaziar histórico
+                      {t("history.clear_history", undefined, "esvaziar histórico")}
                     </button>
                   </div>
                 </div>
@@ -442,49 +451,49 @@ export function HistoricoX({
                     <div className="absolute inset-0 rounded-full bg-mint-400/10 blur-2xl" />
                     <Icon name="trash" className="relative h-10 w-10 text-ink-400" />
                   </div>
-                  <p className="font-display text-xl font-extrabold text-bone-200">A lixeira está vazia</p>
+                  <p className="font-display text-xl font-extrabold text-bone-200">
+                    {t("history.empty.trash_title", undefined, "A lixeira está vazia")}
+                  </p>
                   <p className="max-w-sm text-[13px] leading-relaxed text-ink-400">
-                    Itens apagados do histórico param aqui e aguardam a retenção configurável antes
-                    de serem excluídos permanentemente.
+                    {t("history.empty.trash_desc", undefined, "Itens apagados do histórico param aqui e aguardam a retenção configurável antes de serem excluídos permanentemente.")}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {listTrash.map((t, i) => (
+                  {listTrash.map((tItem, i) => (
                     <TrashRow
-                      key={t.id}
-                      entry={t}
+                      key={tItem.id}
+                      entry={tItem}
                       num={i + 1}
                       retention={retention}
-                      expanded={expanded === t.id}
-                      onToggle={() => setExpanded(expanded === t.id ? null : t.id)}
+                      expanded={expanded === tItem.id}
+                      onToggle={() => setExpanded(expanded === tItem.id ? null : tItem.id)}
                       onRestore={() => {
-                        os.restore(t.id);
+                        os.restore(tItem.id);
                       }}
                       onDestroy={async () => {
-                        if (window.confirm("Excluir permanentemente? Não dá para desfazer.")) {
-                          await os.deleteForever(t.id);
+                        if (window.confirm(t("history.destroy_confirm", undefined, "Excluir permanentemente? Não dá para desfazer."))) {
+                          await os.deleteForever(tItem.id);
                         }
                       }}
                       onGo={onGo}
-                      savedItemId={savedItemIds[t.id] || savedItemIds[String(t.id)]}
+                      savedItemId={savedItemIds[tItem.id] || savedItemIds[String(tItem.id)]}
                     />
                   ))}
                   <div className="flex flex-wrap items-center gap-3 rounded-lg border border-oxide-400/30 bg-oxide-400/[0.05] px-4 py-3">
                     <Icon name="clock" className="h-3.5 w-3.5 text-oxide-400" />
                     <span className="text-[11.5px] text-bone-300">
-                      purge automática a cada abertura · retenção atual de{" "}
-                      <strong className="text-bone-50">{retention === 1 ? "1 dia" : `${retention} dias`}</strong>
+                      {t("history.auto_purge_note", { days: retention === 1 ? t("history.one_day", undefined, "1 dia") : `${retention} ${t("history.days", undefined, "dias")}` }, `purge automática a cada abertura · retenção atual de ${retention === 1 ? "1 dia" : `${retention} dias`}`)}
                     </span>
                     <button
                       onClick={async () => {
-                        if (window.confirm("Esvaziar a lixeira inteira? Não dá para recuperar.")) {
+                        if (window.confirm(t("history.empty_trash_confirm", undefined, "Esvaziar a lixeira inteira? Não dá para recuperar."))) {
                           await os.emptyTrash();
                         }
                       }}
                       className="ml-auto rounded border border-oxide-400/40 px-2.5 py-1 font-mono text-[9.5px] tracking-[0.14em] text-oxide-400 uppercase transition-colors hover:bg-oxide-400/15"
                     >
-                      esvaziar lixeira
+                      {t("history.empty_trash", undefined, "esvaziar lixeira")}
                     </button>
                   </div>
                 </div>
@@ -504,7 +513,7 @@ export function HistoricoX({
                 <span className="h-2 w-2 rounded-full bg-mint-400/80" />
               </div>
               <span className="font-mono text-[9.5px] tracking-[0.22em] text-ink-400 uppercase">
-                studio — log local
+                {t("history.console_title", undefined, "studio — log local")}
               </span>
               <Icon name="lock" className="h-3.5 w-3.5 text-mint-400" strokeWidth={1.8} />
             </div>
@@ -518,16 +527,16 @@ export function HistoricoX({
                 ))
               ) : (
                 <p className="py-6 text-center text-ink-400">
-                  {"> nenhuma execução em memória"}<br />
-                  {"> aguardando atividade…"}
+                  {t("history.no_executions_memory_1", undefined, "> nenhuma execução em memória")}<br />
+                  {t("history.no_executions_memory_2", undefined, "> aguardando atividade…")}
                 </p>
               )}
             </div>
           </div>
 
-          <Card title="Retenção da lixeira" note="purge automática" accent="oxide">
+          <Card title={t("history.retention_title", undefined, "Retenção da lixeira")} note={t("history.auto_purge", undefined, "purge automática")} accent="oxide">
             <div className="mb-2 font-mono text-[9.5px] tracking-[0.16em] text-ink-400 uppercase">
-              Manter itens na lixeira por:
+              {t("history.keep_items_for", undefined, "Manter itens na lixeira por:")}
             </div>
             <div className="grid grid-cols-4 gap-1.5">
               {([1, 7, 30, 90] as TrashRetentionDay[]).map((d) => (
@@ -543,22 +552,21 @@ export function HistoricoX({
                 >
                   <span className="block font-display text-lg font-extrabold tabular-nums">{d}</span>
                   <span className="block font-mono text-[8.5px] tracking-[0.14em] uppercase">
-                    {d === 1 ? "dia" : "dias"}
+                    {d === 1 ? t("history.day", undefined, "dia") : t("history.days", undefined, "dias")}
                   </span>
                 </button>
               ))}
             </div>
             <p className="mt-3 border-t border-ink-800 pt-3 text-[11.5px] leading-relaxed text-ink-400">
-              Passado o prazo, os itens são excluídos permanentemente — sem servidor, sem backup,
-              sem resgate. O histórico fica intacto: só quem apaga manualmente acaba na lixeira.
+              {t("history.retention_desc", undefined, "Passado o prazo, os itens são excluídos permanentemente — sem servidor, sem backup, sem resgate. O histórico fica intacto: só quem apaga manualmente acaba na lixeira.")}
             </p>
           </Card>
 
           {!auth.user && (
-            <Card title="Ocupação" accent="signal">
+            <Card title={t("history.occupancy", undefined, "Ocupação")} accent="signal">
               <div className="space-y-3">
-                <Meter value={os.history.length} max={QUOTA} accent="signal" label="Histórico" />
-                <Meter value={os.trash.length} max={TRASH_QUOTA} accent="oxide" label="Lixeira" />
+                <Meter value={os.history.length} max={QUOTA} accent="signal" label={t("history.tabs.history", undefined, "Histórico")} />
+                <Meter value={os.trash.length} max={TRASH_QUOTA} accent="oxide" label={t("history.tabs.trash", undefined, "Lixeira")} />
               </div>
             </Card>
           )}
@@ -582,7 +590,7 @@ export function HistoricoX({
               URL.revokeObjectURL(url);
             }}
           >
-            Exportar histórico (.json)
+            {t("history.export_json", undefined, "Exportar histórico (.json)")}
           </Button>
         </div>
       </div>
@@ -628,12 +636,11 @@ export function HistoricoX({
               </div>
               
               <h3 className="mb-2 font-display text-xl font-bold text-bone-100">
-                Remover dos Salvos?
+                {t("history.remove_modal.title", undefined, "Remover dos Salvos?")}
               </h3>
               
               <p className="mb-7 text-[13px] leading-relaxed text-bone-300">
-                Deseja remover <strong className="text-bone-100">{itemToRemoveFromSalvos.title}</strong> dos seus salvos? 
-                O registro permanecerá no seu histórico local normalmente.
+                {t("history.remove_modal.desc_prefix", undefined, "Deseja remover ")}<strong className="text-bone-100">{itemToRemoveFromSalvos.title}</strong>{t("history.remove_modal.desc_suffix", undefined, " dos seus salvos? O registro permanecerá no seu histórico local normalmente.")}
               </p>
               
               <div className="flex gap-3">
@@ -642,7 +649,7 @@ export function HistoricoX({
                   onClick={() => setItemToRemoveFromSalvos(null)}
                   className="flex-1 rounded-lg border border-ink-800/60 bg-ink-950/60 px-4 py-3.5 font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase transition-colors hover:bg-ink-800 hover:text-bone-100"
                 >
-                  Cancelar
+                  {t("common.cancel", undefined, "Cancelar")}
                 </button>
                 <button
                   type="button"
@@ -683,7 +690,7 @@ export function HistoricoX({
                   }}
                   className="flex-1 rounded-lg bg-red-500/20 border border-red-500/40 px-4 py-3.5 font-mono text-[10px] font-bold tracking-[0.14em] text-red-400 uppercase transition-all duration-200 hover:bg-red-500 hover:text-white hover:border-red-500"
                 >
-                  Sim, Remover
+                  {t("saved.modal.confirm_remove", undefined, "Sim, Remover")}
                 </button>
               </div>
             </div>
@@ -724,6 +731,7 @@ function HistoryRow({
   savedItemIds: Record<string, string>;
   onRequestRemoveSaved: (entry: HistoryEntry) => void;
 }) {
+  const { t } = useI18n();
   const ac = accentOf(entry);
   const meta = TOOL_BY_ID[entry.tool];
   const rating = entry.content.match(/RATING:([\d.]+)\/10/);
@@ -743,7 +751,7 @@ function HistoryRow({
             {String(num).padStart(2, "0")}
           </span>
           <span className={cn("hidden rounded border px-2 py-0.5 font-mono text-[8.5px] tracking-[0.14em] uppercase sm:inline", accentSoft[ac])}>
-            {entry.toolName}
+            {t(`tools.${entry.tool}.name`, undefined, entry.toolName)}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13.5px] font-medium text-bone-100">
@@ -758,7 +766,7 @@ function HistoryRow({
           </span>
           <TagChip tag={entry.tag} />
           <span className="hidden shrink-0 font-mono text-[10px] text-ink-500 tabular-nums lg:inline" suppressHydrationWarning>
-            {timeAgo(entry.createdAt)}
+            {timeAgo(entry.createdAt, t)}
           </span>
           <span className="hidden shrink-0 sm:block">
             {rating && (
@@ -798,7 +806,7 @@ function HistoryRow({
           <div className="border-t border-ink-800 px-4 py-3.5">
             <div className="mb-2 flex items-center gap-2">
               <span className="font-mono text-[9px] tracking-[0.16em] text-ink-400 uppercase">
-                bloco completo · {entry.content.split(/\s+/).filter(Boolean).length} palavras
+                {t("history.row.words", { count: entry.content.split(/\s+/).filter(Boolean).length }, `bloco completo · ${entry.content.split(/\s+/).filter(Boolean).length} palavras`)}
               </span>
               <CopyButton text={`${entry.title}\n${entry.summary}\n\n${entry.content.replace(/^RATING:[\d/ .]+\n?/, "")}`} className="ml-auto" />
             </div>
@@ -812,10 +820,10 @@ function HistoryRow({
                 icon="restore"
                 onClick={() => onGo(`${entry.tool}`)}
               >
-                Reabrir em {meta?.name ?? entry.toolName}
+                {t("history.row.reopen_in", { tool: meta?.name ?? entry.toolName }, `Reabrir em ${meta?.name ?? entry.toolName}`)}
               </Button>
               <span className="font-mono text-[9.5px] tracking-[0.14em] text-ink-500 uppercase">
-                restaura os dados na tela onde nasceram
+                {t("history.row.restore_hint", undefined, "restaura os dados na tela onde nasceram")}
               </span>
             </div>
           </div>
@@ -826,15 +834,16 @@ function HistoryRow({
 }
 
 function Actions({ entry, onGo, onSaveItem, savedItemId, onRequestRemoveSaved }: { entry: HistoryEntry; onGo: (id: string) => void; onSaveItem: (entry: HistoryEntry) => void; savedItemId?: string; onRequestRemoveSaved?: () => void }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   return (
-    <span className="ml-auto flex shrink-0 items-center gap-0" title="Ações">
+    <span className="ml-auto flex shrink-0 items-center gap-0" title={t("history.row.actions", undefined, "Ações")}>
       <button
         onClick={() => onGo(`${entry.tool}`)}
         className="rounded px-2 py-1 font-mono text-[9.5px] tracking-[0.12em] text-ink-500 uppercase transition-colors hover:bg-ink-800 hover:text-signal-300"
-        title="Reabrir ferramenta"
+        title={t("history.row.reopen_tool", undefined, "Reabrir ferramenta")}
       >
-        reabrir
+        {t("history.row.reopen", undefined, "reabrir")}
       </button>
       <button
         onClick={() => {
@@ -848,7 +857,7 @@ function Actions({ entry, onGo, onSaveItem, savedItemId, onRequestRemoveSaved }:
           "rounded px-2 py-1 transition-colors",
           savedItemId ? "text-signal-400" : "text-ink-500 hover:bg-ink-800 hover:text-signal-300"
         )}
-        title={savedItemId ? "Remover dos salvos" : "Salvar na nuvem"}
+        title={savedItemId ? t("history.row.remove_saved", undefined, "Remover dos salvos") : t("history.row.save_cloud", undefined, "Salvar na nuvem")}
       >
         <Icon 
           name="bookmark" 
@@ -867,14 +876,14 @@ function Actions({ entry, onGo, onSaveItem, savedItemId, onRequestRemoveSaved }:
           "rounded p-1.5 transition-colors",
           copied ? "text-mint-400" : "text-ink-500 hover:bg-ink-800 hover:text-bone-100"
         )}
-        title="Copiar conteúdo"
+        title={t("common.copy_content", undefined, "Copiar conteúdo")}
       >
         <Icon name={copied ? "check" : "copy"} className="h-3.5 w-3.5" strokeWidth={1.9} />
       </button>
       <button
         onClick={() => dropToTrash(entry)}
         className="rounded p-1.5 text-ink-500 transition-colors hover:bg-oxide-400/15 hover:text-oxide-400"
-        title="Mover para a lixeira"
+        title={t("history.row.move_trash", undefined, "Mover para a lixeira")}
       >
         <Icon name="trash" className="h-3.5 w-3.5" strokeWidth={1.8} />
       </button>
@@ -903,6 +912,7 @@ function TrashRow({
   onGo: (id: string) => void;
   savedItemId?: string;
 }) {
+  const { t } = useI18n();
   const ac = accentOf(entry);
   const left = daysLeft(entry, retention);
   const isSaved = Boolean(entry.favorite || savedItemId);
@@ -919,7 +929,7 @@ function TrashRow({
             {String(num).padStart(2, "0")}
           </span>
           <span className={cn("hidden rounded border px-2 py-0.5 font-mono text-[8.5px] tracking-[0.14em] uppercase opacity-70 sm:inline", accentSoft[ac])}>
-            {entry.toolName}
+            {t(`tools.${entry.tool}.name`, undefined, entry.toolName)}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13.5px] font-medium text-bone-300 line-through decoration-ink-600">
@@ -943,7 +953,7 @@ function TrashRow({
             )}
             suppressHydrationWarning
           >
-            expira em {left}d
+            {t("history.row.expires_in", { days: left }, `expira em ${left}d`)}
           </span>
           <Icon
             name="chevron"
@@ -955,30 +965,31 @@ function TrashRow({
 
       <div className="flex items-center gap-1 border-t border-ink-800/70 px-3.5 py-1.5">
         <span className="font-mono text-[9px] tracking-[0.14em] text-ink-500 uppercase" suppressHydrationWarning>
-          apagado {timeAgo(entry.deletedAt)} atrás
+          {t("history.row.deleted_ago", { time: timeAgo(entry.deletedAt, t) }, `apagado ${timeAgo(entry.deletedAt, t)} atrás`)}
         </span>
         <span className="ml-auto flex items-center gap-0">
           <button
             onClick={onRestore}
             className="flex items-center gap-1.5 rounded px-2 py-1 font-mono text-[9.5px] tracking-[0.12em] text-ink-500 uppercase transition-colors hover:bg-mint-400/15 hover:text-mint-300"
-            title="Restaurar para o histórico"
+            title={t("history.row.restore_tooltip", undefined, "Restaurar para o histórico")}
           >
             <Icon name="restore" className="h-3.5 w-3.5" strokeWidth={1.9} />
-            restaurar
+            {t("history.row.restore", undefined, "restaurar")}
           </button>
           <button
             onClick={() => onGo(entry.tool)}
             className="rounded px-2 py-1 font-mono text-[9.5px] tracking-[0.12em] text-ink-500 uppercase transition-colors hover:bg-ink-800 hover:text-signal-300"
+            title={t("history.row.redo_tooltip", undefined, "Refazer na ferramenta")}
           >
-            refazer
+            {t("history.row.redo", undefined, "refazer")}
           </button>
           <button
             onClick={onDestroy}
             className="flex items-center gap-1.5 rounded px-2 py-1 font-mono text-[9.5px] tracking-[0.12em] text-ink-500 uppercase transition-colors hover:bg-oxide-400/15 hover:text-oxide-400"
-            title="Excluir permanentemente"
+            title={t("history.row.destroy_tooltip", undefined, "Excluir permanentemente")}
           >
             <Icon name="trash" className="h-3.5 w-3.5" strokeWidth={1.9} />
-            destruir
+            {t("history.row.destroy", undefined, "destruir")}
           </button>
         </span>
       </div>

@@ -3,6 +3,7 @@ import { cn } from "../utils/cn";
 import { TOOLS, accentText, type Accent } from "../data";
 import { Icon } from "./ui";
 import { useAuth, supabase } from "../auth";
+import { useI18n } from "../i18n";
 
 const GROUPS = ["Criação", "Publicação", "Estratégia"] as const;
 
@@ -38,6 +39,7 @@ export function Sidebar({
   viewedProfileHandle,
 }: Props) {
   const auth = useAuth();
+  const { t } = useI18n();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -81,7 +83,7 @@ export function Sidebar({
           active={active === "home"}
           onClick={() => go("home")}
           icon="stack"
-          label="Visão geral"
+          label={t("nav.overview")}
           accent="signal"
         />
 
@@ -90,16 +92,16 @@ export function Sidebar({
             active={active === "ranking"}
             onClick={() => go("ranking")}
             icon="trophy"
-            label="Ranking"
-            kicker="Top criadores"
+            label={t("nav.ranking")}
+            kicker={t("nav.ranking_kicker")}
             accent="signal"
           />
           <NavItem
             active={active === "login" || (active === "perfil" && !viewedProfileHandle)}
             onClick={() => go(authenticated ? "perfil" : "login")}
             icon={authenticated ? "user" : "login"}
-            label={authenticated ? "Meu Perfil" : "Entrar"}
-            kicker={authenticated ? "Gerenciar conta" : "Acesse dados salvos"}
+            label={authenticated ? t("nav.profile") : t("nav.login")}
+            kicker={authenticated ? t("nav.manage_account", undefined, "Gerenciar conta") : t("nav.access_saved", undefined, "Acesse dados salvos")}
             accent="signal"
           />
           {authenticated && !!supabase && auth.user?.provider !== "demo" && (
@@ -108,16 +110,16 @@ export function Sidebar({
                 active={active === "projetos"}
                 onClick={() => go("projetos")}
                 icon="layers"
-                label="Projetos"
-                kicker="Gerenciar projetos"
+                label={t("nav.projects")}
+                kicker={t("nav.projects_kicker")}
                 accent="signal"
               />
               <NavItem
                 active={active === "salvos"}
                 onClick={() => go("salvos")}
                 icon="bookmark"
-                label="Salvos"
-                kicker="Meus itens salvos"
+                label={t("nav.saved")}
+                kicker={t("nav.saved_kicker")}
                 accent="signal"
               />
             </>
@@ -126,16 +128,16 @@ export function Sidebar({
             active={active === "historico" || active === "lixeira"}
             onClick={() => go("historico")}
             icon="historico"
-            label="Histórico & Lixeira"
-            kicker={authenticated ? `${historyCount} ${historyCount === 1 ? "log" : "logs"} · ${trashCount} na lixeira` : "entre para acessar"}
+            label={t("nav.history")}
+            kicker={authenticated ? t("nav.history_kicker_counts", { logs: historyCount, logText: historyCount === 1 ? "log" : "logs", trash: trashCount }, "{logs} {logText} · {trash} na lixeira") : t("nav.sign_in_to_access", undefined, "entre para acessar")}
             accent="signal"
           />
           <NavItem
             active={active === "calibracao"}
             onClick={() => go("calibracao")}
             icon="dial"
-            label="Calibração do Canal"
-            kicker="Base de dados"
+            label={t("tools.calibracao.name")}
+            kicker={t("tools.calibracao.kicker")}
             accent="bone"
           />
         </div>
@@ -147,7 +149,7 @@ export function Sidebar({
             <div key={g} className="mt-6">
               <div className="mb-2 flex items-center gap-2 px-2">
                 <span className="font-mono text-[9.5px] tracking-[0.22em] text-ink-400 uppercase">
-                  {g}
+                  {g === "Criação" ? t("nav.groups.creation") : g === "Publicação" ? t("nav.groups.publishing") : t("nav.groups.strategy")}
                 </span>
                 <span className="h-px flex-1 bg-ink-800" />
                 <span className="font-mono text-[9.5px] text-ink-500 tabular-nums">
@@ -155,15 +157,15 @@ export function Sidebar({
                 </span>
               </div>
               <div className="space-y-0.5">
-                {items.map((t) => (
+                {items.map((tool) => (
                   <NavItem
-                    key={t.id}
-                    active={active === t.id}
-                    onClick={() => go(t.id)}
-                    icon={t.icon}
-                    label={t.name}
-                    kicker={t.kicker}
-                    accent={t.accent}
+                    key={tool.id}
+                    active={active === tool.id}
+                    onClick={() => go(tool.id)}
+                    icon={tool.icon}
+                    label={t(`tools.${tool.id}.name`, undefined, tool.name)}
+                    kicker={t(`tools.${tool.id}.kicker`, undefined, tool.kicker)}
+                    accent={tool.accent}
                   />
                 ))}
               </div>
@@ -174,7 +176,7 @@ export function Sidebar({
         <div className="mt-6">
           <div className="mb-2 flex items-center gap-2 px-2">
             <span className="font-mono text-[9.5px] tracking-[0.22em] text-ink-400 uppercase">
-              Sistema
+              {t("nav.groups.panel")}
             </span>
             <span className="h-px flex-1 bg-ink-800" />
             <span className="font-mono text-[9.5px] text-ink-500 tabular-nums">04</span>
@@ -184,8 +186,8 @@ export function Sidebar({
               active={active === "wiki"}
               onClick={() => go("wiki")}
               icon="book"
-              label="Wiki do Painel"
-              kicker="Ajuda"
+              label={t("tools.wiki.name")}
+              kicker={t("tools.wiki.kicker")}
               accent="bone"
             />
           </div>
@@ -196,11 +198,11 @@ export function Sidebar({
       <div className="border-t border-ink-800 p-4">
         <div className="mb-3 rounded-md border border-ink-800 bg-ink-900/70 p-3">
           <div className="mb-2 flex items-center justify-between gap-1">
-            <span className="flex items-center gap-1.5 min-w-0 font-mono text-[9.5px] tracking-[0.14em] text-ink-400 uppercase truncate" title={profileName || "Calibração"}>
+            <span className="flex items-center gap-1.5 min-w-0 font-mono text-[9.5px] tracking-[0.14em] text-ink-400 uppercase truncate" title={profileName || t("tools.calibracao.name", undefined, "Calibração")}>
               {profileColor && (
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: profileColor }} />
               )}
-              <span className="truncate">{profileName || "Calibração"}</span>
+              <span className="truncate">{profileName || t("tools.calibracao.name", undefined, "Calibração")}</span>
             </span>
             <span
               className={cn(
@@ -224,7 +226,7 @@ export function Sidebar({
             onClick={() => go("calibracao")}
             className="mt-2.5 flex items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] text-bone-400 uppercase transition-colors hover:text-signal-300"
           >
-            {progress >= 100 ? "Revisar dados" : "Completar agora"}
+            {progress >= 100 ? t("nav.review_data", undefined, "Revisar dados") : t("nav.complete_now", undefined, "Completar agora")}
             <Icon name="arrow" className="h-3 w-3" strokeWidth={2} />
           </button>
         </div>
@@ -245,7 +247,7 @@ export function Sidebar({
             onClick={() => go("config")}
             className="font-mono text-[9.5px] tracking-[0.14em] text-ink-400 uppercase transition-colors hover:text-bone-100"
           >
-            {hasKey ? "conectado" : "configurar"}
+            {hasKey ? t("nav.connected", undefined, "conectado") : t("nav.configure", undefined, "configurar")}
           </button>
         </div>
       </div>

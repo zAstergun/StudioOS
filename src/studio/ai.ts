@@ -1,3 +1,5 @@
+import { getAILanguageDirective } from "./i18n";
+
 export const AI_PROVIDERS = [
   { id: "openai", label: "OpenAI", keyUrl: "https://platform.openai.com/api-keys", models: ["gpt-4o", "gpt-4o-mini", "o4-mini"] },
   { id: "anthropic", label: "Anthropic", keyUrl: "https://console.anthropic.com/settings/keys", models: ["claude-sonnet-4", "claude-haiku-4"] },
@@ -198,6 +200,10 @@ export async function requestAI(
 
   try {
     const maxTokens = options?.maxTokens ?? 2048;
+    const langDirective = getAILanguageDirective();
+    const effectiveSystemPrompt = systemPrompt
+      ? `${systemPrompt}\n\n${langDirective}`
+      : langDirective;
 
     if (settings.provider === "google") {
       const model = encodeURIComponent(settings.model.trim());
@@ -227,7 +233,7 @@ export async function requestAI(
           headers: { "Content-Type": "application/json" },
           signal: controller.signal,
           body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemPrompt }] },
+            systemInstruction: { parts: [{ text: effectiveSystemPrompt }] },
             contents,
             generationConfig: { temperature: settings.temperature, maxOutputTokens: maxTokens },
           }),
@@ -271,7 +277,7 @@ export async function requestAI(
         body: JSON.stringify({
           model: settings.model.trim(),
           max_tokens: maxTokens,
-          system: systemPrompt,
+          system: effectiveSystemPrompt,
           messages: anthropicMessages,
           temperature: settings.temperature,
         }),
@@ -291,11 +297,11 @@ export async function requestAI(
 
     const chatMessages = (options?.messages && options.messages.length > 0)
       ? [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: effectiveSystemPrompt },
           ...options.messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role, content: m.content })),
         ]
       : [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: effectiveSystemPrompt },
           { role: "user", content: prompt },
         ];
 

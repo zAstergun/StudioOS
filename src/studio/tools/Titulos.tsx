@@ -7,11 +7,14 @@ import { useExampleMode } from "../auth";
 import { useToolRestore } from "../utils/toolStateRestore";
 import { isCalibrated, type Calib } from "../calibration";
 import { CalibrationNotice } from "../components/CalibrationNotice";
+import { useI18n } from "../i18n";
+import { getLocalizedToolExamples } from "../i18n/examples";
 
 const STOP = new Set([
   "a","o","as","os","de","do","da","dos","das","em","no","na","nos","nas","com","para","pra","por",
   "que","e","ou","mas","se","eu","voce","você","meu","minha","seu","sua","como","quando","mais",
   "isso","esse","essa","sao","é","foi","tem","nao","não","um","uma","aos","ao","ja","já",
+  "the","in","on","at","to","for","of","with","by","from","an","and","or","is","are","was","were",
 ]);
 
 function freq(text: string) {
@@ -30,16 +33,17 @@ function cap(s: string) {
   return t ? t[0].toUpperCase() + t.slice(1) : t;
 }
 
-const PLATFORMS = [
-  { id: "yt", label: "YouTube · longo" },
-  { id: "shorts", label: "Shorts / Reels" },
-  { id: "post", label: "Post / legenda" },
-];
-
 type Gen = { title: string; pattern: string; why: string; ctr: number; flag?: string };
 
-function generate(tema: string, tops: string, ctr: number, platform: string): Gen[] {
-  const topic = cap(tema.trim() || "esse assunto");
+function generate(
+  tema: string,
+  tops: string,
+  ctr: number,
+  platform: string,
+  tFn?: (k: string, p?: any, fb?: string) => string
+): Gen[] {
+  const t = tFn || ((_k: string, _p?: any, fb?: string) => fb || "");
+  const topic = cap(tema.trim() || t("tools.titulos.default_topic", {}, "esse assunto"));
   const low = topic.toLowerCase();
   const topWords = freq(tops).slice(0, 4).map((w) => w[0]);
   const anchor = topWords[0] ? cap(topWords[0]) : "";
@@ -53,34 +57,38 @@ function generate(tema: string, tops: string, ctr: number, platform: string): Ge
 
   const base: Gen[] = [
     {
-      title: trim(`Eu parei de ${low} — e o resultado apareceu em ${n1} meses`),
-      pattern: "1ª pessoa + verbo de ação + consequência",
-      why: "Confissão com prazo cria um loop aberto que só fecha assistindo.",
+      title: trim(t("tools.titulos.p1_title", { low, n1 }, `Eu parei de ${low} — e o resultado apareceu em ${n1} meses`)),
+      pattern: t("tools.titulos.p1_pattern", {}, "1ª pessoa + verbo de ação + consequência"),
+      why: t("tools.titulos.p1_why", {}, "Confissão com prazo cria um loop aberto que só fecha assistindo."),
       ctr: ctr * 1.28,
-      flag: "Recomendado",
+      flag: t("tools.titulos.recommended", {}, "Recomendado"),
     },
     {
-      title: trim(`${topic} não vale mais a pena${anchor ? ` (e ${anchor} explica)` : ""}`),
-      pattern: "Mudança + urgência",
-      why: "Contradiz o senso comum do nicho e sinaliza informação nova.",
+      title: trim(
+        anchor
+          ? t("tools.titulos.p2_title_anchor", { topic, anchor }, `${topic} não vale mais a pena (e ${anchor} explica)`)
+          : t("tools.titulos.p2_title", { topic }, `${topic} não vale mais a pena`)
+      ),
+      pattern: t("tools.titulos.p2_pattern", {}, "Mudança + urgência"),
+      why: t("tools.titulos.p2_why", {}, "Contradiz o senso comum do nicho e sinaliza informação nova."),
       ctr: ctr * 1.19,
     },
     {
-      title: trim(`Perdi ${n2} anos com ${low}. O que eu faria diferente`),
-      pattern: "Confissão com humor",
-      why: "Erro próprio = prova de honestidade, e reduz o medo de clicar.",
+      title: trim(t("tools.titulos.p3_title", { n2, low }, `Perdi ${n2} anos com ${low}. O que eu faria diferente`)),
+      pattern: t("tools.titulos.p3_pattern", {}, "Confissão com humor"),
+      why: t("tools.titulos.p3_why", {}, "Erro próprio = prova de honestidade, e reduz o medo de clicar."),
       ctr: ctr * 1.14,
     },
     {
-      title: trim(`${n1} alternativas melhores que ${low} começando com R$100`),
-      pattern: "Número específico + sistema",
-      why: "Número na frente, entregável claro e barreira de entrada baixa.",
+      title: trim(t("tools.titulos.p4_title", { n1, low }, `${n1} alternativas melhores que ${low} começando com R$100`)),
+      pattern: t("tools.titulos.p4_pattern", {}, "Número específico + sistema"),
+      why: t("tools.titulos.p4_why", {}, "Número na frente, entregável claro e barreira de entrada baixa."),
       ctr: ctr * 1.22,
     },
     {
-      title: trim(`Ninguém te contou isso sobre ${low} antes de ${year}`),
-      pattern: "Quebra de expectativa",
-      why: "Curiosidade com prazo: funciona como alerta, não como aula.",
+      title: trim(t("tools.titulos.p5_title", { low, year }, `Ninguém te contou isso sobre ${low} antes de ${year}`)),
+      pattern: t("tools.titulos.p5_pattern", {}, "Quebra de expectativa"),
+      why: t("tools.titulos.p5_why", {}, "Curiosidade com prazo: funciona como alerta, não como aula."),
       ctr: ctr * 1.08,
     },
   ];
@@ -103,23 +111,31 @@ export function Titulos({
   profileName?: string;
   profileColor?: string;
 }) {
+  const { t, resolvedLanguage } = useI18n();
   const examples = useExampleMode();
   const calibrated = isCalibrated(calib);
+  const toolExamples = getLocalizedToolExamples(resolvedLanguage);
 
   const [tema, setTema] = useState(
-    examples ? "investir R$100 por mês em FIIs" : calib?.niche ? calib.niche.slice(0, 55) : ""
+    examples ? toolExamples.titulosTema : calib?.niche ? calib.niche.slice(0, 55) : ""
   );
   const [tops, setTops] = useState(
-    calib?.tops ? calib.tops : examples ? "Como saí de R$0 para R$10 mil em 2 anos\nParei de ouvir gerente de banco\n3 erros que me custaram R$8.000" : ""
+    calib?.tops ? calib.tops : examples ? toolExamples.titulosTops : ""
   );
   const [flops, setFlops] = useState(
-    calib?.flops ? calib.flops : examples ? "O que são fundos imobiliários\nMinha carteira completa de FIIs" : ""
+    calib?.flops ? calib.flops : examples ? toolExamples.titulosFlops : ""
   );
   const [ctr, setCtr] = useState(
-    calib?.ctr ? calib.ctr : examples ? "4.8" : ""
+    calib?.ctr ? calib.ctr : examples ? toolExamples.titulosCtr : ""
   );
   const [platform, setPlatform] = useState("yt");
   const [ran, setRan] = useState(true);
+
+  const platforms = [
+    { id: "yt", label: t("tools.titulos.platform_yt", {}, "YouTube · longo") },
+    { id: "shorts", label: t("tools.titulos.platform_shorts", {}, "Shorts / Reels") },
+    { id: "post", label: t("tools.titulos.platform_post", {}, "Post / legenda") },
+  ];
 
   useEffect(() => {
     if (calib) {
@@ -148,57 +164,60 @@ export function Titulos({
 
   const ctrNum = Math.max(0, parseFloat(ctr.replace(",", ".")) || 0);
   const results = useMemo(
-    () => (tema.trim() ? generate(tema, tops, ctrNum, platform) : []),
-    [tema, tops, ctrNum, platform]
+    () => (tema.trim() ? generate(tema, tops, ctrNum, platform, t) : []),
+    [tema, tops, ctrNum, platform, t]
   );
 
   const best = results[0]?.ctr ?? 0;
-  const friendlySummary = `${results.length} opções de títulos geradas · CTR estimado de até ${best.toFixed(1)}% (base ${ctrNum.toFixed(1)}%)`;
+  const friendlySummary = t(
+    "tools.titulos.friendly_summary",
+    { count: results.length, best: best.toFixed(1), base: ctrNum.toFixed(1) },
+    `${results.length} opções de títulos geradas · CTR estimado de até ${best.toFixed(1)}% (base ${ctrNum.toFixed(1)}%)`
+  );
 
   useAutosave(
     () => ({
       tool: "titulos",
-      toolName: "Gerador de Títulos",
-      title: tema.trim() ? `Títulos — ${tema}` : "",
+      toolName: t("tools.titulos.title", {}, "Gerador de Títulos"),
+      title: tema.trim() ? t("tools.titulos.save_title", { tema }, `Títulos — ${tema}`) : "",
       summary: friendlySummary,
       tag: `${best.toFixed(1)}%`,
       content: `TEMA: ${tema}\nCTR BASE: ${ctrNum.toFixed(1)}% · PLATAFORMA: ${platform}\n\n${results
         .map(
           (r, i) =>
-            `${String(i + 1).padStart(2, "0")}. ${r.title}\n    padrão: ${r.pattern} · ctr projetado ${r.ctr.toFixed(1)}%${r.flag ? ` · ${r.flag}` : ""}\n    por que: ${r.why}`
+            `${String(i + 1).padStart(2, "0")}. ${r.title}\n    ${t("tools.titulos.pattern_label", {}, "padrão")}: ${r.pattern} · ${t("tools.titulos.proj_ctr_label", {}, "ctr projetado")} ${r.ctr.toFixed(1)}%${r.flag ? ` · ${r.flag}` : ""}\n    ${t("tools.titulos.why_label", {}, "por que")}: ${r.why}`
         )
         .join("\n")}`,
     }),
-    [results, tema, ctrNum, platform, friendlySummary, best],
-    4
+    [results, tema, ctrNum, platform, friendlySummary, best, t]
   );
   const vocab = freq(tops).slice(0, 6);
 
   return (
     <ToolShell
       id="titulos"
-      title="Gerador de Títulos"
+      title={t("tools.titulos.title", {}, "Gerador de Títulos")}
       accent="oxide"
-      lede="Cinco padrões de empacotamento aplicados ao seu tema, calibrados pelos títulos que já performaram no canal. Cada saída vem com a régua: por que funciona e quanto deve mover o CTR."
+      lede={t("tools.titulos.lede", {}, "Cinco padrões de empacotamento aplicados ao seu tema, calibrados pelos títulos que já performaram no canal. Cada saída vem com a régua: por que funciona e quanto deve mover o CTR.")}
       meta={[
-        { k: "Padrões", v: "5" },
-        { k: "CTR base", v: `${ctrNum.toFixed(1)}%` },
-        { k: "Meta", v: `${best.toFixed(1)}%` },
-        { k: "Plataforma", v: platform === "yt" ? "YT" : platform === "shorts" ? "Shorts" : "Post" },
+        { k: t("tools.titulos.patterns", {}, "Padrões"), v: "5" },
+        { k: t("tools.titulos.ctr_base", {}, "CTR base"), v: `${ctrNum.toFixed(1)}%` },
+        { k: t("tools.titulos.goal", {}, "Meta"), v: `${best.toFixed(1)}%` },
+        { k: t("tools.titulos.platform", {}, "Plataforma"), v: platform === "yt" ? "YT" : platform === "shorts" ? "Shorts" : "Post" },
       ]}
       onBack={onBack}
       onGo={onGo}
       saveItem={tema.trim() ? {
         type: "titulos",
-        group: "Criação",
-        toolName: "Gerador de Títulos",
-        title: `Títulos — ${tema}`,
+        group: "Criação" as const,
+        toolName: t("tools.titulos.title", {}, "Gerador de Títulos"),
+        title: t("tools.titulos.save_title", { tema }, `Títulos — ${tema}`),
         summary: friendlySummary,
         tag: `${best.toFixed(1)}%`,
         content: `TEMA: ${tema}\nCTR BASE: ${ctrNum.toFixed(1)}% · PLATAFORMA: ${platform}\n\n${results
           .map(
             (r, i) =>
-              `${String(i + 1).padStart(2, "0")}. ${r.title}\n    padrão: ${r.pattern} · ctr projetado ${r.ctr.toFixed(1)}%${r.flag ? ` · ${r.flag}` : ""}\n    por que: ${r.why}`
+              `${String(i + 1).padStart(2, "0")}. ${r.title}\n    ${t("tools.titulos.pattern_label", {}, "padrão")}: ${r.pattern} · ${t("tools.titulos.proj_ctr_label", {}, "ctr projetado")} ${r.ctr.toFixed(1)}%${r.flag ? ` · ${r.flag}` : ""}\n    ${t("tools.titulos.why_label", {}, "por que")}: ${r.why}`
           )
           .join("\n")}`,
         metadata: {
@@ -210,7 +229,7 @@ export function Titulos({
       } : null}
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
-          <Card title="Vocabulário do canal" note="extraído dos tops" accent="signal">
+          <Card title={t("tools.titulos.channel_vocab", {}, "Vocabulário do canal")} note={t("tools.titulos.extracted_tops", {}, "extraído dos tops")} accent="signal">
             <div className="flex flex-wrap gap-1.5">
               {vocab.length ? (
                 vocab.map(([w, c]) => (
@@ -224,17 +243,16 @@ export function Titulos({
                 ))
               ) : (
                 <span className="font-mono text-[10.5px] text-ink-400">
-                  informe títulos que performaram
+                  {t("tools.titulos.no_vocab", {}, "informe títulos que performaram")}
                 </span>
               )}
             </div>
             <p className="mt-3 border-t border-ink-800 pt-3 text-[11.5px] leading-relaxed text-ink-400">
-              Palavras repetidas nos seus vídeos vencedores são as que o seu público já reconhece.
-              O gerador injeta a mais frequente em pelo menos uma variante.
+              {t("tools.titulos.vocab_desc", {}, "Palavras repetidas nos seus vídeos vencedores são as que o seu público já reconhece. O gerador injeta a mais frequente em pelo menos uma variante.")}
             </p>
           </Card>
 
-          <Card title="O que floppou" note="evite" accent="oxide">
+          <Card title={t("tools.titulos.what_flopped", {}, "O que floppou")} note={t("tools.titulos.avoid", {}, "evite")} accent="oxide">
             <ul className="space-y-2">
               {(flops.split("\n").filter(Boolean)).slice(0, 4).map((f) => (
                 <li key={f} className="flex items-start gap-2 text-[12.5px] leading-snug text-bone-400">
@@ -244,20 +262,20 @@ export function Titulos({
               ))}
             </ul>
             <p className="mt-3 border-t border-ink-800 pt-3 text-[11.5px] leading-relaxed text-ink-400">
-              Padrão comum: título que descreve o conteúdo em vez de prometer uma consequência.
+              {t("tools.titulos.flops_desc", {}, "Padrão comum: título que descreve o conteúdo em vez de prometer uma consequência.")}
             </p>
           </Card>
 
-          <Card title="Encadeamento" accent="mint">
+          <Card title={t("tools.titulos.chaining", {}, "Encadeamento")} accent="mint">
             <div className="space-y-2">
               <Button size="sm" variant="outline" className="w-full justify-start" icon="bolt" onClick={() => onGo("hooks")}>
-                Gerar hooks do título vencedor
+                {t("tools.titulos.chain_hooks", {}, "Gerar hooks do título vencedor")}
               </Button>
               <Button size="sm" variant="outline" className="w-full justify-start" icon="frame" onClick={() => onGo("thumbnail")}>
-                Briefing da thumbnail
+                {t("tools.titulos.chain_thumb", {}, "Briefing da thumbnail")}
               </Button>
               <Button size="sm" variant="ghost" className="w-full justify-start" icon="gauge" onClick={() => onGo("rank")}>
-                Voltar ao rank de ideia
+                {t("tools.titulos.chain_rank", {}, "Voltar ao rank de ideia")}
               </Button>
             </div>
           </Card>
@@ -269,48 +287,65 @@ export function Titulos({
         calibrated={calibrated}
         profileName={profileName}
         profileColor={profileColor}
-        toolName="Gerador de Títulos"
+        toolName={t("tools.titulos.title", {}, "Gerador de Títulos")}
         onGo={onGo}
         onGoCalib={() => onGo("calibracao")}
       />
 
-      <Card title="Entrada" note={profileName ? `perfil: ${profileName}` : "tema + histórico"} accent="oxide">
+      <Card
+        title={t("tools.titulos.input", {}, "Entrada")}
+        note={profileName ? `${t("tools.titulos.profile", {}, "perfil")}: ${profileName}` : t("tools.titulos.input_note", {}, "tema + histórico")}
+        accent="oxide"
+      >
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="lg:col-span-2">
-            <Label hint="assunto principal">Tema do vídeo</Label>
-            <Input value={tema} onChange={(e) => { setTema(e.target.value); setRan(true); }} placeholder="Ex.: investir R$100 por mês em FIIs" />
+            <Label hint={t("tools.titulos.topic_hint", {}, "assunto principal")}>
+              {t("tools.titulos.topic_label", {}, "Tema do vídeo")}
+            </Label>
+            <Input
+              value={tema}
+              onChange={(e) => {
+                setTema(e.target.value);
+                setRan(true);
+              }}
+              placeholder={t("tools.titulos.topic_placeholder", {}, "Ex.: investir R$100 por mês em FIIs")}
+            />
           </div>
           <div>
-            <Label hint="1 por linha">5 títulos que mais performaram</Label>
+            <Label hint={t("tools.titulos.one_per_line", {}, "1 por linha")}>
+              {t("tools.titulos.top_titles_label", {}, "5 títulos que mais performaram")}
+            </Label>
             <Textarea rows={5} value={tops} onChange={(e) => setTops(e.target.value)} />
           </div>
           <div>
-            <Label hint="1 por linha">5 que flopparam</Label>
+            <Label hint={t("tools.titulos.one_per_line", {}, "1 por linha")}>
+              {t("tools.titulos.flop_titles_label", {}, "5 que flopparam")}
+            </Label>
             <Textarea rows={5} value={flops} onChange={(e) => setFlops(e.target.value)} />
           </div>
           <div>
-            <Label>CTR médio do canal</Label>
+            <Label>{t("tools.titulos.avg_ctr_label", {}, "CTR médio do canal")}</Label>
             <div className="flex items-center gap-2">
               <Input value={ctr} onChange={(e) => setCtr(e.target.value)} inputMode="decimal" className="w-24 text-center font-mono tabular-nums" />
               <span className="font-mono text-[12px] text-ink-400">%</span>
               <div className="ml-auto flex-1">
                 <Meter value={ctrNum} max={12} accent="mint" showValue={false} />
                 <div className="mt-1 flex justify-between font-mono text-[9px] text-ink-500">
-                  <span>0</span><span>bom: 4–7%</span><span>12</span>
+                  <span>0</span><span>{t("tools.titulos.good_ctr", {}, "bom: 4–7%")}</span><span>12</span>
                 </div>
               </div>
             </div>
           </div>
           <div>
-            <Label>Plataforma</Label>
-            <Select value={platform} onChange={(e) => setPlatform(e.target.value)} headerTitle="Plataformas disponíveis">
-              {PLATFORMS.map((p) => (
+            <Label>{t("tools.titulos.platform_label", {}, "Plataforma")}</Label>
+            <Select value={platform} onChange={(e) => setPlatform(e.target.value)} headerTitle={t("tools.titulos.platforms_avail", {}, "Plataformas disponíveis")}>
+              {platforms.map((p) => (
                 <option key={p.id} value={p.id}>{p.label}</option>
               ))}
             </Select>
             <div className="mt-2.5">
               <Kicker accent="signal">
-                limite {platform === "shorts" ? "62" : "70"} caracteres
+                {t("tools.titulos.char_limit", { count: platform === "shorts" ? 62 : 70 }, `limite ${platform === "shorts" ? "62" : "70"} caracteres`)}
               </Kicker>
             </div>
           </div>
@@ -320,12 +355,12 @@ export function Titulos({
       <div className="mt-6">
         <div className="mb-3 flex items-center gap-3">
           <span className="font-mono text-[10.5px] tracking-[0.2em] text-bone-400 uppercase">
-            Saída · {results.length} títulos
+            {t("tools.titulos.output_header", { count: results.length }, `Saída · ${results.length} títulos`)}
           </span>
           <span className="h-px flex-1 bg-ink-800" />
           {ran && tema.trim() && (
             <span className="font-mono text-[10px] tracking-[0.14em] text-mint-400 uppercase">
-              ● gerado
+              {t("tools.titulos.generated", {}, "● gerado")}
             </span>
           )}
         </div>
@@ -333,7 +368,7 @@ export function Titulos({
         {!tema.trim() ? (
           <Card>
             <p className="py-6 text-center font-mono text-[11px] tracking-[0.16em] text-ink-400 uppercase">
-              Aguardando tema para análise…
+              {t("tools.titulos.waiting_topic", {}, "Aguardando tema para análise…")}
             </p>
           </Card>
         ) : (
@@ -374,7 +409,7 @@ export function Titulos({
                   <div className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end">
                     <div className="text-right">
                       <div className="font-mono text-[9px] tracking-[0.16em] text-ink-400 uppercase">
-                        CTR proj.
+                        {t("tools.titulos.proj_ctr", {}, "CTR proj.")}
                       </div>
                       <div
                         className={cn(

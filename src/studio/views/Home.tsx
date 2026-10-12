@@ -3,6 +3,7 @@ import { cn } from "../utils/cn";
 import { FRAMEWORKS, TOOLS, accentSoft, accentText, type Tool } from "../data";
 import { Icon, Reveal, SectionHead } from "../components/ui";
 import { IdeaBank } from "./IdeaBank";
+import { useI18n } from "../i18n";
 
 /* ------------------------------------------------------- mini visuals */
 
@@ -115,6 +116,7 @@ function Mini({ id }: { id: string }) {
 /* ---------------------------------------------------------- tool card */
 
 function ToolCard({ tool, i, onGo }: { tool: Tool; i: number; onGo: (id: string) => void }) {
+  const { t } = useI18n();
   return (
     <Reveal delay={(i % 4) * 70} className={cn("h-full", tool.span)}>
       <button
@@ -144,19 +146,21 @@ function ToolCard({ tool, i, onGo }: { tool: Tool; i: number; onGo: (id: string)
             <Icon name={tool.icon} className="h-[18px] w-[18px]" strokeWidth={1.6} />
           </span>
           <span className={cn("rounded border px-2 py-0.5 font-mono text-[9px] tracking-[0.16em] uppercase", accentSoft[tool.accent])}>
-            {tool.kicker}
+            {t(`tools.${tool.id}.kicker`, undefined, tool.kicker)}
           </span>
         </div>
 
         <h3 className="relative font-display text-[19px] leading-tight font-extrabold tracking-[-0.02em] text-bone-50">
-          {tool.name}
+          {t(`tools.${tool.id}.name`, undefined, tool.name)}
         </h3>
-        <p className="relative mt-1.5 flex-1 text-[13px] leading-relaxed text-bone-400">{tool.desc}</p>
+        <p className="relative mt-1.5 flex-1 text-[13px] leading-relaxed text-bone-400">
+          {t(`tools.${tool.id}.desc`, undefined, tool.desc)}
+        </p>
 
         <div className={cn("relative mt-5 flex items-end justify-between gap-4 opacity-90", accentText[tool.accent])}>
           <Mini id={tool.id} />
           <span className="flex items-center gap-1.5 font-mono text-[9.5px] tracking-[0.16em] text-ink-400 uppercase transition-colors group-hover:text-bone-100">
-            abrir
+            {t("common.open", undefined, "abrir")}
             <Icon name="arrow" className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-1" strokeWidth={2} />
           </span>
         </div>
@@ -178,10 +182,19 @@ export function Home({
   progress: number;
   niche: string;
 }) {
+  const { t } = useI18n();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("Todas");
-  const list = TOOLS.filter((t) => (filter === "Todas" ? true : t.group === filter));
+  const list = TOOLS.filter((tTool) => (filter === "Todas" ? true : tTool.group === filter));
   const [hoverFw, setHoverFw] = useState<string | null>(null);
   const activeFw = FRAMEWORKS.find((f) => f.n === hoverFw);
+
+  const filterLabels: Record<(typeof FILTERS)[number], string> = {
+    Todas: t("common.view_all", undefined, "Todas"),
+    Criação: t("nav.groups.creation", undefined, "Criação"),
+    Publicação: t("nav.groups.publishing", undefined, "Publicação"),
+    Estratégia: t("nav.groups.strategy", undefined, "Estratégia"),
+    Painel: t("nav.groups.panel", undefined, "Painel"),
+  };
 
   return (
     <div>
@@ -189,15 +202,15 @@ export function Home({
       <section className="mx-auto max-w-[1400px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
         <SectionHead
           index="01"
-          kicker="Ferramentas rápidas"
+          kicker={t("home.section_01.kicker", {}, "Ferramentas rápidas")}
           title={
             <>
-              Doze bancadas.
+              {t("home.section_01.title_part1", {}, "Doze bancadas.")}
               <br />
-              <span className="text-signal-400">Uma régua só.</span>
+              <span className="text-signal-400">{t("home.section_01.title_part2", {}, "Uma régua só.")}</span>
             </>
           }
-          lede="Toda ferramenta lê a mesma calibração do canal. É por isso que o título gerado aqui tem a sua cara — e não a cara de um template importado."
+          lede={t("home.section_01.lede", {}, "Toda ferramenta lê a mesma calibração do canal. É por isso que o título gerado aqui tem a sua cara — e não a cara de um template importado.")}
           right={
             <div className="flex flex-wrap gap-1.5">
               {FILTERS.map((f) => (
@@ -205,13 +218,13 @@ export function Home({
                   key={f}
                   onClick={() => setFilter(f)}
                   className={cn(
-                    "rounded border px-3 py-1.5 font-mono text-[10px] tracking-[0.14em] uppercase transition-all duration-200",
+                    "rounded border px-3 py-1.5 font-mono text-[10px] tracking-[0.14em] uppercase transition-all duration-200 cursor-pointer",
                     filter === f
                       ? "border-signal-400/60 bg-signal-400/15 text-signal-300"
                       : "border-ink-700 bg-ink-900/60 text-bone-400 hover:border-ink-500 hover:text-bone-100"
                   )}
                 >
-                  {f}
+                  {filterLabels[f]}
                 </button>
               ))}
             </div>
@@ -238,30 +251,28 @@ export function Home({
                 <div className="mb-5 flex items-center gap-3">
                   <span className="h-px w-8 bg-oxide-400/70" />
                   <span className="font-mono text-[11px] tracking-[0.22em] text-oxide-400 uppercase">
-                    03 · Como o painel pensa
+                    {t("home.manifesto.kicker", {}, "03 · Como o painel pensa")}
                   </span>
                 </div>
                 <p className="font-display text-[clamp(1.7rem,4.2vw,3rem)] leading-[1.05] font-extrabold tracking-[-0.03em] text-bone-50 text-balance">
-                  Criador não tem problema de ideia.
+                  {t("home.manifesto.title_line1", {}, "Criador não tem problema de ideia.")}
                   <br />
-                  <span className="text-ink-400">Tem problema de</span>{" "}
+                  <span className="text-ink-400">{t("home.manifesto.title_line2", {}, "Tem problema de")}</span>{" "}
                   <span className="relative inline-block text-oxide-400">
-                    critério
+                    {t("home.manifesto.title_criteria", {}, "critério")}
                     <span className="absolute inset-x-0 -bottom-1 h-[3px] bg-oxide-400/40" />
                   </span>
                   .
                 </p>
                 <p className="mt-6 max-w-xl text-[15px] leading-relaxed text-bone-400">
-                  O StudioOS existe para transformar gosto em número. Cada ferramenta devolve uma
-                  nota, uma evidência e uma correção — nunca um texto bonito que você não sabe se
-                  funciona.
+                  {t("home.manifesto.body", {}, "O StudioOS existe para transformar gosto em número. Cada ferramenta devolve uma nota, uma evidência e uma correção — nunca um texto bonito que você não sabe se funciona.")}
                 </p>
 
                 <div className="mt-9 grid gap-px overflow-hidden rounded-lg border border-ink-700/80 bg-ink-700/60 sm:grid-cols-3">
                   {[
-                    { n: "01", t: "Medir", d: "Toda saída vem com nota e régua visível." },
-                    { n: "02", t: "Comparar", d: "Sempre contra o seu histórico, nunca contra a média." },
-                    { n: "03", t: "Corrigir", d: "O painel diz qual critério derrubou o resultado." },
+                    { n: "01", t: t("home.manifesto.step1_title", {}, "Medir"), d: t("home.manifesto.step1_desc", {}, "Toda saída vem com nota e régua visível.") },
+                    { n: "02", t: t("home.manifesto.step2_title", {}, "Comparar"), d: t("home.manifesto.step2_desc", {}, "Sempre contra o seu histórico, nunca contra a média.") },
+                    { n: "03", t: t("home.manifesto.step3_title", {}, "Corrigir"), d: t("home.manifesto.step3_desc", {}, "O painel diz qual critério derrubou o resultado.") },
                   ].map((s) => (
                     <div key={s.n} className="group bg-ink-900 p-5 transition-colors duration-300 hover:bg-ink-850">
                       <div className="font-mono text-[11px] text-signal-400 tabular-nums">{s.n}</div>
@@ -277,7 +288,7 @@ export function Home({
                   <div className="rounded-lg border border-ink-700 bg-ink-950/70 p-5">
                     <div className="mb-3 flex items-center justify-between">
                       <span className="font-mono text-[9.5px] tracking-[0.18em] text-ink-400 uppercase">
-                        Calibração do canal
+                        {t("home.manifesto.calib_title", {}, "Calibração do canal")}
                       </span>
                       <span className={cn("font-mono text-[11px] tabular-nums", progress >= 100 ? "text-mint-400" : "text-signal-400")}>
                         {Math.round(progress)}%
@@ -291,34 +302,34 @@ export function Home({
                     </div>
                     <p className="mt-3 text-[12.5px] leading-relaxed text-bone-400">
                       {progress >= 100
-                        ? "Canal calibrado. As réguas de título, ideia e fit já usam o seu vocabulário."
-                        : "Sem calibração, o painel devolve régua genérica. São 4 perguntas e 10 títulos."}
+                        ? t("home.manifesto.calib_done_desc", {}, "Canal calibrado. As réguas de título, ideia e fit já usam o seu vocabulário.")
+                        : t("home.manifesto.calib_pending_desc", {}, "Sem calibração, o painel devolve régua genérica. São 4 perguntas e 10 títulos.")}
                     </p>
                     <button
                       onClick={() => onGo("calibracao")}
-                      className="group mt-4 inline-flex items-center gap-2 font-mono text-[10.5px] tracking-[0.16em] text-signal-400 uppercase transition-colors hover:text-signal-300"
+                      className="group mt-4 inline-flex items-center gap-2 font-mono text-[10.5px] tracking-[0.16em] text-signal-400 uppercase transition-colors hover:text-signal-300 cursor-pointer"
                     >
-                      {progress >= 100 ? "revisar dados" : "completar calibração"}
+                      {progress >= 100 ? t("home.manifesto.calib_review", {}, "revisar dados") : t("home.manifesto.calib_complete", {}, "completar calibração")}
                       <Icon name="arrow" className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" strokeWidth={2} />
                     </button>
                   </div>
 
                   <div className="rounded-lg border border-ink-700 bg-ink-900/60 p-5">
                     <div className="font-mono text-[9.5px] tracking-[0.18em] text-ink-400 uppercase">
-                      Ordem de uso
+                      {t("home.manifesto.order_of_use", {}, "Ordem de uso")}
                     </div>
                     <ol className="mt-3 space-y-2.5">
                       {[
-                        ["Calibração", "calibracao"],
-                        ["Rank de Ideia", "rank"],
-                        ["Título + Hook", "titulos"],
-                        ["Roteiro + Teleprompter", "roteiro"],
-                        ["Score de Post", "score"],
+                        [t("tools.calibracao.name", {}, "Calibração"), "calibracao"],
+                        [t("tools.rank.name", {}, "Rank de Ideia"), "rank"],
+                        [t("home.manifesto.order_titles", {}, "Título + Hook"), "titulos"],
+                        [t("home.manifesto.order_script", {}, "Roteiro + Teleprompter"), "roteiro"],
+                        [t("tools.score.name", {}, "Score de Post"), "score"],
                       ].map(([label, id], i) => (
                         <li key={id}>
                           <button
                             onClick={() => onGo(id)}
-                            className="group flex w-full items-center gap-3 text-left"
+                            className="group flex w-full items-center gap-3 text-left cursor-pointer"
                           >
                             <span className="font-mono text-[10px] text-ink-500 tabular-nums">{i + 1}</span>
                             <span className="flex-1 border-b border-dashed border-ink-700 pb-2 text-[13px] text-bone-300 transition-colors group-hover:border-signal-400/50 group-hover:text-signal-300">
@@ -344,18 +355,18 @@ export function Home({
           kicker="Mentor AI"
           title={
             <>
-              24 modelos mentais,
+              {t("home.frameworks.title_part1", {}, "24 modelos mentais,")}
               <br />
-              <span className="text-sky-400">numerados como ferramenta.</span>
+              <span className="text-sky-400">{t("home.frameworks.title_part2", {}, "numerados como ferramenta.")}</span>
             </>
           }
-          lede="Passe o cursor para ler a lente de cada framework. Clique para abrir o consultório completo e gerar um parecer sobre o seu caso."
+          lede={t("home.frameworks.lede", {}, "Passe o cursor para ler a lente de cada framework. Clique para abrir o consultório completo e gerar um parecer sobre o seu caso.")}
           right={
             <button
               onClick={() => onGo("mentor")}
-              className="group inline-flex items-center gap-2.5 rounded-md border border-ink-600 bg-ink-900/70 px-5 py-3 text-[14px] font-semibold text-bone-100 transition-all duration-200 hover:border-sky-400/60 hover:text-sky-400"
+              className="group inline-flex items-center gap-2.5 rounded-md border border-ink-600 bg-ink-900/70 px-5 py-3 text-[14px] font-semibold text-bone-100 transition-all duration-200 hover:border-sky-400/60 hover:text-sky-400 cursor-pointer"
             >
-              Abrir Mentor AI
+              {t("home.frameworks.open_mentor", {}, "Abrir Mentor AI")}
               <Icon name="arrow" className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" strokeWidth={2} />
             </button>
           }
@@ -371,7 +382,7 @@ export function Home({
                 onMouseLeave={() => setHoverFw(null)}
                 onClick={() => onGo("mentor")}
                 className={cn(
-                  "group relative overflow-hidden bg-ink-900 p-3.5 text-left transition-colors duration-300 hover:bg-ink-850",
+                  "group relative overflow-hidden bg-ink-900 p-3.5 text-left transition-colors duration-300 hover:bg-ink-850 cursor-pointer",
                   hoverFw === f.n && "bg-ink-850"
                 )}
               >
@@ -393,7 +404,7 @@ export function Home({
             <div className="mb-4 flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
               <span className="font-mono text-[9.5px] tracking-[0.2em] text-sky-400 uppercase">
-                {activeFw ? `framework ${activeFw.n}` : "lente selecionada"}
+                {activeFw ? t("home.frameworks.active_lens", { n: activeFw.n }, `framework ${activeFw.n}`) : t("home.frameworks.selected_lens", {}, "lente selecionada")}
               </span>
             </div>
             {activeFw ? (
@@ -408,20 +419,24 @@ export function Home({
               </div>
             ) : (
               <p className="text-[13px] leading-relaxed text-ink-400">
-                Cada framework é uma pergunta que você faz antes de decidir — não uma frase de
-                efeito para colar no roteiro.
+                {t("home.frameworks.lens_desc", {}, "Cada framework é uma pergunta que você faz antes de decidir — não uma frase de efeito para colar no roteiro.")}
               </p>
             )}
             <div className="mt-6 border-t border-ink-800 pt-4">
               <div className="font-mono text-[9.5px] tracking-[0.16em] text-ink-400 uppercase">
-                Distribuição por grupo
+                {t("home.frameworks.group_dist", {}, "Distribuição por grupo")}
               </div>
               <div className="mt-3 space-y-2">
-                {["Criação", "Diagnóstico", "Posicionamento", "Estratégia"].map((g) => {
-                  const n = FRAMEWORKS.filter((f) => f.group === g).length;
+                {[
+                  { key: "Criação", label: t("nav.groups.creation", {}, "Criação") },
+                  { key: "Diagnóstico", label: t("home.frameworks.diagnosis", {}, "Diagnóstico") },
+                  { key: "Posicionamento", label: t("home.frameworks.positioning", {}, "Posicionamento") },
+                  { key: "Estratégia", label: t("nav.groups.strategy", {}, "Estratégia") },
+                ].map(({ key, label }) => {
+                  const n = FRAMEWORKS.filter((f) => f.group === key).length;
                   return (
-                    <div key={g} className="flex items-center gap-3">
-                      <span className="w-28 font-mono text-[10px] text-bone-400 uppercase">{g}</span>
+                    <div key={key} className="flex items-center gap-3">
+                      <span className="w-28 font-mono text-[10px] text-bone-400 uppercase">{label}</span>
                       <div className="h-1 flex-1 overflow-hidden rounded-full bg-ink-800">
                         <div className="h-full rounded-full bg-sky-400/70" style={{ width: `${(n / 24) * 100 * 3}%` }} />
                       </div>

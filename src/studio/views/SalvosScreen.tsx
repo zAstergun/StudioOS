@@ -4,19 +4,24 @@ import { cn } from "../utils/cn";
 import { useAuth, supabase } from "../auth";
 import { prepareToolRestore, formatFriendlySummary } from "../utils/toolStateRestore";
 import { VipRgbColorPicker } from "../components/VipRgbColorPicker";
+import { useI18n } from "../i18n";
 
 const PALETTE = ["#F2604C", "#F2B33D", "#2FD4A0", "#6E93F5", "#D946EF", "#A855F7", "#F472B6", "#38BDF8"];
 
-const STATUS_LABEL_MAP: Record<string, string> = {
-  planning: "Planejamento",
-  active: "Em Andamento",
-  completed: "Concluído",
-  archived: "Arquivado",
-  trashed: "Lixeira",
-};
-
 export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
+  const { t } = useI18n();
   const { user } = useAuth();
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "planning": return t("projects.status.planning", undefined, "Planejamento");
+      case "active": return t("projects.status.active", undefined, "Em Andamento");
+      case "completed": return t("projects.status.completed", undefined, "Concluído");
+      case "archived": return t("projects.status.archived", undefined, "Arquivado");
+      case "trashed": return t("projects.status.trashed", undefined, "Lixeira");
+      default: return status;
+    }
+  };
   const [categories, setCategories] = useState<{id: string, name: string, color: string}[]>([]);
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window !== "undefined") {
@@ -298,14 +303,14 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                 <Icon name="bookmark" className="h-4 w-4 text-signal-400" strokeWidth={2} />
               </div>
               <span className="font-mono text-[10px] tracking-[0.22em] text-signal-400 uppercase">
-                Workspace · Salvos
+                {t("saved.kicker", undefined, "Workspace · Salvos")}
               </span>
             </div>
             <h1 className="font-display text-[2.6rem] leading-[0.95] font-extrabold tracking-[-0.03em] text-bone-50">
-              Itens Salvos
+              {t("saved.title", undefined, "Itens Salvos")}
             </h1>
             <p className="mt-3 max-w-lg text-[14px] leading-relaxed text-ink-300">
-              Gerencie e acesse todos os seus recursos favoritos categorizados por guias.
+              {t("saved.description", undefined, "Gerencie e acesse todos os seus recursos favoritos categorizados por guias.")}
             </p>
           </div>
         </div>
@@ -324,7 +329,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                   : "text-bone-300 hover:text-ink-300 hover:bg-ink-800/40"
               )}
             >
-              Todos
+              {t("saved.tabs.all", undefined, "Todos")}
             </button>
             
             {categories.map(cat => (
@@ -361,7 +366,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
               className="flex items-center gap-1.5 rounded-md px-3 py-2 font-mono text-[10px] tracking-[0.12em] uppercase transition-all duration-200 text-ink-400 hover:text-bone-300 hover:bg-ink-800/40 ml-1"
             >
               <Icon name="plus" className="h-3 w-3" strokeWidth={2} />
-              Nova Guia
+              {t("saved.tabs.new_tab", undefined, "Nova Guia")}
             </button>
           </div>
         </div>
@@ -385,10 +390,12 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
               <Icon name="bookmark" className="h-6 w-6 text-ink-400" strokeWidth={1.5} />
             </div>
             <h3 className="font-display text-[20px] font-bold text-bone-100 relative z-10">
-              {activeTab === "todos" ? "Nenhum item salvo" : `Nenhum item em "${categories.find(c => c.id === activeTab)?.name}"`}
+              {activeTab === "todos" 
+                ? t("saved.empty.title", undefined, "Nenhum item salvo") 
+                : t("saved.empty.tab_title", { tab: categories.find(c => c.id === activeTab)?.name || "" }, "Nenhum item em \"{tab}\"")}
             </h3>
             <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-ink-300 relative z-10">
-              Quando você salvar ideias, referências ou roteiros, eles aparecerão aqui classificados por guias.
+              {t("saved.empty.desc", undefined, "Quando você salvar ideias, referências ou roteiros, eles aparecerão aqui classificados por guias.")}
             </p>
           </div>
         ) : (
@@ -422,7 +429,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                         setItemToDelete(item);
                       }}
                       className="text-ink-500 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10"
-                      title="Remover dos salvos"
+                      title={t("saved.card.remove_tooltip", undefined, "Remover dos salvos")}
                     >
                       <Icon name="trash" className="h-3.5 w-3.5" />
                     </button>
@@ -440,7 +447,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                   {item.metadata?.status && (
                     <div className="mt-3 flex items-center gap-2 font-mono text-[10px] text-bone-400">
                       <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.metadata.color || "#F2B33D" }} />
-                      Projeto: {STATUS_LABEL_MAP[item.metadata.status] || item.metadata.status}
+                      {t("saved.card.project_prefix", undefined, "Projeto:")} {getStatusLabel(item.metadata.status)}
                     </div>
                   )}
 
@@ -456,9 +463,9 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                               onGo(toolTarget);
                             }}
                             className="flex items-center gap-1.5 rounded bg-signal-400 px-3 py-1.5 font-mono text-[9.5px] font-bold tracking-wider text-ink-950 uppercase transition-all duration-200 hover:bg-signal-300 shadow-[0_2px_10px_-2px_rgba(242,179,61,0.4)] cursor-pointer"
-                            title="Abrir ferramenta com estes dados carregados"
+                            title={t("saved.card.open_tool_tooltip", undefined, "Abrir ferramenta com estes dados carregados")}
                           >
-                            Abrir Ferramenta
+                            {t("saved.card.open_tool", undefined, "Abrir Ferramenta")}
                             <Icon name="arrow" className="h-3 w-3" strokeWidth={2.2} />
                           </button>
                         );
@@ -471,7 +478,11 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                           }}
                           className="flex items-center gap-1.5 rounded bg-signal-400/15 border border-signal-400/30 px-3 py-1.5 font-mono text-[9.5px] tracking-widest text-signal-400 uppercase transition-all duration-200 hover:bg-signal-400 hover:text-ink-950 hover:border-signal-400 cursor-pointer"
                         >
-                          {item.type === "projeto" ? "Abrir Projeto" : item.type === "link" ? "Abrir Link" : "Abrir"}
+                          {item.type === "projeto" 
+                            ? t("saved.card.open_project", undefined, "Abrir Projeto") 
+                            : item.type === "link" 
+                            ? t("saved.card.open_link", undefined, "Abrir Link") 
+                            : t("saved.card.open", undefined, "Abrir")}
                           <Icon name="arrow" className="h-3 w-3" strokeWidth={2} />
                         </button>
                       );
@@ -483,9 +494,9 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                           setViewingItem(item);
                         }}
                         className="rounded bg-ink-800/60 px-2 py-1.5 font-mono text-[9px] tracking-wider text-bone-300 uppercase hover:bg-ink-700 hover:text-bone-50 transition-colors cursor-pointer"
-                        title="Ver conteúdo completo"
+                        title={t("saved.card.view_tooltip", undefined, "Ver conteúdo completo")}
                       >
-                        Visualizar
+                        {t("saved.card.view", undefined, "Visualizar")}
                       </button>
                     )}
                     {item.url && item.type !== "link" && (
@@ -495,10 +506,10 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                         rel="noreferrer" 
                         onClick={(e) => e.stopPropagation()}
                         className="flex items-center gap-1 rounded bg-ink-800/60 px-2 py-1.5 font-mono text-[9px] tracking-wider text-bone-300 uppercase hover:bg-ink-700 hover:text-bone-50 transition-colors"
-                        title="Abrir Link Externo"
+                        title={t("saved.card.external_link_tooltip", undefined, "Abrir Link Externo")}
                       >
                         <Icon name="link" className="h-3 w-3" />
-                        Link
+                        {t("saved.card.link", undefined, "Link")}
                       </a>
                     )}
                   </div>
@@ -524,8 +535,12 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                     <Icon name="plus" className="h-3.5 w-3.5 text-signal-400" strokeWidth={2} />
                   </div>
                   <div>
-                    <h2 className="font-display text-lg font-bold text-bone-50">Nova Guia</h2>
-                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">Categoria de salvos</p>
+                    <h2 className="font-display text-lg font-bold text-bone-50">
+                      {t("saved.modal.new_tab_title", undefined, "Nova Guia")}
+                    </h2>
+                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">
+                      {t("saved.modal.new_tab_kicker", undefined, "Categoria de salvos")}
+                    </p>
                   </div>
                 </div>
                 <button 
@@ -541,13 +556,13 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
             <form onSubmit={handleCreateTab} className="p-6">
               <div className="mb-6">
                 <label className="mb-2 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Nome da Guia
+                  {t("saved.modal.tab_name_label", undefined, "Nome da Guia")}
                 </label>
                 <input 
                   type="text" 
                   value={newTabName}
                   onChange={(e) => setNewTabName(e.target.value)}
-                  placeholder="Ex: Referências Visuais"
+                  placeholder={t("saved.modal.tab_name_placeholder", undefined, "Ex: Referências Visuais")}
                   autoFocus
                   className="w-full rounded-lg border border-ink-800/60 bg-ink-950/50 px-4 py-3 text-[14px] text-bone-100 placeholder:text-ink-400 transition-colors focus:border-signal-400/60 focus:outline-none focus:ring-1 focus:ring-signal-400/20"
                   required
@@ -558,7 +573,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                 <VipRgbColorPicker
                   value={newTabColor}
                   onChange={setNewTabColor}
-                  label="Cor de Destaque"
+                  label={t("saved.modal.accent_color", undefined, "Cor de Destaque")}
                   palette={PALETTE}
                 />
               </div>
@@ -569,14 +584,14 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                   onClick={() => setShowModal(false)}
                   className="flex-1 rounded-lg border border-ink-800/60 bg-ink-900 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase transition-colors hover:bg-ink-800"
                 >
-                  Cancelar
+                  {t("common.cancel", undefined, "Cancelar")}
                 </button>
                 <button
                   type="submit"
                   disabled={!newTabName.trim()}
                   className="flex-1 rounded-lg bg-signal-400 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.14em] text-ink-950 uppercase transition-all duration-200 hover:bg-signal-400/90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Criar Guia
+                  {t("saved.modal.create_tab", undefined, "Criar Guia")}
                 </button>
               </div>
             </form>
@@ -598,8 +613,12 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                     <Icon name="edit" className="h-3.5 w-3.5 text-signal-400" strokeWidth={2} />
                   </div>
                   <div>
-                    <h2 className="font-display text-lg font-bold text-bone-50">Editar Guia</h2>
-                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">Ajustar categoria</p>
+                    <h2 className="font-display text-lg font-bold text-bone-50">
+                      {t("saved.modal.edit_tab_title", undefined, "Editar Guia")}
+                    </h2>
+                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">
+                      {t("saved.modal.edit_tab_kicker", undefined, "Ajustar categoria")}
+                    </p>
                   </div>
                 </div>
                 <button 
@@ -616,7 +635,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                 <>
                   <div className="mb-6">
                     <label className="mb-2 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                      Nome da Guia
+                      {t("saved.modal.tab_name_label", undefined, "Nome da Guia")}
                     </label>
                     <input 
                       type="text" 
@@ -632,7 +651,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                     <VipRgbColorPicker
                       value={editTabColor}
                       onChange={setEditTabColor}
-                      label="Cor de Destaque"
+                      label={t("saved.modal.accent_color", undefined, "Cor de Destaque")}
                       palette={PALETTE}
                     />
                   </div>
@@ -644,7 +663,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                       className="flex items-center gap-2 font-mono text-[10px] font-bold tracking-[0.14em] text-red-400 uppercase transition-colors hover:text-red-300"
                     >
                       <Icon name="trash" className="h-3.5 w-3.5" />
-                      Remover Guia
+                      {t("saved.modal.remove_tab", undefined, "Remover Guia")}
                     </button>
                     <div className="flex gap-3">
                       <button
@@ -652,14 +671,14 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                         onClick={() => setEditingTabId(null)}
                         className="rounded-lg border border-ink-800/60 bg-ink-900 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase transition-colors hover:bg-ink-800"
                       >
-                        Cancelar
+                        {t("common.cancel", undefined, "Cancelar")}
                       </button>
                       <button
                         type="submit"
                         disabled={!editTabName.trim()}
                         className="rounded-lg bg-signal-400 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.14em] text-ink-950 uppercase transition-all duration-200 hover:bg-signal-400/90 disabled:opacity-50"
                       >
-                        Salvar
+                        {t("common.save", undefined, "Salvar")}
                       </button>
                     </div>
                   </div>
@@ -669,9 +688,11 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                   <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-400/10">
                     <Icon name="trash" className="h-5 w-5 text-red-400" />
                   </div>
-                  <h3 className="mb-2 font-display text-[16px] font-bold text-bone-100">Excluir Guia?</h3>
+                  <h3 className="mb-2 font-display text-[16px] font-bold text-bone-100">
+                    {t("saved.modal.delete_tab_confirm_title", undefined, "Excluir Guia?")}
+                  </h3>
                   <p className="mb-8 text-[13px] leading-relaxed text-ink-300">
-                    Tem certeza de que deseja excluir a guia <strong className="text-bone-100">{editTabName}</strong>? Isso não pode ser desfeito.
+                    {t("saved.modal.delete_tab_confirm_desc", { name: editTabName }, `Tem certeza de que deseja excluir a guia ${editTabName}? Isso não pode ser desfeito.`)}
                   </p>
                   <div className="flex gap-3">
                     <button
@@ -679,14 +700,14 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                       onClick={() => setShowDeleteConfirm(false)}
                       className="flex-1 rounded-lg border border-ink-800/60 bg-ink-900 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase transition-colors hover:bg-ink-800"
                     >
-                      Cancelar
+                      {t("common.cancel", undefined, "Cancelar")}
                     </button>
                     <button
                       type="button"
                       onClick={handleDeleteTab}
                       className="flex-1 rounded-lg bg-red-500 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.14em] text-white uppercase transition-all duration-200 hover:bg-red-600"
                     >
-                      Excluir
+                      {t("common.delete", undefined, "Excluir")}
                     </button>
                   </div>
                 </div>
@@ -707,9 +728,11 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-400/10">
                 <Icon name="trash" className="h-6 w-6 text-red-400" />
               </div>
-              <h3 className="mb-2 font-display text-xl font-bold text-bone-100">Remover dos Salvos?</h3>
+              <h3 className="mb-2 font-display text-xl font-bold text-bone-100">
+                {t("saved.modal.remove_item_title", undefined, "Remover dos Salvos?")}
+              </h3>
               <p className="mb-8 text-[13px] leading-relaxed text-ink-300">
-                Tem certeza que deseja remover <strong className="text-bone-100">{itemToDelete.title}</strong> dos seus salvos? Isso não apagará o item original, apenas o atalho salvo.
+                {t("saved.modal.remove_item_desc", { title: itemToDelete.title }, `Tem certeza que deseja remover ${itemToDelete.title} dos seus salvos? Isso não apagará o item original, apenas o atalho salvo.`)}
               </p>
               
               <div className="flex gap-3">
@@ -718,7 +741,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                   onClick={() => setItemToDelete(null)}
                   className="flex-1 rounded-lg border border-ink-800/60 bg-ink-900 px-4 py-3.5 font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase transition-colors hover:bg-ink-800"
                 >
-                  Cancelar
+                  {t("common.cancel", undefined, "Cancelar")}
                 </button>
                 <button
                   type="button"
@@ -734,7 +757,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                   }}
                   className="flex-1 rounded-lg bg-red-500 px-4 py-3.5 font-mono text-[10px] font-bold tracking-[0.14em] text-white uppercase transition-colors hover:bg-red-400"
                 >
-                  Sim, Remover
+                  {t("saved.modal.confirm_remove", undefined, "Sim, Remover")}
                 </button>
               </div>
             </div>
@@ -770,7 +793,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                     )}
                     {viewingItem.metadata?.status && (
                       <span className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-signal-400">
-                        • {STATUS_LABEL_MAP[viewingItem.metadata.status] || viewingItem.metadata.status}
+                        • {getStatusLabel(viewingItem.metadata.status)}
                       </span>
                     )}
                   </div>
@@ -792,7 +815,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
               {viewingItem.metadata?.summary && (
                 <div>
                   <span className="font-mono text-[9px] tracking-[0.14em] text-ink-400 uppercase block mb-1">
-                    Resumo
+                    {t("saved.detail.summary", undefined, "Resumo")}
                   </span>
                   <p className="text-[13px] leading-relaxed text-bone-200">
                     {formatFriendlySummary(viewingItem.metadata?.tool || viewingItem.type, viewingItem.metadata.summary, viewingItem.metadata.content)}
@@ -804,7 +827,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="font-mono text-[9px] tracking-[0.14em] text-ink-400 uppercase">
-                      Conteúdo Completo
+                      {t("saved.detail.full_content", undefined, "Conteúdo Completo")}
                     </span>
                     <button
                       onClick={() => {
@@ -815,7 +838,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                       className="flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase text-signal-400 hover:text-signal-300 transition-colors"
                     >
                       <Icon name="copy" className="h-3 w-3" />
-                      {copied ? "Copiado!" : "Copiar"}
+                      {copied ? t("common.copied", undefined, "Copiado!") : t("common.copy", undefined, "Copiar")}
                     </button>
                   </div>
                   <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-ink-800 bg-ink-950/80 p-4 font-mono text-[11.5px] leading-relaxed text-bone-200">
@@ -827,7 +850,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
               {viewingItem.url && (
                 <div>
                   <span className="font-mono text-[9px] tracking-[0.14em] text-ink-400 uppercase block mb-1">
-                    Link do Recurso
+                    {t("saved.detail.resource_link", undefined, "Link do Recurso")}
                   </span>
                   <a 
                     href={viewingItem.url} 
@@ -849,7 +872,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                 onClick={() => setViewingItem(null)}
                 className="rounded-lg border border-ink-800 px-4 py-2 font-mono text-[10px] font-bold tracking-[0.12em] text-bone-300 uppercase transition-colors hover:bg-ink-800"
               >
-                Fechar
+                {t("common.close", undefined, "Fechar")}
               </button>
               {(() => {
                 const toolTarget = viewingItem.metadata?.tool || (["humanizador", "rank", "titulos", "hooks", "roteiro", "thumbnail", "receita", "score", "mentor", "membros"].includes(viewingItem.type) ? viewingItem.type : null);
@@ -864,7 +887,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                     }}
                     className="flex items-center gap-1.5 rounded-lg bg-signal-400 px-5 py-2 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-950 uppercase transition-colors hover:bg-signal-300 shadow-[0_4px_16px_-4px_rgba(242,179,61,0.5)] cursor-pointer"
                   >
-                    Abrir na Ferramenta
+                    {t("saved.detail.open_in_tool", undefined, "Abrir na Ferramenta")}
                     <Icon name="arrow" className="h-3 w-3" strokeWidth={2.2} />
                   </button>
                 );
@@ -882,7 +905,7 @@ export function SalvosScreen({ onGo }: { onGo?: (id: string) => void }) {
                   }}
                   className="rounded-lg bg-signal-400 px-5 py-2 font-mono text-[10px] font-bold tracking-[0.12em] text-ink-950 uppercase transition-colors hover:bg-signal-300 shadow-[0_4px_16px_-4px_rgba(242,179,61,0.5)]"
                 >
-                  Abrir no Painel de Projetos
+                  {t("saved.detail.open_in_projects", undefined, "Abrir no Painel de Projetos")}
                 </button>
               )}
             </div>

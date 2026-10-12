@@ -1,6 +1,7 @@
 import { cn } from "../utils/cn";
 import { Icon } from "./ui";
 import { isCalibrated, type Calib } from "../calibration";
+import { useI18n } from "../i18n";
 
 export function CalibrationNotice({
   calibrated,
@@ -23,6 +24,7 @@ export function CalibrationNotice({
   compact?: boolean;
   className?: string;
 }) {
+  const { t } = useI18n();
   const isCalib = calibrated !== undefined ? calibrated : isCalibrated(calib);
 
   const handleGoCalib = (e: React.MouseEvent) => {
@@ -60,7 +62,7 @@ export function CalibrationNotice({
             style={{ backgroundColor: profileColor }}
           />
           <span className="truncate">
-            Parâmetros adaptados ao perfil:{" "}
+            {t("calibration_notice.profile_adapted", undefined, "Parâmetros adaptados ao perfil:")}{" "}
             <strong className="text-bone-50 font-semibold">{profileName}</strong>
           </span>
         </div>
@@ -69,7 +71,7 @@ export function CalibrationNotice({
           onClick={handleGoCalib}
           className="ml-auto shrink-0 font-mono text-[10px] tracking-wider text-mint-400 uppercase underline underline-offset-2 transition-colors hover:text-mint-200 cursor-pointer"
         >
-          Trocar perfil
+          {t("calibration_notice.change_profile", undefined, "Trocar perfil")}
         </button>
       </div>
     );
@@ -88,7 +90,8 @@ export function CalibrationNotice({
           <Icon name="spark" className="h-3.5 w-3.5" />
         </span>
         <span className="leading-relaxed">
-          <strong className="text-bone-50 font-semibold">Respostas genéricas:</strong> Sem calibração do canal, as respostas e sugestões {toolName ? `do ${toolName}` : "desta ferramenta"} são baseadas em parâmetros padrão. As análises ficam muito melhores quando o perfil do canal é preenchido.
+          <strong className="text-bone-50 font-semibold">{t("calibration_notice.generic_responses", undefined, "Respostas genéricas:")}</strong>{" "}
+          {t("calibration_notice.generic_desc", { tool: toolName || "" }, "Sem calibração do canal, as respostas e sugestões desta ferramenta são baseadas em parâmetros padrão. As análises ficam muito melhores quando o perfil do canal é preenchido.")}
         </span>
       </div>
       <button
@@ -96,7 +99,7 @@ export function CalibrationNotice({
         onClick={handleGoCalib}
         className="inline-flex shrink-0 items-center gap-2 self-start sm:self-auto rounded-lg bg-signal-400 px-3.5 py-2 font-mono text-[10.5px] font-bold tracking-wider text-ink-950 uppercase shadow-md transition-all hover:bg-signal-300 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
       >
-        <span>Calibrar canal</span>
+        <span>{t("calibration_notice.calibrate_channel", undefined, "Calibrar canal")}</span>
         <Icon name="arrow" className="h-3 w-3" strokeWidth={2.5} />
       </button>
     </div>

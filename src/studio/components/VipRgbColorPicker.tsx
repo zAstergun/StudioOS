@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./ui";
 import { useAuth } from "../auth";
+import { useI18n } from "../i18n";
 import { cn } from "../utils/cn";
 import { openVipModal } from "./VipModal";
 
@@ -120,6 +121,7 @@ export function VipRgbColorPicker({
   className,
 }: VipRgbColorPickerProps) {
   const { user } = useAuth();
+  const { t } = useI18n();
   const isVip = Boolean(user?.is_vip);
 
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -362,7 +364,7 @@ export function VipRgbColorPicker({
                   : "hover:scale-110 hover:opacity-90"
               )}
               style={{ backgroundColor: c }}
-              title={`Cor ${c}`}
+              title={t("vip.rgb.color_title", { color: c }, `Cor ${c}`)}
             >
               {isSelected && (
                 <Icon name="check" className="h-3 w-3 text-ink-950 drop-shadow-sm" strokeWidth={3} />
@@ -397,7 +399,7 @@ export function VipRgbColorPicker({
             style={{
               background: "conic-gradient(from 180deg at 50% 50%, #FF0000 0deg, #FF7A00 60deg, #FFD600 120deg, #00FF00 180deg, #0000FF 240deg, #FF00C7 300deg, #FF0000 360deg)"
             }}
-            title={isVip ? "Abrir Seletor RGB Personalizado" : "Recurso exclusivo para assinantes VIP (Clique para ver)"}
+            title={isVip ? t("vip.rgb.open_picker", undefined, "Abrir Seletor RGB Personalizado") : t("vip.rgb.exclusive_feature", undefined, "Recurso exclusivo para assinantes VIP (Clique para ver)")}
           >
             {/* Se cor personalizada estiver ativa, mostra a cor selecionada com check */}
             {isCustomSelected ? (
@@ -428,7 +430,7 @@ export function VipRgbColorPicker({
         <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300 anim-fade">
           <div className="flex items-center gap-2">
             <Icon name="lock" className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-            <span>O seletor RGB livre é um benefício exclusivo de membros <strong className="text-amber-400">VIP</strong>.</span>
+            <span>{t("vip.rgb.non_vip_alert", undefined, "O seletor RGB livre é um benefício exclusivo de membros")} <strong className="text-amber-400">VIP</strong>.</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
@@ -436,7 +438,7 @@ export function VipRgbColorPicker({
               onClick={openVipModal}
               className="rounded bg-signal-400 px-2 py-0.5 font-mono text-[9px] font-bold text-ink-950 uppercase hover:bg-signal-300 transition-colors cursor-pointer shadow-sm"
             >
-              Seja VIP
+              {t("vip.become_vip", undefined, "Seja VIP")}
             </button>
             <button
               type="button"
@@ -467,10 +469,10 @@ export function VipRgbColorPicker({
                 <Icon name="crown" className="h-3 w-3" strokeWidth={2} />
               </span>
               <span className="font-display text-[11.5px] font-bold text-bone-100 tracking-tight">
-                Seletor RGB VIP
+                {t("vip.rgb.modal_title", undefined, "Seletor RGB VIP")}
               </span>
               <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.2 font-mono text-[7.5px] font-bold text-amber-300 uppercase">
-                Ativo
+                {t("vip.rgb.active_badge", undefined, "Ativo")}
               </span>
             </div>
 
@@ -478,7 +480,7 @@ export function VipRgbColorPicker({
               type="button"
               onClick={() => setIsOpenModal(false)}
               className="rounded-md p-1 text-ink-400 hover:text-white hover:bg-ink-800/60 transition-colors cursor-pointer"
-              title="Fechar"
+              title={t("common.close", undefined, "Fechar")}
             >
               <Icon name="close" className="h-3.5 w-3.5" />
             </button>
@@ -524,7 +526,7 @@ export function VipRgbColorPicker({
                 type="button"
                 onClick={handleEyeDropper}
                 className="flex h-7 w-7 items-center justify-center rounded-lg border border-ink-800/80 bg-ink-900/80 text-ink-300 hover:border-amber-400/40 hover:text-amber-300 transition-colors shrink-0 cursor-pointer shadow-sm"
-                title="Conta-gotas: capturar qualquer cor da tela"
+                title={t("vip.rgb.eyedropper_title", undefined, "Conta-gotas: capturar qualquer cor da tela")}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                   <path d="m14 7 3 3m-4.5-4.5L6 12l-1 5 5-1 6.5-6.5a2.12 2.12 0 0 0-3-3Z" />
@@ -538,7 +540,7 @@ export function VipRgbColorPicker({
             <div
               className="h-7 w-7 rounded-lg border border-white/20 shadow-inner shrink-0"
               style={{ backgroundColor: currentHex }}
-              title={`Cor ativa: ${currentHex}`}
+              title={t("vip.rgb.active_color_title", { color: currentHex }, `Cor ativa: ${currentHex}`)}
             />
 
             {/* Barra Contínua de Matiz (Hue Slider) */}
@@ -549,7 +551,7 @@ export function VipRgbColorPicker({
               style={{
                 background: "linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)"
               }}
-              title="Ajustar Matiz (Hue)"
+              title={t("vip.rgb.hue_slider_title", undefined, "Ajustar Matiz (Hue)")}
             >
               {/* Cursor do Hue */}
               <div
@@ -625,9 +627,9 @@ export function VipRgbColorPicker({
                   type="button"
                   onClick={handleCopyHex}
                   className="rounded-lg bg-ink-800/80 px-2 py-1.5 font-mono text-[9px] text-ink-300 hover:text-white transition-colors shrink-0 cursor-pointer"
-                  title="Copiar código HEX"
+                  title={t("vip.rgb.copy_hex_title", undefined, "Copiar código HEX")}
                 >
-                  {copiedHex ? "Copiado!" : "Copiar"}
+                  {copiedHex ? t("common.copied", undefined, "Copiado!") : t("common.copy", undefined, "Copiar")}
                 </button>
               </div>
             )}
@@ -637,7 +639,7 @@ export function VipRgbColorPicker({
               type="button"
               onClick={() => setInputMode((m) => (m === "hex" ? "rgb" : "hex"))}
               className="flex h-7 w-7 items-center justify-center rounded-lg border border-ink-800 bg-ink-900/60 text-ink-400 hover:text-white transition-colors shrink-0 cursor-pointer"
-              title={`Alternar para ${inputMode === "hex" ? "RGB" : "HEX"}`}
+              title={t("vip.rgb.toggle_mode", { mode: inputMode === "hex" ? "RGB" : "HEX" }, `Alternar para ${inputMode === "hex" ? "RGB" : "HEX"}`)}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                 <path d="m7 15 5 5 5-5M7 9l5-5 5 5"/>
@@ -647,7 +649,7 @@ export function VipRgbColorPicker({
 
           {/* 4. Presets VIP Rápidos */}
           <div className="flex items-center justify-between pt-2.5 mt-2.5 border-t border-ink-800/60">
-            <span className="font-mono text-[8.5px] uppercase tracking-wider text-ink-400">Tons VIP</span>
+            <span className="font-mono text-[8.5px] uppercase tracking-wider text-ink-400">{t("vip.rgb.presets_title", undefined, "Tons VIP")}</span>
             <div className="flex items-center gap-1.5">
               {VIP_PRESETS.map((presetHex) => (
                 <button
@@ -656,7 +658,7 @@ export function VipRgbColorPicker({
                   onClick={() => onChange(presetHex)}
                   className="h-4 w-4 rounded-full border border-white/20 transition-transform hover:scale-125 cursor-pointer shadow-sm"
                   style={{ backgroundColor: presetHex }}
-                  title={`Preset ${presetHex}`}
+                  title={t("vip.rgb.preset_item_title", { hex: presetHex }, `Preset ${presetHex}`)}
                 />
               ))}
             </div>

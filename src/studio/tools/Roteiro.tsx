@@ -8,6 +8,8 @@ import { useExampleMode } from "../auth";
 import { useToolRestore } from "../utils/toolStateRestore";
 import { type Calib } from "../calibration";
 import { CalibrationNotice } from "../components/CalibrationNotice";
+import { useI18n } from "../i18n";
+import { getLocalizedToolExamples } from "../i18n/examples";
 
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
 
@@ -19,7 +21,13 @@ function splitSentences(t: string) {
     .filter(Boolean);
 }
 
-function analyzeVoice(sample: string, provoca: string, cta: string) {
+function analyzeVoice(
+  sample: string,
+  provoca: string,
+  cta: string,
+  tFn?: (k: string, p?: any, fb?: string) => string
+) {
+  const t = tFn || ((_k: string, _p?: any, fb?: string) => fb || "");
   const sents = splitSentences(sample);
   const words = sample.trim() ? sample.trim().split(/\s+/) : [];
   const lens = sents.map((s) => s.split(/\s+/).length);
@@ -27,18 +35,42 @@ function analyzeVoice(sample: string, provoca: string, cta: string) {
   const variance = lens.length
     ? Math.sqrt(lens.reduce((a, b) => a + (b - avg) ** 2, 0) / lens.length)
     : 0;
-  const first = (sample.match(/\b(eu|meu|minha|me| mim)\b/gi) ?? []).length;
-  const second = (sample.match(/\b(você|voce|seu|sua|te|ti)\b/gi) ?? []).length;
+  const first = (sample.match(/\b(eu|meu|minha|me| mim|i|my|mine|me)\b/gi) ?? []).length;
+  const second = (sample.match(/\b(você|voce|seu|sua|te|ti|you|your|yours)\b/gi) ?? []).length;
   const numbers = (sample.match(/\b\d+(?:[.,]\d+)?\b/g) ?? []).length;
   const questions = (sample.match(/\?/g) ?? []).length;
 
   const found: { label: string; on: boolean; ev: string }[] = [
-    { label: VOICE_PATTERNS[0], on: avg > 0 && sents.length > 1, ev: avg ? `frase média de ${avg.toFixed(1)} palavras` : "sem amostra" },
-    { label: VOICE_PATTERNS[1], on: second >= first, ev: `${second} marca(s) de 2ª pessoa vs ${first} de 1ª` },
-    { label: VOICE_PATTERNS[2], on: questions >= 1 || provoca.trim().length > 8, ev: questions ? `${questions} pergunta(s) retórica(s)` : "definido no campo de provocação" },
-    { label: VOICE_PATTERNS[3], on: first >= 2, ev: `${first} confissão(ões) em 1ª pessoa` },
-    { label: VOICE_PATTERNS[4], on: numbers >= 1, ev: numbers ? `${numbers} número(s) cru(s)` : "nenhum número na amostra" },
-    { label: VOICE_PATTERNS[5], on: cta.trim().length > 4, ev: cta.trim() ? "CTA recorrente declarado" : "CTA vazio" },
+    {
+      label: t("tools.roteiro.vp_0", {}, VOICE_PATTERNS[0]),
+      on: avg > 0 && sents.length > 1,
+      ev: avg ? t("tools.roteiro.vp_0_ev", { avg: avg.toFixed(1) }, `frase média de ${avg.toFixed(1)} palavras`) : t("tools.roteiro.no_sample", {}, "sem amostra"),
+    },
+    {
+      label: t("tools.roteiro.vp_1", {}, VOICE_PATTERNS[1]),
+      on: second >= first,
+      ev: t("tools.roteiro.vp_1_ev", { second, first }, `${second} marca(s) de 2ª pessoa vs ${first} de 1ª`),
+    },
+    {
+      label: t("tools.roteiro.vp_2", {}, VOICE_PATTERNS[2]),
+      on: questions >= 1 || provoca.trim().length > 8,
+      ev: questions ? t("tools.roteiro.vp_2_ev_q", { questions }, `${questions} pergunta(s) retórica(s)`) : t("tools.roteiro.vp_2_ev_def", {}, "definido no campo de provocação"),
+    },
+    {
+      label: t("tools.roteiro.vp_3", {}, VOICE_PATTERNS[3]),
+      on: first >= 2,
+      ev: t("tools.roteiro.vp_3_ev", { first }, `${first} confissão(ões) em 1ª pessoa`),
+    },
+    {
+      label: t("tools.roteiro.vp_4", {}, VOICE_PATTERNS[4]),
+      on: numbers >= 1,
+      ev: numbers ? t("tools.roteiro.vp_4_ev_num", { numbers }, `${numbers} número(s) cru(s)`) : t("tools.roteiro.vp_4_ev_none", {}, "nenhum número na amostra"),
+    },
+    {
+      label: t("tools.roteiro.vp_5", {}, VOICE_PATTERNS[5]),
+      on: cta.trim().length > 4,
+      ev: cta.trim() ? t("tools.roteiro.vp_5_ev_declared", {}, "CTA recorrente declarado") : t("tools.roteiro.vp_5_ev_empty", {}, "CTA vazio"),
+    },
   ];
 
   const match = found.filter((f) => f.on).length;
@@ -48,6 +80,7 @@ function analyzeVoice(sample: string, provoca: string, cta: string) {
 /* --------------------------------------------------------- teleprompter */
 
 function Teleprompter({ text }: { text: string }) {
+  const { t } = useI18n();
   const [speed, setSpeed] = useState(1);
   const [playing, setPlaying] = useState(false);
   const [size, setSize] = useState(30);
@@ -99,11 +132,11 @@ function Teleprompter({ text }: { text: string }) {
         <div className="flex items-center gap-2">
           <span className="on-air-dot h-2 w-2 rounded-full bg-oxide-500" />
           <span className="font-mono text-[10px] font-bold tracking-[0.22em] text-ink-900/70 uppercase">
-            Teleprompter
+            {t("tools.roteiro.teleprompter", {}, "Teleprompter")}
           </span>
         </div>
         <span className="font-mono text-[10px] text-ink-900/50 tabular-nums">
-          {words} palavras · ~{minutes.toFixed(1)} min
+          {words} {t("tools.roteiro.words_label", {}, "palavras")} · ~{minutes.toFixed(1)} min
         </span>
 
         <div className="ml-auto flex items-center gap-1.5">
@@ -113,28 +146,28 @@ function Teleprompter({ text }: { text: string }) {
               "flex h-8 w-8 items-center justify-center rounded transition-all duration-200 active:scale-90",
               playing ? "bg-oxide-500 text-bone-50" : "bg-ink-900 text-bone-50 hover:bg-ink-700"
             )}
-            aria-label={playing ? "Pausar" : "Rolar"}
+            aria-label={playing ? t("tools.roteiro.pause", {}, "Pausar") : t("tools.roteiro.scroll", {}, "Rolar")}
           >
             <Icon name={playing ? "pause" : "play"} className="h-4 w-4" strokeWidth={1.9} />
           </button>
           <button
             onClick={reset}
             className="flex h-8 w-8 items-center justify-center rounded bg-ink-900/10 text-ink-900 transition-colors hover:bg-ink-900/20"
-            aria-label="Reiniciar"
+            aria-label={t("tools.roteiro.reset", {}, "Reiniciar")}
           >
             <Icon name="refresh" className="h-4 w-4" strokeWidth={1.9} />
           </button>
           <button
             onClick={() => setSize((s) => Math.max(18, s - 3))}
             className="flex h-8 w-8 items-center justify-center rounded bg-ink-900/10 font-mono text-[13px] text-ink-900 transition-colors hover:bg-ink-900/20"
-            aria-label="Diminuir fonte"
+            aria-label={t("tools.roteiro.decrease_font", {}, "Diminuir fonte")}
           >
             A−
           </button>
           <button
             onClick={() => setSize((s) => Math.min(56, s + 3))}
             className="flex h-8 w-8 items-center justify-center rounded bg-ink-900/10 font-mono text-[15px] text-ink-900 transition-colors hover:bg-ink-900/20"
-            aria-label="Aumentar fonte"
+            aria-label={t("tools.roteiro.increase_font", {}, "Aumentar fonte")}
           >
             A+
           </button>
@@ -145,7 +178,7 @@ function Teleprompter({ text }: { text: string }) {
               mirror ? "bg-ink-900 text-bone-50" : "bg-ink-900/10 text-ink-900 hover:bg-ink-900/20"
             )}
           >
-            espelho
+            {t("tools.roteiro.mirror", {}, "espelho")}
           </button>
         </div>
       </div>
@@ -168,7 +201,7 @@ function Teleprompter({ text }: { text: string }) {
                 </p>
               ))
             ) : (
-              <p className="text-ink-900/35">Preencha o roteiro para ver o texto aqui.</p>
+              <p className="text-ink-900/35">{t("tools.roteiro.fill_script", {}, "Preencha o roteiro para ver o texto aqui.")}</p>
             )}
           </div>
         </div>
@@ -176,7 +209,7 @@ function Teleprompter({ text }: { text: string }) {
 
       <div className="flex flex-wrap items-center gap-4 border-t border-ink-900/10 bg-bone-200/60 px-4 py-3">
         <span className="font-mono text-[10px] tracking-[0.16em] text-ink-900/60 uppercase">
-          Velocidade
+          {t("tools.roteiro.speed", {}, "Velocidade")}
         </span>
         <input
           type="range"
@@ -186,13 +219,13 @@ function Teleprompter({ text }: { text: string }) {
           value={speed}
           onChange={(e) => setSpeed(parseFloat(e.target.value))}
           className="h-1 w-40 cursor-pointer appearance-none rounded-full bg-ink-900/20 accent-oxide-500"
-          aria-label="Velocidade de rolagem"
+          aria-label={t("tools.roteiro.scroll_speed", {}, "Velocidade de rolagem")}
         />
         <span className="font-mono text-[11px] font-bold text-ink-900 tabular-nums">
           {speed.toFixed(1)}×
         </span>
         <span className="font-mono text-[10px] tracking-[0.14em] text-ink-900/50 uppercase">
-          {speed < 0.7 ? "lento" : speed < 1.3 ? "normal" : speed < 2 ? "rápido" : "grave hoje"}
+          {speed < 0.7 ? t("tools.roteiro.speed_slow", {}, "lento") : speed < 1.3 ? t("tools.roteiro.speed_normal", {}, "normal") : speed < 2 ? t("tools.roteiro.speed_fast", {}, "rápido") : t("tools.roteiro.speed_record_today", {}, "grave hoje")}
         </span>
         <div className="ml-auto flex w-40 items-center gap-2">
           <div className="h-1 flex-1 overflow-hidden rounded-full bg-ink-900/15">
@@ -222,37 +255,45 @@ export function Roteiro({
   profileName?: string;
   profileColor?: string;
 }) {
+  const { t, resolvedLanguage } = useI18n();
   const examples = useExampleMode();
+  const toolExamples = getLocalizedToolExamples(resolvedLanguage);
   const [tab, setTab] = useState<"voz" | "roteiro" | "prompter">("voz");
   const [sample, setSample] = useState(
     examples
-      ? "Eu perdi dois anos aportando R$100 por mês em fundo imobiliário. O resultado? Menos que a poupança. Você não precisa repetir esse erro. Olha o extrato aqui na tela: R$2.400 aportados, R$2.311 de saldo. Eu errei, e a culpa foi minha."
+      ? toolExamples.roteiroSample
       : calib?.tops && calib.tops.length > 0
-      ? `Exemplo de gravação sobre: ${calib.tops[0]}.`
+      ? t("tools.roteiro.recording_example_about", { topic: calib.tops[0] }, `Exemplo de gravação sobre: ${calib.tops[0]}.`)
       : ""
   );
-  const [provoca, setProvoca] = useState(examples ? "Provoca com humor, mostra o próprio erro antes de cobrar alguém" : calib?.prova || "");
-  const [cta, setCta] = useState(examples ? "Se esse número te assustou, comenta 100 que eu mostro o próximo passo" : "");
-  const [takeName, setTakeName] = useState(examples ? "Take 01 — FIIs R$100" : "");
+  const [provoca, setProvoca] = useState(
+    examples ? toolExamples.roteiroProvoca : calib?.prova || ""
+  );
+  const [cta, setCta] = useState(
+    examples ? toolExamples.roteiroCta : ""
+  );
+  const [takeName, setTakeName] = useState(
+    examples ? t("tools.roteiro.default_take_name", {}, "Take 01 — FIIs R$100") : ""
+  );
 
   useEffect(() => {
     if (calib) {
       if (!sample && calib.tops && calib.tops.length > 0) {
-        setSample(`Exemplo de gravação sobre: ${calib.tops[0]}.`);
+        setSample(t("tools.roteiro.recording_example_about", { topic: calib.tops[0] }, `Exemplo de gravação sobre: ${calib.tops[0]}.`));
       }
       if (!provoca && calib.prova) {
         setProvoca(calib.prova);
       }
     }
-  }, [calib]);
+  }, [calib, t]);
 
   const [blocks, setBlocks] = useState<Record<string, string>>(() => {
     if (examples) {
       return {
-        hook: "Dois anos. R$100 por mês. E o meu saldo era menor que a poupança. Olha esse extrato.",
-        contexto: "Eu comecei a aportar em FIIs em 2023 porque todo mundo falava de renda mensal. Só que ninguém mostrava o rendimento real.",
-        dev: "Primeiro erro: escolhi fundo pelo dividend yield. Segundo erro: ignorei a vacância. Terceiro erro: aportei todo mês sem olhar o preço da cota. Aqui na tela está a planilha com os três anos.\nQuando eu troquei por um mix de tesouro direto com um FII de tijolo bom, o resultado mudou. Não ficou rico, ficou honesto.",
-        cta: "Se você aporta R$100 por mês, faz essa conta antes do próximo aporte. E comenta 100 que eu trago o passo a passo da migração.",
+        hook: t("tools.roteiro.block_hook_example", {}, "Dois anos. R$100 por mês. E o meu saldo era menor que a poupança. Olha esse extrato."),
+        contexto: t("tools.roteiro.block_context_example", {}, "Eu comecei a aportar em FIIs em 2023 porque todo mundo falava de renda mensal. Só que ninguém mostrava o rendimento real."),
+        dev: t("tools.roteiro.block_dev_example", {}, "Primeiro erro: escolhi fundo pelo dividend yield. Segundo erro: ignorei a vacância. Terceiro erro: aportei todo mês sem olhar o preço da cota. Aqui na tela está a planilha com os três anos.\nQuando eu troquei por um mix de tesouro direto com um FII de tijolo bom, o resultado mudou. Não ficou rico, ficou honesto."),
+        cta: t("tools.roteiro.block_cta_example", {}, "Se você aporta R$100 por mês, faz essa conta antes do próximo aporte. E comenta 100 que eu trago o passo a passo da migração."),
       };
     }
     return {
@@ -288,7 +329,7 @@ export function Roteiro({
     }
   });
 
-  const voice = useMemo(() => analyzeVoice(sample, provoca, cta), [sample, provoca, cta]);
+  const voice = useMemo(() => analyzeVoice(sample, provoca, cta, t), [sample, provoca, cta, t]);
 
   const full = useMemo(
     () =>
@@ -306,62 +347,69 @@ export function Roteiro({
     const firstSent = sents[0] ?? "";
     return [
       {
-        ...QUALITY_CHECKS[0],
-        ok: firstSent.length > 0 && firstSent.split(/\s+/).length <= 18 && !/^(oi|olá|ola|e aí|eai|bom|então|entao)/i.test(firstSent),
-        ev: firstSent ? `1ª frase: “${firstSent.slice(0, 58)}${firstSent.length > 58 ? "…" : ""}”` : "roteiro vazio",
+        q: t("tools.roteiro.qc_0_q", {}, QUALITY_CHECKS[0].q),
+        a: t("tools.roteiro.qc_0_a", {}, QUALITY_CHECKS[0].a),
+        ok: firstSent.length > 0 && firstSent.split(/\s+/).length <= 18 && !/^(oi|olá|ola|e aí|eai|bom|então|entao|hi|hello|hey)/i.test(firstSent),
+        ev: firstSent ? t("tools.roteiro.qc_0_ev_first", { phrase: firstSent.slice(0, 58) + (firstSent.length > 58 ? "…" : "") }, `1ª frase: “${firstSent.slice(0, 58)}${firstSent.length > 58 ? "…" : ""}”`) : t("tools.roteiro.empty_script", {}, "roteiro vazio"),
       },
       {
-        ...QUALITY_CHECKS[1],
+        q: t("tools.roteiro.qc_1_q", {}, QUALITY_CHECKS[1].q),
+        a: t("tools.roteiro.qc_1_a", {}, QUALITY_CHECKS[1].a),
         ok: /\d/.test(firstSent + " " + (sents[1] ?? "")),
-        ev: /\d/.test(full) ? `${(full.match(/\b\d+(?:[.,]\d+)?\b/g) ?? []).length} número(s) no texto` : "nenhum número",
+        ev: /\d/.test(full) ? t("tools.roteiro.qc_1_ev_num", { count: (full.match(/\b\d+(?:[.,]\d+)?\b/g) ?? []).length }, `${(full.match(/\b\d+(?:[.,]\d+)?\b/g) ?? []).length} número(s) no texto`) : t("tools.roteiro.qc_1_ev_none", {}, "nenhum número"),
       },
       {
-        ...QUALITY_CHECKS[2],
+        q: t("tools.roteiro.qc_2_q", {}, QUALITY_CHECKS[2].q),
+        a: t("tools.roteiro.qc_2_a", {}, QUALITY_CHECKS[2].a),
         ok: full.length > 0 && !/—|–|\(|\)/.test(full) && !EMOJI.test(full),
         ev: EMOJI.test(full)
-          ? "emoji encontrado"
+          ? t("tools.roteiro.qc_2_ev_emoji", {}, "emoji encontrado")
           : /[—–]/.test(full)
-            ? "travessão encontrado"
+            ? t("tools.roteiro.qc_2_ev_dash", {}, "travessão encontrado")
             : /\(|\)/.test(full)
-              ? "parênteses encontrados"
-              : "limpo para leitura em voz alta",
+              ? t("tools.roteiro.qc_2_ev_paren", {}, "parênteses encontrados")
+              : t("tools.roteiro.qc_2_ev_clean", {}, "limpo para leitura em voz alta"),
       },
       {
-        ...QUALITY_CHECKS[3],
+        q: t("tools.roteiro.qc_3_q", {}, QUALITY_CHECKS[3].q),
+        a: t("tools.roteiro.qc_3_a", {}, QUALITY_CHECKS[3].a),
         ok: words > 0 && duration <= 15,
-        ev: words ? `${words} palavras · ~${duration.toFixed(1)} min` : "roteiro vazio",
+        ev: words ? t("tools.roteiro.qc_3_ev_stats", { words, duration: duration.toFixed(1) }, `${words} palavras · ~${duration.toFixed(1)} min`) : t("tools.roteiro.empty_script", {}, "roteiro vazio"),
       },
     ];
-  }, [full, words, duration]);
+  }, [full, words, duration, t]);
 
   const checkScore = checks.filter((c) => c.ok).length;
 
-  const friendlySummary = `Roteiro pronto com ${words} palavras (~${duration.toFixed(1)} min de fala) · Checklist de qualidade: ${checkScore} de 4 aprovados`;
+  const friendlySummary = t(
+    "tools.roteiro.friendly_summary",
+    { words, duration: duration.toFixed(1), score: checkScore },
+    `Roteiro pronto com ${words} palavras (~${duration.toFixed(1)} min de fala) · Checklist de qualidade: ${checkScore} de 4 aprovados`
+  );
 
   useAutosave(
     () => ({
       tool: "roteiro",
-      toolName: "Roteiro & Gravação",
-      title: (blocks.hook || "").trim() || sample.trim() ? `Roteiro — ${((blocks.hook || "").trim() || sample.trim()).slice(0, 72)}` : "",
+      toolName: t("tools.roteiro.title", {}, "Roteiro & Gravação"),
+      title: (blocks.hook || "").trim() || sample.trim() ? t("tools.roteiro.save_title", { hook: ((blocks.hook || "").trim() || sample.trim()).slice(0, 72) }, `Roteiro — ${((blocks.hook || "").trim() || sample.trim()).slice(0, 72)}`) : "",
       summary: friendlySummary,
       tag: `${checkScore}/4`,
       content: `ROTEIRO MONTADO\nhook: ${blocks.hook || ""}\n\ncontexto: ${blocks.contexto || ""}\n\ndesenvolvimento: ${blocks.dev || ""}\n\ncta: ${blocks.cta || ""}\n\nSTATS\n${words} palavras · ~${duration.toFixed(1)} min · checklist ${checkScore}/4 · padrão de voz ${voice.match}/6\n\nCHECKLIST\n${checks.map((c) => `${c.ok ? "[x]" : "[ ]"} ${c.q} — ${c.ev}`).join("\n")}`,
     }),
-    [full, words, duration, checkScore, voice.match, friendlySummary],
-    30
+    [full, words, duration, checkScore, voice.match, friendlySummary, blocks.hook, sample, t]
   );
 
   return (
     <ToolShell
       id="roteiro"
-      title="Roteiro & Gravação"
+      title={t("tools.roteiro.title", {}, "Roteiro & Gravação")}
       accent="sky"
-      lede="Três abas: motor de voz, roteiro em blocos e teleprompter. O texto final sai com contagem de palavras, duração estimada e checklist de qualidade aplicado de verdade sobre o que você escreveu."
+      lede={t("tools.roteiro.lede", {}, "Três abas: motor de voz, roteiro em blocos e teleprompter. O texto final sai com contagem de palavras, duração estimada e checklist de qualidade aplicado de verdade sobre o que você escreveu.")}
       meta={[
-        { k: "Blocos", v: "4" },
-        { k: "Palavras", v: String(words) },
-        { k: "Duração", v: `${duration.toFixed(1)}m` },
-        { k: "Checklist", v: `${checkScore}/4` },
+        { k: t("tools.roteiro.blocks_count", {}, "Blocos"), v: "4" },
+        { k: t("tools.roteiro.words_count", {}, "Palavras"), v: String(words) },
+        { k: t("tools.roteiro.duration", {}, "Duração"), v: `${duration.toFixed(1)}m` },
+        { k: t("tools.roteiro.checklist", {}, "Checklist"), v: `${checkScore}/4` },
       ]}
       onBack={onBack}
       onGo={onGo}
@@ -369,9 +417,9 @@ export function Roteiro({
         blocks.hook?.trim() || sample.trim()
           ? {
               type: "roteiro",
-              group: "Criação",
-              toolName: "Roteiro & Gravação",
-              title: blocks.hook?.trim() ? `Roteiro — ${blocks.hook.trim().slice(0, 60)}` : "Roteiro de Gravação",
+              group: "Criação" as const,
+              toolName: t("tools.roteiro.title", {}, "Roteiro & Gravação"),
+              title: blocks.hook?.trim() ? t("tools.roteiro.save_title", { hook: blocks.hook.trim().slice(0, 60) }, `Roteiro — ${blocks.hook.trim().slice(0, 60)}`) : t("tools.roteiro.generic_title", {}, "Roteiro de Gravação"),
               summary: friendlySummary,
               tag: `${checkScore}/4`,
               content: `ROTEIRO MONTADO\nhook: ${blocks.hook || ""}\n\ncontexto: ${blocks.contexto || ""}\n\ndesenvolvimento: ${blocks.dev || ""}\n\ncta: ${blocks.cta || ""}\n\nSTATS\n${words} palavras · ~${duration.toFixed(1)} min · checklist ${checkScore}/4 · padrão de voz ${voice.match}/6\n\nCHECKLIST\n${checks.map((c) => `${c.ok ? "[x]" : "[ ]"} ${c.q} — ${c.ev}`).join("\n")}`,
@@ -388,10 +436,10 @@ export function Roteiro({
       }
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
-          <Card title="Padrão detectado" note={`${voice.match}/6`} accent="sky">
+          <Card title={t("tools.roteiro.detected_pattern", {}, "Padrão detectado")} note={`${voice.match}/6`} accent="sky">
             {voice.words === 0 ? (
               <p className="py-3 text-center font-mono text-[11px] tracking-[0.14em] text-ink-400 uppercase">
-                aguardando amostra de voz…
+                {t("tools.roteiro.waiting_voice_sample", {}, "aguardando amostra de voz…")}
               </p>
             ) : (
               <ul className="space-y-2.5">
@@ -417,7 +465,7 @@ export function Roteiro({
             )}
           </Card>
 
-          <Card title="Checklist de qualidade" note={`${checkScore}/4`} accent="mint">
+          <Card title={t("tools.roteiro.quality_checklist", {}, "Checklist de qualidade")} note={`${checkScore}/4`} accent="mint">
             <ul className="space-y-3">
               {checks.map((c) => (
                 <li key={c.q} className="flex items-start gap-2.5">
@@ -447,7 +495,7 @@ export function Roteiro({
         calib={calib}
         profileName={profileName}
         profileColor={profileColor}
-        toolName="Roteiro & Gravação"
+        toolName={t("tools.roteiro.title", {}, "Roteiro & Gravação")}
         onGo={onGo}
         onGoCalib={() => onGo("calibracao")}
       />
@@ -457,27 +505,27 @@ export function Roteiro({
           value={tab}
           onChange={setTab}
           options={[
-            { id: "voz", label: "Motor de voz" },
-            { id: "roteiro", label: "Blocos" },
-            { id: "prompter", label: "Teleprompter" },
+            { id: "voz", label: t("tools.roteiro.tab_voice", {}, "Motor de voz") },
+            { id: "roteiro", label: t("tools.roteiro.tab_blocks", {}, "Blocos") },
+            { id: "prompter", label: t("tools.roteiro.tab_prompter", {}, "Teleprompter") },
           ]}
         />
         <span className="ml-auto flex items-center gap-2 font-mono text-[10px] tracking-[0.14em] text-ink-400 uppercase">
           <span className={cn("h-1.5 w-1.5 rounded-full", voice.match >= 4 ? "bg-mint-400" : "bg-signal-400")} />
-          motor {voice.match >= 4 ? "ativo" : "calibrando"}
+          {t("tools.roteiro.engine_label", {}, "motor")} {voice.match >= 4 ? t("tools.roteiro.engine_active", {}, "ativo") : t("tools.roteiro.engine_calibrating", {}, "calibrando")}
         </span>
       </div>
 
       {tab === "voz" && (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card title="Amostra de texto ou transcrição" note="~1 min falado" accent="sky" className="lg:col-span-2">
-            <Textarea rows={7} value={sample} onChange={(e) => setSample(e.target.value)} placeholder="Cole aqui uma transcrição sua, ou um texto que você escreveria sem revisar" />
+          <Card title={t("tools.roteiro.sample_title", {}, "Amostra de texto ou transcrição")} note={t("tools.roteiro.sample_note", {}, "~1 min falado")} accent="sky" className="lg:col-span-2">
+            <Textarea rows={7} value={sample} onChange={(e) => setSample(e.target.value)} placeholder={t("tools.roteiro.sample_placeholder", {}, "Cole aqui uma transcrição sua, ou um texto que você escreveria sem revisar")} />
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
-                { k: "Palavras", v: String(voice.words) },
-                { k: "Frase média", v: voice.avg ? voice.avg.toFixed(1) : "—" },
-                { k: "Burstiness", v: voice.variance ? voice.variance.toFixed(1) : "—" },
-                { k: "Números crus", v: String(voice.numbers) },
+                { k: t("tools.roteiro.words_label", {}, "Palavras"), v: String(voice.words) },
+                { k: t("tools.roteiro.avg_sentence", {}, "Frase média"), v: voice.avg ? voice.avg.toFixed(1) : "—" },
+                { k: t("tools.roteiro.burstiness", {}, "Burstiness"), v: voice.variance ? voice.variance.toFixed(1) : "—" },
+                { k: t("tools.roteiro.raw_numbers", {}, "Números crus"), v: String(voice.numbers) },
               ].map((m) => (
                 <div key={m.k} className="rounded border border-ink-800 bg-ink-950/50 px-3 py-2">
                   <div className="font-mono text-[9px] tracking-[0.16em] text-ink-400 uppercase">{m.k}</div>
@@ -487,26 +535,26 @@ export function Roteiro({
             </div>
           </Card>
 
-          <Card title="Como o criador provoca?" accent="oxide">
+          <Card title={t("tools.roteiro.how_provokes", {}, "Como o criador provoca?")} accent="oxide">
             <Textarea rows={4} value={provoca} onChange={(e) => setProvoca(e.target.value)} />
             <p className="mt-2 text-[11.5px] leading-relaxed text-ink-400">
-              Define o limite do humor: até onde a provocação vai antes de virar ataque gratuito.
+              {t("tools.roteiro.provokes_desc", {}, "Define o limite do humor: até onde a provocação vai antes de virar ataque gratuito.")}
             </p>
           </Card>
 
-          <Card title="CTA recorrente" accent="mint">
+          <Card title={t("tools.roteiro.recurring_cta", {}, "CTA recorrente")} accent="mint">
             <Textarea rows={4} value={cta} onChange={(e) => setCta(e.target.value)} />
             <p className="mt-2 text-[11.5px] leading-relaxed text-ink-400">
-              A frase que fecha todo vídeo. Repetição constrói hábito de comentário.
+              {t("tools.roteiro.cta_desc", {}, "A frase que fecha todo vídeo. Repetição constrói hábito de comentário.")}
             </p>
           </Card>
 
-          <Card title="Ritmo de fala" note="referência" accent="signal" className="lg:col-span-2">
+          <Card title={t("tools.roteiro.speech_pace", {}, "Ritmo de fala")} note={t("tools.roteiro.reference", {}, "referência")} accent="signal" className="lg:col-span-2">
             <div className="grid gap-4 sm:grid-cols-3">
               {[
-                { l: "Palavras por minuto", v: 145, m: 145, max: 200, a: "signal" as const },
-                { l: "2ª pessoa × 1ª pessoa", v: voice.second, m: Math.max(voice.first, voice.second), max: Math.max(6, voice.first + voice.second), a: "sky" as const },
-                { l: "Perguntas retóricas", v: voice.questions, m: voice.questions, max: 6, a: "mint" as const },
+                { l: t("tools.roteiro.words_per_minute", {}, "Palavras por minuto"), v: 145, m: 145, max: 200, a: "signal" as const },
+                { l: t("tools.roteiro.second_vs_first_person", {}, "2ª pessoa × 1ª pessoa"), v: voice.second, m: Math.max(voice.first, voice.second), max: Math.max(6, voice.first + voice.second), a: "sky" as const },
+                { l: t("tools.roteiro.rhetorical_questions", {}, "Perguntas retóricas"), v: voice.questions, m: voice.questions, max: 6, a: "mint" as const },
               ].map((r) => (
                 <div key={r.l}>
                   <Meter value={r.v} max={r.max} accent={r.a} label={r.l} suffix="" />
@@ -525,31 +573,47 @@ export function Roteiro({
             const blockWords = wordList.length;
             const blockMins = (blockWords / 145).toFixed(1);
             const hasIssue = EMOJI.test(val) || /[—–()]/.test(val);
+            const label =
+              b.id === "hook"
+                ? t("tools.roteiro.block_hook", {}, "Hook")
+                : b.id === "contexto"
+                ? t("tools.roteiro.block_ctx", {}, "Contexto Curto")
+                : b.id === "dev"
+                ? t("tools.roteiro.block_dev", {}, "Desenvolvimento")
+                : t("tools.roteiro.block_cta", {}, "Entregável e CTA");
+            const note =
+              b.id === "hook"
+                ? t("tools.roteiro.block_hook_note", {}, "Tese + número cru")
+                : b.id === "contexto"
+                ? t("tools.roteiro.block_ctx_note", {}, "Máx. 30s")
+                : b.id === "dev"
+                ? t("tools.roteiro.block_dev_note", {}, "2 a 4 blocos")
+                : t("tools.roteiro.block_cta_note", {}, "CTA recorrente");
 
             return (
               <Card
                 key={b.id}
-                title={`${i + 1}. ${b.label}`}
-                note={`${b.note} · alvo ${b.target}`}
+                title={`${i + 1}. ${label}`}
+                note={`${note} · ${t("tools.roteiro.target", {}, "alvo")} ${b.target}`}
                 accent={(["mint", "sky", "signal", "oxide"] as const)[i]}
               >
                 <Textarea
                   rows={b.id === "dev" ? 7 : 4}
                   value={val}
                   onChange={(e) => setBlocks((prev) => ({ ...prev, [b.id]: e.target.value }))}
-                  placeholder={`Escreva o bloco: ${b.label}`}
+                  placeholder={t("tools.roteiro.write_block", { label }, `Escreva o bloco: ${label}`)}
                 />
                 <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[10px] tracking-[0.12em] text-ink-400 uppercase">
-                  <span>{blockWords} palavras</span>
+                  <span>{blockWords} {t("tools.roteiro.words_label", {}, "palavras")}</span>
                   <span className="h-3 w-px bg-ink-700" />
                   <span>~{blockMins} min</span>
                   {hasIssue ? (
                     <span className="ml-auto flex items-center gap-1 text-oxide-400">
-                      <Icon name="close" className="h-3 w-3" strokeWidth={2.4} /> trava de leitura
+                      <Icon name="close" className="h-3 w-3" strokeWidth={2.4} /> {t("tools.roteiro.reading_blocker", {}, "trava de leitura")}
                     </span>
                   ) : val.trim() ? (
                     <span className="ml-auto flex items-center gap-1 text-mint-400">
-                      <Icon name="check" className="h-3 w-3" strokeWidth={2.4} /> legível em voz alta
+                      <Icon name="check" className="h-3 w-3" strokeWidth={2.4} /> {t("tools.roteiro.readable_aloud", {}, "legível em voz alta")}
                     </span>
                   ) : null}
                 </div>
@@ -560,18 +624,18 @@ export function Roteiro({
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-ink-700/70 bg-ink-900/50 p-4">
             <div className="mr-auto">
               <div className="font-mono text-[9.5px] tracking-[0.16em] text-ink-400 uppercase">
-                Roteiro montado
+                {t("tools.roteiro.assembled_script", {}, "Roteiro montado")}
               </div>
               <div className="font-display text-lg font-bold text-bone-50 tabular-nums">
-                {words} palavras · {duration.toFixed(1)} min
+                {words} {t("tools.roteiro.words_label", {}, "palavras")} · {duration.toFixed(1)} min
               </div>
             </div>
             <CopyButton text={full} />
             <Button size="sm" variant="outline" icon="wave" onClick={() => onGo("humanizador")}>
-              Passar no humanizador
+              {t("tools.roteiro.pass_humanizer", {}, "Passar no humanizador")}
             </Button>
             <Button size="sm" icon="mic" onClick={() => setTab("prompter")}>
-              Abrir teleprompter
+              {t("tools.roteiro.open_prompter", {}, "Abrir teleprompter")}
             </Button>
           </div>
         </div>
@@ -581,22 +645,22 @@ export function Roteiro({
         <div className="space-y-4">
           <Teleprompter text={full} />
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-            <Card title="Texto em rolagem" note="editável" accent="sky">
+            <Card title={t("tools.roteiro.scrolling_text", {}, "Texto em rolagem")} note={t("tools.roteiro.editable", {}, "editável")} accent="sky">
               <Textarea rows={8} value={full} readOnly className="font-mono text-[12.5px] text-bone-300" />
               <p className="mt-2 text-[11.5px] text-ink-400">
-                O teleprompter lê o roteiro montado na aba Blocos. Edite lá e volte aqui.
+                {t("tools.roteiro.prompter_note", {}, "O teleprompter lê o roteiro montado na aba Blocos. Edite lá e volte aqui.")}
               </p>
               <Button size="sm" variant="outline" className="mt-3" icon="arrow" onClick={() => setTab("roteiro")}>
-                Editar blocos
+                {t("tools.roteiro.edit_blocks", {}, "Editar blocos")}
               </Button>
             </Card>
-            <Card title="Setup de gravação" accent="bone">
+            <Card title={t("tools.roteiro.recording_setup", {}, "Setup de gravação")} accent="bone">
               <ul className="space-y-2.5">
                 {[
-                  "Câmera na altura dos olhos",
-                  "Prompter a 40 cm da lente",
-                  "Olhe na lente, não na tela",
-                  "Grave 3 takes do hook antes do resto",
+                  t("tools.roteiro.setup_1", {}, "Câmera na altura dos olhos"),
+                  t("tools.roteiro.setup_2", {}, "Prompter a 40 cm da lente"),
+                  t("tools.roteiro.setup_3", {}, "Olhe na lente, não na tela"),
+                  t("tools.roteiro.setup_4", {}, "Grave 3 takes do hook antes do resto"),
                 ].map((s) => (
                   <li key={s} className="flex items-start gap-2.5 text-[12.5px] leading-snug text-bone-300">
                     <Icon name="check" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signal-400" strokeWidth={2.2} />
@@ -605,8 +669,8 @@ export function Roteiro({
                 ))}
               </ul>
               <div className="mt-4 border-t border-ink-800 pt-3">
-                <Label>Chamada de gravação</Label>
-                <Input value={takeName} onChange={(event) => setTakeName(event.target.value)} placeholder="Ex.: Take 01 — nome do vídeo" className="font-mono text-[12px]" />
+                <Label>{t("tools.roteiro.recording_call", {}, "Chamada de gravação")}</Label>
+                <Input value={takeName} onChange={(event) => setTakeName(event.target.value)} placeholder={t("tools.roteiro.recording_call_ph", {}, "Ex.: Take 01 — nome do vídeo")} className="font-mono text-[12px]" />
               </div>
             </Card>
           </div>

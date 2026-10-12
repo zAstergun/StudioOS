@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./ui";
 import { useAuth } from "../auth";
+import { useI18n } from "../i18n";
 import { cn } from "../utils/cn";
 
 export function openVipModal() {
@@ -17,6 +18,7 @@ export interface VipModalProps {
 
 export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose }: VipModalProps) {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [internalOpen, setInternalOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
@@ -89,7 +91,7 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
         <button
           onClick={handleClose}
           className="absolute top-3.5 right-3.5 sm:top-5 sm:right-5 flex h-8 w-8 items-center justify-center rounded-xl border border-ink-700/60 bg-ink-900/70 text-ink-300 hover:text-white hover:border-signal-400/50 hover:bg-ink-800 transition-all cursor-pointer z-10 active:scale-95"
-          title="Fechar"
+          title={t("common.close", undefined, "Fechar")}
         >
           <Icon name="close" className="h-3.5 w-3.5" />
         </button>
@@ -149,21 +151,21 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
 
           <div className="inline-flex items-center gap-1.5 rounded-full border border-signal-400/35 bg-signal-400/10 px-3 py-0.5 mt-2 mb-2 font-mono text-[9px] font-bold tracking-[0.16em] uppercase text-signal-300">
             <span className="h-1.5 w-1.5 rounded-full bg-signal-400 animate-pulse shadow-[0_0_6px_#f59e0b]" />
-            Cargo de Apoiador dos Projetos do Aster
+            {t("vip.supporter_role", undefined, "Cargo de Apoiador dos Projetos do Aster")}
           </div>
 
           <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-bone-50">
-            Seja VIP no StudioOS
+            {t("vip.modal_title", undefined, "Seja VIP no StudioOS")}
           </h2>
 
           <p className="mt-1.5 text-[12px] sm:text-[13px] text-bone-300 max-w-md leading-relaxed">
-            O VIP é o cargo oficial para os <strong className="text-white font-semibold">apoiadores dos projetos do Aster</strong>. Ao se tornar VIP, o privilégio é <strong className="text-signal-300 underline decoration-signal-400/40 underline-offset-4">válido em todos os projetos do Aster</strong>!
+            {t("vip.modal_desc", undefined, "O VIP é o cargo oficial para os apoiadores dos projetos do Aster. Ao se tornar VIP, o privilégio é válido em todos os projetos do Aster!")}
           </p>
 
           {isVip && (
             <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-1 text-[11px] font-mono text-emerald-300">
               <Icon name="check" className="h-3.5 w-3.5 text-emerald-400" strokeWidth={2.5} />
-              <span>Você já é um membro VIP ativo! Muito obrigado pelo apoio.</span>
+              <span>{t("vip.already_active", undefined, "Você já é um membro VIP ativo! Muito obrigado pelo apoio.")}</span>
             </div>
           )}
         </div>
@@ -174,10 +176,10 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
         <div className="py-4 sm:py-5 border-b border-white/[0.07] relative z-10">
           <div className="flex items-center justify-between mb-3">
             <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-ink-400 font-bold">
-              Privilégios & Vantagens Inclusas
+              {t("vip.perks_title", undefined, "Privilégios & Vantagens Inclusas")}
             </span>
             <span className="text-[9.5px] font-mono text-signal-400/80 bg-signal-400/10 px-2 py-0.5 rounded border border-signal-400/20">
-              Acesso Completo
+              {t("vip.full_access", undefined, "Acesso Completo")}
             </span>
           </div>
 
@@ -191,10 +193,12 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <h4 className="font-display text-[12.5px] font-bold text-bone-100">Badge VIP com Brilho</h4>
+                    <h4 className="font-display text-[12.5px] font-bold text-bone-100">
+                      {t("vip.badge_title", undefined, "Badge VIP com Brilho")}
+                    </h4>
                   </div>
                   <p className="mt-0.5 text-[10.5px] text-bone-400 leading-snug">
-                    Selo oficial dourado nos rankings, projetos, tarefas e perfil de usuário.
+                    {t("vip.badge_desc", undefined, "Selo oficial dourado nos rankings, projetos, tarefas e perfil de usuário.")}
                   </p>
                 </div>
               </div>
@@ -222,10 +226,12 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <h4 className="font-display text-[12.5px] font-bold text-bone-100">Cores RGB Ilimitadas</h4>
+                    <h4 className="font-display text-[12.5px] font-bold text-bone-100">
+                      {t("vip.rgb_title", undefined, "Cores RGB Ilimitadas")}
+                    </h4>
                   </div>
                   <p className="mt-0.5 text-[10.5px] text-bone-400 leading-snug">
-                    Seletor livre com espectro RGB, HEX personalizado e gradientes exclusivos.
+                    {t("vip.rgb_desc", undefined, "Seletor livre com espectro RGB, HEX personalizado e gradientes exclusivos.")}
                   </p>
                 </div>
               </div>
@@ -239,10 +245,12 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <h4 className="font-display text-[12.5px] font-bold text-bone-100">Capa & GIFs Animados</h4>
+                    <h4 className="font-display text-[12.5px] font-bold text-bone-100">
+                      {t("vip.gif_title", undefined, "Capa & GIFs Animados")}
+                    </h4>
                   </div>
                   <p className="mt-0.5 text-[10.5px] text-bone-400 leading-snug">
-                    Personalização da capa de fundo do perfil e fotos com GIFs animados.
+                    {t("vip.gif_desc", undefined, "Personalização da capa de fundo do perfil e fotos com GIFs animados.")}
                   </p>
                 </div>
               </div>
@@ -256,10 +264,12 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <h4 className="font-display text-[12.5px] font-bold text-bone-100">Todos os Projetos do Aster</h4>
+                    <h4 className="font-display text-[12.5px] font-bold text-bone-100">
+                      {t("vip.all_projects_title", undefined, "Todos os Projetos do Aster")}
+                    </h4>
                   </div>
                   <p className="mt-0.5 text-[10.5px] text-bone-400 leading-snug">
-                    Válido no StudioOS e em quaisquer futuras ferramentas e plataformas do Aster.
+                    {t("vip.all_projects_desc", undefined, "Válido no StudioOS e em quaisquer futuras ferramentas e plataformas do Aster.")}
                   </p>
                 </div>
               </div>
@@ -278,7 +288,7 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
                 ⚡
               </span>
               <h4 className="font-display text-[13px] font-bold text-white tracking-tight">
-                Como ativar seus privilégios VIP:
+                {t("vip.how_to_activate", undefined, "Como ativar seus privilégios VIP:")}
               </h4>
             </div>
 
@@ -286,24 +296,24 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
               {/* Passo 1 */}
               <div className="rounded-lg border border-white/[0.06] bg-ink-950/60 p-2.5">
                 <div className="flex items-center gap-1.5 text-[10px] font-mono text-signal-400 font-bold uppercase mb-1">
-                  <span>Passo 1</span>
+                  <span>{t("vip.step_1", undefined, "Passo 1")}</span>
                   <span className="text-ink-500">·</span>
-                  <span className="text-bone-300">Contribuição</span>
+                  <span className="text-bone-300">{t("vip.contribution", undefined, "Contribuição")}</span>
                 </div>
                 <p className="text-[11px] text-bone-300 leading-relaxed">
-                  Faça uma contribuição de qualquer valor para o Aster em <strong className="text-signal-300">donate.asterdev.me</strong>.
+                  {t("vip.step_1_desc", undefined, "Faça uma contribuição de qualquer valor para o Aster em")} <strong className="text-signal-300">donate.asterdev.me</strong>.
                 </p>
               </div>
 
               {/* Passo 2 */}
               <div className="rounded-lg border border-white/[0.06] bg-ink-950/60 p-2.5">
                 <div className="flex items-center gap-1.5 text-[10px] font-mono text-signal-400 font-bold uppercase mb-1">
-                  <span>Passo 2</span>
+                  <span>{t("vip.step_2", undefined, "Passo 2")}</span>
                   <span className="text-ink-500">·</span>
-                  <span className="text-bone-300">Ativação</span>
+                  <span className="text-bone-300">{t("vip.activation", undefined, "Ativação")}</span>
                 </div>
                 <p className="text-[11px] text-bone-300 leading-relaxed">
-                  Envie um e-mail para <strong className="text-signal-300">donate@asterdev.me</strong> com seu usuário/canal para ativarmos seu VIP.
+                  {t("vip.step_2_desc", undefined, "Envie um e-mail para")} <strong className="text-signal-300">donate@asterdev.me</strong> {t("vip.step_2_sub", undefined, "com seu usuário/canal para ativarmos seu VIP.")}
                 </p>
               </div>
             </div>
@@ -320,7 +330,7 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
               rel="noopener noreferrer"
               className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-signal-400 to-yellow-500 px-4 py-2.5 font-mono text-[11px] font-bold tracking-[0.08em] text-ink-950 uppercase shadow-[0_6px_20px_-3px_rgba(242,179,61,0.5)] transition-all hover:brightness-110 active:scale-[0.98] cursor-pointer"
             >
-              <span>Apoiar no donate.asterdev.me</span>
+              <span>{t("vip.support_btn", undefined, "Apoiar no donate.asterdev.me")}</span>
               <Icon name="arrow" className="h-3 w-3 -rotate-45" strokeWidth={3} />
             </a>
 
@@ -334,10 +344,10 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
                   ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
                   : "border-white/[0.12] bg-white/[0.03] text-bone-200 hover:border-signal-400/50 hover:bg-white/[0.07] hover:text-white"
               )}
-              title="Copiar e-mail donate@asterdev.me"
+              title={t("vip.copy_email_title", undefined, "Copiar e-mail donate@asterdev.me")}
             >
               <Icon name={copiedEmail ? "check" : "copy"} className="h-3.5 w-3.5 text-signal-400" />
-              <span>{copiedEmail ? "Copiado!" : "donate@asterdev.me"}</span>
+              <span>{copiedEmail ? t("common.copied", undefined, "Copiado!") : "donate@asterdev.me"}</span>
             </button>
 
             {/* Fechar */}
@@ -346,7 +356,7 @@ export function VipModal({ isOpen: controlledIsOpen, onClose: controlledOnClose 
               onClick={handleClose}
               className="rounded-xl px-3 py-2.5 font-mono text-[10.5px] uppercase tracking-wider text-bone-400 hover:text-white transition-colors cursor-pointer text-center sm:text-left active:scale-95"
             >
-              Fechar
+              {t("common.close", undefined, "Fechar")}
             </button>
           </div>
         </div>

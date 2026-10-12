@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Icon, Button } from "./ui";
 import { cn } from "../utils/cn";
 import { supabase, useAuth } from "../auth";
+import { useI18n } from "../i18n";
 import { 
   type ProjectSavedItem, 
   TOOL_GROUP_MAP, 
@@ -14,7 +15,7 @@ import { formatFriendlySummary } from "../utils/toolStateRestore";
 
 export interface SaveToProjectPayload {
   type: string; // 'rank', 'titulos', 'hooks', etc. or 'link'
-  group?: "Criação" | "Publicação" | "Estratégia" | "Link";
+  group?: "Criação" | "Publicação" | "Estratégia" | "Link" | string;
   toolName?: string;
   title: string;
   summary?: string;
@@ -50,6 +51,7 @@ export function SaveToProjectModal({
   onGoToProject,
 }: SaveToProjectModalProps) {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [mounted, setMounted] = useState(false);
   const [projects, setProjects] = useState<MiniProject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,6 +122,7 @@ export function SaveToProjectModal({
 
   const toolType = item.type || "link";
   const group = item.group || TOOL_GROUP_MAP[toolType] || (toolType === "link" ? "Link" : "Criação");
+  const displayGroup = group === "Criação" ? t("nav.groups.creation", undefined, "Criação") : group === "Publicação" ? t("nav.groups.publishing", undefined, "Publicação") : group === "Estratégia" ? t("nav.groups.strategy", undefined, "Estratégia") : group;
   const toolName = item.toolName || TOOL_NAME_MAP[toolType] || (toolType === "link" ? "Link Externo" : "Ferramenta");
   const iconName = TOOL_ICON_MAP[toolType] || "bookmark";
   const style = TOOL_ACCENT_STYLES[toolType] || TOOL_ACCENT_STYLES.link;
@@ -192,10 +195,10 @@ export function SaveToProjectModal({
             </div>
             <div>
               <h3 className="font-display text-base font-bold text-bone-100">
-                Salvar no Projeto
+                {t("save_modal.title", undefined, "Salvar no Projeto")}
               </h3>
               <p className="font-mono text-[10px] tracking-wider text-ink-400 uppercase">
-                {group} · {toolName}
+                {displayGroup} · {toolName}
               </p>
             </div>
           </div>
@@ -217,10 +220,10 @@ export function SaveToProjectModal({
                 <Icon name="check" className="h-6 w-6" strokeWidth={2.5} />
               </div>
               <h4 className="font-display text-lg font-bold text-bone-50">
-                Item salvo com sucesso!
+                {t("save_modal.success_title", undefined, "Item salvo com sucesso!")}
               </h4>
               <p className="mt-1 text-[13px] text-ink-300">
-                Salvo nos <strong className="text-bone-100">Itens Salvos</strong> do projeto{" "}
+                {t("save_modal.success_desc_1", undefined, "Salvo nos")} <strong className="text-bone-100">{t("save_modal.saved_items_tag", undefined, "Itens Salvos")}</strong> {t("save_modal.success_desc_2", undefined, "do projeto")}{" "}
                 <span className="text-signal-400 font-medium">{savedSuccessProject.name}</span>.
               </p>
 
@@ -230,7 +233,7 @@ export function SaveToProjectModal({
                   onClick={onClose}
                   className="font-mono text-[10.5px] uppercase tracking-wider"
                 >
-                  Fechar
+                  {t("common.close", undefined, "Fechar")}
                 </Button>
                 {onGoToProject && (
                   <Button 
@@ -241,7 +244,7 @@ export function SaveToProjectModal({
                     }}
                     className="font-mono text-[10.5px] uppercase tracking-wider gap-1.5 shadow-[0_0_15px_rgba(242,179,61,0.25)]"
                   >
-                    Abrir Projeto
+                    {t("save_modal.open_project", undefined, "Abrir Projeto")}
                     <Icon name="arrow" className="h-3 w-3" />
                   </Button>
                 )}
@@ -253,13 +256,13 @@ export function SaveToProjectModal({
               {/* Título do item */}
               <div>
                 <label className="block mb-1.5 font-mono text-[10px] uppercase tracking-wider text-ink-400">
-                  Título do item no projeto
+                  {t("save_modal.item_title_label", undefined, "Título do item no projeto")}
                 </label>
                 <input
                   type="text"
                   value={customTitle}
                   onChange={(e) => setCustomTitle(e.target.value)}
-                  placeholder="Nome do item salvo..."
+                  placeholder={t("save_modal.item_title_placeholder", undefined, "Nome do item salvo...")}
                   className="w-full rounded-lg border border-ink-800 bg-ink-950 px-3.5 py-2.5 text-[13px] text-bone-100 placeholder:text-ink-600 transition-colors focus:border-signal-400/50 focus:outline-none"
                 />
               </div>
@@ -269,7 +272,7 @@ export function SaveToProjectModal({
                 <div className="rounded-lg border border-ink-800/60 bg-ink-950/40 p-3">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="font-mono text-[9px] uppercase tracking-wider text-ink-500">
-                      Prévia do Conteúdo
+                      {t("save_modal.preview_label", undefined, "Prévia do Conteúdo")}
                     </span>
                     {item.tag && (
                       <span className="rounded bg-signal-400/10 border border-signal-400/20 px-1.5 py-0.5 font-mono text-[9px] font-bold text-signal-400">
@@ -286,19 +289,21 @@ export function SaveToProjectModal({
               {/* Escolha do Projeto de Destino */}
               <div>
                 <label className="block mb-2 font-mono text-[10px] uppercase tracking-wider text-ink-400">
-                  Selecione o Projeto de Destino ({projects.length})
+                  {t("save_modal.select_project_label", { count: projects.length }, "Selecione o Projeto de Destino ({count})")}
                 </label>
 
                 {loading ? (
                   <div className="flex items-center justify-center py-8 text-ink-400 font-mono text-xs">
-                    Carregando projetos...
+                    {t("save_modal.loading_projects", undefined, "Carregando projetos...")}
                   </div>
                 ) : projects.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-ink-800 p-6 text-center">
                     <Icon name="layers" className="mx-auto h-6 w-6 text-ink-600 mb-2" />
-                    <p className="text-[13px] text-bone-300 font-medium">Nenhum projeto encontrado</p>
+                    <p className="text-[13px] text-bone-300 font-medium">
+                      {t("save_modal.no_projects", undefined, "Nenhum projeto encontrado")}
+                    </p>
                     <p className="text-[11px] text-ink-400 mt-0.5">
-                      Crie um projeto primeiro na aba Projetos para poder salvar conteúdos nele.
+                      {t("save_modal.no_projects_desc", undefined, "Crie um projeto primeiro na aba Projetos para poder salvar conteúdos nele.")}
                     </p>
                   </div>
                 ) : (
@@ -327,7 +332,7 @@ export function SaveToProjectModal({
                                 {proj.name}
                               </span>
                               <span className="font-mono text-[9px] uppercase tracking-wider text-ink-400">
-                                {savedCount === 1 ? "1 item salvo" : `${savedCount} itens salvos`}
+                                {savedCount === 1 ? `1 ${t("save_modal.item_saved_singular", undefined, "item salvo")}` : `${savedCount} ${t("save_modal.items_saved_plural", undefined, "itens salvos")}`}
                               </span>
                             </div>
                           </div>
@@ -355,7 +360,7 @@ export function SaveToProjectModal({
                   disabled={saving}
                   className="font-mono text-[10.5px] uppercase tracking-wider"
                 >
-                  Cancelar
+                  {t("common.cancel", undefined, "Cancelar")}
                 </Button>
                 <Button 
                   variant="solid" 
@@ -364,11 +369,11 @@ export function SaveToProjectModal({
                   className="font-mono text-[10.5px] uppercase tracking-wider gap-1.5 shadow-[0_0_20px_rgba(242,179,61,0.25)]"
                 >
                   {saving ? (
-                    <>Salvando...</>
+                    <>{t("common.saving", undefined, "Salvando...")}</>
                   ) : (
                     <>
                       <Icon name="bookmark" className="h-3.5 w-3.5" />
-                      Salvar no Projeto
+                      {t("save_modal.title", undefined, "Salvar no Projeto")}
                     </>
                   )}
                 </Button>

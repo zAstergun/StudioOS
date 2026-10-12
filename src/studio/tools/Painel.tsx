@@ -7,10 +7,13 @@ import { CALIBRATION_QUESTIONS, WIKI, accentSoft } from "../data";
 import { AI_PROVIDERS, AIModelUnavailableError, listAvailableModels, requestAI, type AISettings } from "../ai";
 import type { StudioConfig } from "../history";
 import { VipRgbColorPicker } from "../components/VipRgbColorPicker";
+import { useI18n } from "../i18n";
+import { getLocalizedExampleCalib } from "../i18n/examples";
 
 /* ----------------------------------------------------------------- WIKI */
 
 export function Wiki({ onBack, onGo }: { onBack: () => void; onGo: (id: string) => void }) {
+  const { t } = useI18n();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("Todos");
   const [open, setOpen] = useState<string | null>("rank");
@@ -25,57 +28,61 @@ export function Wiki({ onBack, onGo }: { onBack: () => void; onGo: (id: string) 
   const cats = ["Todos", ...Array.from(new Set(WIKI.map((w) => w.cat)))];
   const list = useMemo(
     () =>
-      WIKI.filter((w) => (cat === "Todos" ? true : w.cat === cat)).filter((w) =>
-        q.trim()
-          ? (w.title + w.lede + w.how + w.bullets.join(" ")).toLowerCase().includes(q.toLowerCase())
-          : true
-      ),
-    [q, cat]
+      WIKI.filter((w) => (cat === "Todos" ? true : w.cat === cat)).filter((w) => {
+        if (!q.trim()) return true;
+        const low = q.toLowerCase();
+        const trTitle = t(`tools.wiki.entries.${w.id}.title`, {}, w.title);
+        const trLede = t(`tools.wiki.entries.${w.id}.lede`, {}, w.lede);
+        const trHow = t(`tools.wiki.entries.${w.id}.how`, {}, w.how);
+        const trBullets = w.bullets.map((b, idx) => t(`tools.wiki.entries.${w.id}.bullets.${idx}`, {}, b)).join(" ");
+        return (w.title + w.lede + w.how + w.bullets.join(" ") + trTitle + trLede + trHow + trBullets).toLowerCase().includes(low);
+      }),
+    [q, cat, t]
   );
 
   return (
     <ToolShell
       id="wiki"
-      title="Wiki do Painel"
+      title={t("tools.wiki.title", {}, "Wiki do Painel")}
       accent="bone"
-      lede="Cada ferramenta explicada como ela funciona por dentro: o que entra, o que o painel calcula e o que sai. Leia antes de reclamar do resultado."
+      lede={t("tools.wiki.lede", {}, "Cada ferramenta explicada como ela funciona por dentro: o que entra, o que o painel calcula e o que sai. Leia antes de reclamar do resultado.")}
       meta={[
-        { k: "Verbete", v: String(WIKI.length) },
-        { k: "Categorias", v: String(cats.length - 1) },
-        { k: "Aberto", v: open ? "1" : "0" },
-        { k: "Busca", v: q ? "on" : "off" },
+        { k: t("tools.wiki.meta_entries", {}, "Verbete"), v: String(WIKI.length) },
+        { k: t("tools.wiki.meta_categories", {}, "Categorias"), v: String(cats.length - 1) },
+        { k: t("tools.wiki.meta_open", {}, "Aberto"), v: open ? "1" : "0" },
+        { k: t("tools.wiki.meta_search", {}, "Busca"), v: q ? t("common.on", {}, "on") : t("common.off", {}, "off") },
       ]}
       onBack={onBack}
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
-          <Card title="Como usar o painel" accent="signal">
+          <Card title={t("tools.wiki.how_to_use", {}, "Como usar o painel")} accent="signal">
             <ol className="space-y-3">
               {[
-                ["Calibre primeiro", "Sem nicho, tops e flops, toda ferramenta devolve texto genérico."],
-                ["Rankeie antes de gravar", "Ideia abaixo de 6 não merece um dia de produção."],
-                ["Empacote antes de roteirizar", "Título e thumb definem o roteiro, não o contrário."],
-                ["Dê nota antes de publicar", "Abaixo de 40, o post volta para a bancada."],
-              ].map(([t, d], i) => (
-                <li key={t} className="flex gap-3">
+                [t("tools.wiki.guide_1_t", {}, "Calibre primeiro"), t("tools.wiki.guide_1_d", {}, "Sem nicho, tops e flops, toda ferramenta devolve texto genérico.")],
+                [t("tools.wiki.guide_2_t", {}, "Rankeie antes de gravar"), t("tools.wiki.guide_2_d", {}, "Ideia abaixo de 6 não merece um dia de produção.")],
+                [t("tools.wiki.guide_3_t", {}, "Empacote antes de roteirizar"), t("tools.wiki.guide_3_d", {}, "Título e thumb definem o roteiro, não o contrário.")],
+                [t("tools.wiki.guide_4_t", {}, "Dê nota antes de publicar"), t("tools.wiki.guide_4_d", {}, "Abaixo de 40, o post volta para a bancada.")],
+              ].map(([title, desc], i) => (
+                <li key={title} className="flex gap-3">
                   <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-signal-400/40 bg-signal-400/10 font-mono text-[10px] text-signal-400 tabular-nums">
                     {i + 1}
                   </span>
                   <span>
-                    <span className="block text-[13px] font-semibold text-bone-100">{t}</span>
-                    <span className="block text-[11.5px] leading-snug text-ink-400">{d}</span>
+                    <span className="block text-[13px] font-semibold text-bone-100">{title}</span>
+                    <span className="block text-[11.5px] leading-snug text-ink-400">{desc}</span>
                   </span>
                 </li>
               ))}
             </ol>
           </Card>
-          <Card title="Atalhos" accent="mint">
+          <Card title={t("tools.wiki.shortcuts", {}, "Atalhos")} accent="mint">
             <div className="space-y-1.5">
               {[
-                ["calibracao", "Calibrar canal"],
-                ["rank", "Ranquear ideia"],
-                ["score", "Dar nota num post"],
-                ["historico", "Histórico & lixeira"],
-                ["config", "Trocar provedor de IA"],
+                ["calibracao", t("tools.wiki.sc_calib", {}, "Calibrar canal")],
+                ["rank", t("tools.wiki.sc_rank", {}, "Ranquear ideia")],
+                ["score", t("tools.wiki.sc_score", {}, "Dar nota num post")],
+                ["historico", t("tools.wiki.sc_history", {}, "Histórico & lixeira")],
+                ["config", t("tools.wiki.sc_config", {}, "Trocar provedor de IA")],
               ].map(([id, label]) => (
                 <button
                   key={id}
@@ -105,13 +112,13 @@ export function Wiki({ onBack, onGo }: { onBack: () => void; onGo: (id: string) 
                   : "border-ink-700 bg-ink-900/60 text-bone-400 hover:border-ink-500 hover:text-bone-100"
               )}
             >
-              {c}
+              {c === "Todos" ? t("common.all", {}, "Todos") : t(`tools.wiki.categories.${c}`, {}, c)}
             </button>
           ))}
         </div>
         <div className="relative ml-auto w-full sm:w-64">
           <Icon name="eye" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar na wiki…" className="py-2 pl-8 text-[12.5px]" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("tools.wiki.search_placeholder", {}, "Buscar na wiki…")} className="py-2 pl-8 text-[12.5px]" />
         </div>
       </div>
 
@@ -119,6 +126,11 @@ export function Wiki({ onBack, onGo }: { onBack: () => void; onGo: (id: string) 
         {list.map((w) => {
           const isOpen = open === w.id;
           const accent = (w.cat === "Criação" ? "signal" : w.cat === "Publicação" ? "mint" : "sky") as "signal" | "mint" | "sky";
+          const itemTitle = t(`tools.wiki.entries.${w.id}.title`, {}, w.title);
+          const itemLede = t(`tools.wiki.entries.${w.id}.lede`, {}, w.lede);
+          const itemCat = t(`tools.wiki.categories.${w.cat}`, {}, w.cat);
+          const itemHow = t(`tools.wiki.entries.${w.id}.how`, {}, w.how);
+
           return (
             <div
               key={w.id}
@@ -132,13 +144,13 @@ export function Wiki({ onBack, onGo }: { onBack: () => void; onGo: (id: string) 
                 className="flex w-full items-center gap-4 px-4 py-3.5 text-left"
               >
                 <span className={cn("rounded border px-2 py-0.5 font-mono text-[9px] tracking-[0.14em] uppercase", accentSoft[accent])}>
-                  {w.cat}
+                  {itemCat}
                 </span>
                 <span className={cn("font-display text-[15.5px] font-bold tracking-tight transition-colors", isOpen ? "text-bone-50" : "text-bone-200")}>
-                  {w.title}
+                  {itemTitle}
                 </span>
                 <span className="ml-auto hidden flex-1 truncate pl-4 text-[12px] text-ink-400 sm:block">
-                  {w.lede}
+                  {itemLede}
                 </span>
                 <Icon
                   name="chevron"
@@ -154,30 +166,30 @@ export function Wiki({ onBack, onGo }: { onBack: () => void; onGo: (id: string) 
               >
                 <div className="overflow-hidden">
                   <div className="border-t border-ink-800 px-4 py-4">
-                    <p className="max-w-3xl text-[13.5px] leading-relaxed text-bone-300">{w.lede}</p>
+                    <p className="max-w-3xl text-[13.5px] leading-relaxed text-bone-300">{itemLede}</p>
                     <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
                       <div>
                         <div className="mb-1.5 font-mono text-[9.5px] tracking-[0.16em] text-signal-400 uppercase">
-                          Como funciona
+                          {t("tools.wiki.how_it_works", {}, "Como funciona")}
                         </div>
-                        <p className="text-[13px] leading-relaxed text-bone-200">{w.how}</p>
+                        <p className="text-[13px] leading-relaxed text-bone-200">{itemHow}</p>
                       </div>
                       <div>
                         <div className="mb-1.5 font-mono text-[9.5px] tracking-[0.16em] text-ink-400 uppercase">
-                          O que entra / sai
+                          {t("tools.wiki.in_out", {}, "O que entra / sai")}
                         </div>
                         <ul className="space-y-1.5">
-                          {w.bullets.map((b) => (
+                          {w.bullets.map((b, bIdx) => (
                             <li key={b} className="flex items-start gap-2 text-[12px] leading-snug text-bone-300">
                               <Icon name="check" className="mt-0.5 h-3 w-3 shrink-0 text-mint-400" strokeWidth={2.6} />
-                              {b}
+                              {t(`tools.wiki.entries.${w.id}.bullets.${bIdx}`, {}, b)}
                             </li>
                           ))}
                         </ul>
                       </div>
                     </div>
                     <Button size="sm" variant="outline" className="mt-4" icon="arrow" onClick={() => onGo(w.id)}>
-                      Abrir ferramenta
+                      {t("tools.wiki.open_tool", {}, "Abrir ferramenta")}
                     </Button>
                   </div>
                 </div>
@@ -187,7 +199,7 @@ export function Wiki({ onBack, onGo }: { onBack: () => void; onGo: (id: string) 
         })}
         {!list.length && (
           <div className="rounded-lg border border-dashed border-ink-700 p-10 text-center font-mono text-[11px] tracking-[0.14em] text-ink-400 uppercase">
-            nada encontrado para “{q}”
+            {t("tools.wiki.empty_results", { query: q }, `nada encontrado para “${q}”`)}
           </div>
         )}
       </div>
@@ -231,6 +243,7 @@ export function Calibracao({
   onCreateProfile?: (p: CalibProfile) => void;
   onDeleteProfile?: (id: string) => void;
 }) {
+  const { t, resolvedLanguage } = useI18n();
   const [localStore, setLocalStore] = useState(() => {
     if (parentProfiles && parentProfiles.length > 0) {
       return {
@@ -380,7 +393,7 @@ export function Calibracao({
 
   const handleDeleteProfile = (idToDelete: string) => {
     if (profiles.length <= 1) {
-      alert("Você precisa manter pelo menos um perfil de calibração.");
+      alert(t("tools.calib.alert_min_profiles", {}, "Você precisa manter pelo menos um perfil de calibração."));
       return;
     }
 
@@ -411,29 +424,29 @@ export function Calibracao({
   return (
     <ToolShell
       id="calibracao"
-      title="Calibração do Canal"
+      title={t("tools.calib.title", {}, "Calibração do Canal")}
       accent="bone"
       canSaveToProject={false}
-      lede="Nenhuma ferramenta aqui funciona no escuro. Crie perfis para seus canais: o painel usa os dados do perfil ativo para trocar régua genérica por régua sob medida em todas as ferramentas."
+      lede={t("tools.calib.lede", {}, "Nenhuma ferramenta aqui funciona no escuro. Crie perfis para seus canais: o painel usa os dados do perfil ativo para trocar régua genérica por régua sob medida em todas as ferramentas.")}
       meta={[
-        { k: "Perfil", v: currentProfile.name },
-        { k: "Progresso", v: `${Math.round(pct)}%` },
-        { k: "Perguntas", v: "4" },
-        { k: "Tops", v: String(allTops.length) },
-        { k: "Flops", v: String(allFlops.length) },
+        { k: t("tools.calib.meta_profile", {}, "Perfil"), v: currentProfile.name },
+        { k: t("tools.calib.meta_progress", {}, "Progresso"), v: `${Math.round(pct)}%` },
+        { k: t("tools.calib.meta_questions", {}, "Perguntas"), v: "4" },
+        { k: t("tools.calib.meta_tops", {}, "Tops"), v: String(allTops.length) },
+        { k: t("tools.calib.meta_flops", {}, "Flops"), v: String(allFlops.length) },
       ]}
       onBack={onBack}
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
           <Card
-            title={`Status: ${currentProfile.name}`}
+            title={`${t("tools.calib.status_prefix", {}, "Status")}: ${currentProfile.name}`}
             note={`${Math.round(pct)}%`}
             accent={isSelectedActive ? "signal" : "bone"}
           >
             <div className="mb-3 flex items-center justify-between">
               <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-bone-300">
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: currentProfile.color }} />
-                {isSelectedActive ? "Perfil Ativo no StudioOS" : "Perfil Secundário"}
+                {isSelectedActive ? t("tools.calib.profile_active_label", {}, "Perfil Ativo no StudioOS") : t("tools.calib.profile_sec_label", {}, "Perfil Secundário")}
               </span>
               {!isSelectedActive && (
                 <button
@@ -441,7 +454,7 @@ export function Calibracao({
                   onClick={() => handleSelectActiveProfile(currentProfile.id)}
                   className="font-mono text-[9.5px] uppercase tracking-wider text-signal-400 underline hover:text-signal-300 cursor-pointer"
                 >
-                  Ativar
+                  {t("tools.calib.activate_btn", {}, "Ativar")}
                 </button>
               )}
             </div>
@@ -449,11 +462,11 @@ export function Calibracao({
             <Meter value={pct} max={100} accent={pct >= 100 ? "mint" : isSelectedActive ? "signal" : "sky"} showValue={false} />
             <ul className="mt-4 space-y-2">
               {[
-                { k: "Nicho em 1 frase", ok: calib.niche.trim().length > 3 },
-                { k: "4 perguntas do avaliador", ok: calib.answers.every((a) => a.trim().length > 3) },
-                { k: "5 títulos top", ok: allTops.length >= 5 },
-                { k: "5 títulos flop", ok: allFlops.length >= 5 },
-                { k: "CTR médio", ok: calib.ctr.trim().length > 0 },
+                { k: t("tools.calib.check_niche", {}, "Nicho em 1 frase"), ok: calib.niche.trim().length > 3 },
+                { k: t("tools.calib.check_questions", {}, "4 perguntas do avaliador"), ok: calib.answers.every((a) => a.trim().length > 3) },
+                { k: t("tools.calib.check_tops", {}, "5 títulos top"), ok: allTops.length >= 5 },
+                { k: t("tools.calib.check_flops", {}, "5 títulos flop"), ok: allFlops.length >= 5 },
+                { k: t("tools.calib.check_ctr", {}, "CTR médio"), ok: calib.ctr.trim().length > 0 },
               ].map((r) => (
                 <li key={r.k} className="flex items-center gap-2 text-[12.5px]">
                   <span
@@ -469,11 +482,11 @@ export function Calibracao({
               ))}
             </ul>
             <p className="mt-4 border-t border-ink-800 pt-3 text-[11.5px] leading-relaxed text-ink-400">
-              Os dados de calibração ficam salvos com segurança neste navegador e alimentam automaticamente todas as ferramentas do painel.
+              {t("tools.calib.disclaimer", {}, "Os dados de calibração ficam salvos com segurança neste navegador e alimentam automaticamente todas as ferramentas do painel.")}
             </p>
           </Card>
 
-          <Card title="Vocabulário extraído" accent="mint">
+          <Card title={t("tools.calib.extracted_vocab", {}, "Vocabulário extraído")} accent="mint">
             <div className="flex flex-wrap gap-1.5">
               {Array.from(
                 new Set(
@@ -491,7 +504,7 @@ export function Calibracao({
                   </span>
                 ))}
               {!(calib.niche + calib.tops).trim() && (
-                <span className="font-mono text-[10.5px] text-ink-400">preencha nicho e tops</span>
+                <span className="font-mono text-[10.5px] text-ink-400">{t("tools.calib.fill_niche_tops", {}, "preencha nicho e tops")}</span>
               )}
             </div>
           </Card>
@@ -502,11 +515,10 @@ export function Calibracao({
       <div className="mb-6 space-y-3">
         <div className="flex flex-col gap-1">
           <span className="font-mono text-[9.5px] tracking-[0.2em] text-signal-400 uppercase">
-            Perfis de Calibração do Canal
+            {t("tools.calib.profiles_title", {}, "Perfis de Calibração do Canal")}
           </span>
           <p className="text-[12.5px] text-ink-300">
-            Você pode cadastrar vários perfis (ex.: canal principal, cortes, canal secundário). O perfil marcado como{" "}
-            <strong className="text-bone-100">ATIVO</strong> serve de parâmetro para as respostas e sugestões de todas as outras ferramentas.
+            {t("tools.calib.profiles_desc", {}, "Você pode cadastrar vários perfis (ex.: canal principal, cortes, canal secundário). O perfil marcado como ATIVO serve de parâmetro para as respostas e sugestões de todas as outras ferramentas.")}
           </p>
         </div>
 
@@ -530,7 +542,7 @@ export function Calibracao({
                 <span>{p.name}</span>
                 {isActive && (
                   <span className="rounded bg-signal-400/20 px-1.5 py-0.5 text-[8.5px] font-bold text-signal-400">
-                    Ativo
+                    {t("tools.calib.active", {}, "Ativo")}
                   </span>
                 )}
                 <div
@@ -542,7 +554,7 @@ export function Calibracao({
                     setShowDeleteConfirm(false);
                   }}
                   className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded-sm opacity-0 transition-all hover:bg-ink-700/60 hover:text-bone-50 group-hover:opacity-100"
-                  title="Editar nome ou cor do perfil"
+                  title={t("tools.calib.edit_profile_tip", {}, "Editar nome ou cor do perfil")}
                 >
                   <Icon name="edit" className="h-2.5 w-2.5" />
                 </div>
@@ -561,7 +573,7 @@ export function Calibracao({
             className="flex items-center gap-1.5 rounded-md px-3 py-2 font-mono text-[10px] tracking-[0.12em] uppercase transition-all duration-200 text-ink-400 hover:text-bone-300 hover:bg-ink-800/40 ml-1 cursor-pointer"
           >
             <Icon name="plus" className="h-3 w-3" strokeWidth={2} />
-            Novo Perfil
+            {t("tools.calib.new_profile", {}, "Novo Perfil")}
           </button>
         </div>
 
@@ -573,11 +585,12 @@ export function Calibracao({
                 <Icon name="check" className="h-3 w-3" strokeWidth={3} />
               </span>
               <span>
-                <strong>Perfil Ativo:</strong> As respostas e sugestões de todas as ferramentas do StudioOS estão configuradas com base em <strong>"{currentProfile.name}"</strong>.
+                <strong>{t("tools.calib.active_profile_label", {}, "Perfil Ativo:")}</strong>{" "}
+                {t("tools.calib.active_profile_desc", { name: currentProfile.name }, `As respostas e sugestões de todas as ferramentas do StudioOS estão configuradas com base em "${currentProfile.name}".`)}
               </span>
             </div>
             <span className="self-start sm:self-auto rounded bg-signal-400/20 border border-signal-400/40 px-2 py-0.5 font-mono text-[9px] font-bold text-signal-400 uppercase shrink-0">
-              Alimentando StudioOS
+              {t("tools.calib.feeding_studio", {}, "Alimentando StudioOS")}
             </span>
           </div>
         ) : (
@@ -585,7 +598,7 @@ export function Calibracao({
             <div className="flex items-center gap-2.5">
               <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: currentProfile.color }} />
               <span>
-                Você está visualizando/editando o perfil <strong>"{currentProfile.name}"</strong>. Ele não é o perfil ativo no momento.
+                {t("tools.calib.viewing_profile_desc", { name: currentProfile.name }, `Você está visualizando/editando o perfil "${currentProfile.name}". Ele não é o perfil ativo no momento.`)}
               </span>
             </div>
             <button
@@ -594,7 +607,7 @@ export function Calibracao({
               className="self-start sm:self-auto inline-flex items-center gap-1.5 rounded bg-signal-400 px-3 py-1.5 font-mono text-[10px] font-bold text-ink-950 uppercase transition-all hover:bg-signal-300 shrink-0 cursor-pointer"
             >
               <Icon name="check" className="h-3 w-3" />
-              Usar este perfil nas ferramentas
+              {t("tools.calib.use_in_tools", {}, "Usar este perfil nas ferramentas")}
             </button>
           </div>
         )}
@@ -603,13 +616,13 @@ export function Calibracao({
       {/* SUB-ABAS AVALIADOR / DADOS */}
       <div className="mb-5 inline-flex gap-1 rounded-md border border-ink-700 bg-ink-950/60 p-1">
         {([
-          ["avaliador", "Avaliador"],
-          ["dados", "Dados do canal"],
+          ["avaliador", t("tools.calib.tab_evaluator", {}, "Avaliador")],
+          ["dados", t("tools.calib.tab_data", {}, "Dados do canal")],
         ] as const).map(([id, label]) => (
           <button
             key={id}
             type="button"
-            onClick={() => setTab(id)}
+            onClick={() => setTab(id as any)}
             className={cn(
               "rounded px-3.5 py-1.5 font-mono text-[11px] tracking-[0.1em] uppercase transition-all duration-200 cursor-pointer",
               tab === id ? "bg-signal-400 text-ink-950 font-bold" : "text-bone-400 hover:bg-ink-800 hover:text-bone-100"
@@ -622,27 +635,39 @@ export function Calibracao({
 
       {tab === "avaliador" ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card title="Nicho do canal" note="base de tudo" accent="signal" className="lg:col-span-2">
+          <Card
+            title={t("tools.calib.channel_niche", {}, "Nicho do canal")}
+            note={t("tools.calib.basis_of_all", {}, "base de tudo")}
+            accent="signal"
+            className="lg:col-span-2"
+          >
             <Textarea
               rows={3}
               value={calib.niche}
               onChange={(e) => handleUpdateCalib({ ...calib, niche: e.target.value })}
-              placeholder="Ex.: finanças pessoais para quem começa com pouco dinheiro e não quer jargão de banco"
+              placeholder={t("tools.calib.niche_placeholder", {}, "Ex.: finanças pessoais para quem começa com pouco dinheiro e não quer jargão de banco")}
             />
           </Card>
           {CALIBRATION_QUESTIONS.map((q, i) => (
-            <Card key={q} title={q} note={`pergunta ${i + 1}`} accent={(["sky", "mint", "plum", "oxide"] as const)[i]}>
+            <Card
+              key={q}
+              title={t(`tools.calib.question_${i}`, {}, q)}
+              note={t("tools.calib.question_n", { n: i + 1 }, `pergunta ${i + 1}`)}
+              accent={(["sky", "mint", "plum", "oxide"] as const)[i]}
+            >
               <Textarea
                 rows={5}
                 value={calib.answers[i] || ""}
                 onChange={(e) => setAnswer(i, e.target.value)}
-                placeholder="Responda com exemplos reais…"
+                placeholder={t("tools.calib.answer_placeholder", {}, "Responda com exemplos reais…")}
               />
               <div className="mt-2 flex items-center gap-2 font-mono text-[10px] tracking-[0.12em] text-ink-400 uppercase">
                 <span className={cn("h-1.5 w-1.5 rounded-full", (calib.answers[i] || "").trim().length > 3 ? "bg-mint-400" : "bg-ink-600")} />
-                {(calib.answers[i] || "").trim().length > 3 ? "respondida" : "pendente"}
+                {(calib.answers[i] || "").trim().length > 3
+                  ? t("tools.calib.answered", {}, "respondida")
+                  : t("tools.calib.pending", {}, "pendente")}
                 <span className="ml-auto tabular-nums">
-                  {(calib.answers[i] || "").trim().split(/\s+/).filter(Boolean).length} palavras
+                  {t("tools.calib.words_count", { count: (calib.answers[i] || "").trim().split(/\s+/).filter(Boolean).length }, `${(calib.answers[i] || "").trim().split(/\s+/).filter(Boolean).length} palavras`)}
                 </span>
               </div>
             </Card>
@@ -650,29 +675,40 @@ export function Calibracao({
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card title="5 títulos que mais performaram" note="outliers" accent="mint">
+          <Card
+            title={t("tools.calib.top_titles_title", {}, "5 títulos que mais performaram")}
+            note={t("tools.calib.outliers", {}, "outliers")}
+            accent="mint"
+          >
             <Textarea
               rows={7}
               value={calib.tops}
               onChange={(e) => handleUpdateCalib({ ...calib, tops: e.target.value })}
-              placeholder={"Um por linha\nEx.: Como saí de R$0 para R$10 mil em 2 anos"}
+              placeholder={t("tools.calib.tops_placeholder", {}, "Um por linha\nEx.: Como saí de R$0 para R$10 mil em 2 anos")}
             />
             <div className="mt-2 font-mono text-[10px] tracking-[0.12em] text-ink-400 uppercase">
-              {allTops.length}/5 preenchidos
+              {t("tools.calib.filled_count", { count: allTops.length, total: 5 }, `${allTops.length}/5 preenchidos`)}
             </div>
           </Card>
-          <Card title="5 que flopparam" note="anti-padrão" accent="oxide">
+          <Card
+            title={t("tools.calib.flop_titles_title", {}, "5 que flopparam")}
+            note={t("tools.calib.anti_pattern", {}, "anti-padrão")}
+            accent="oxide"
+          >
             <Textarea
               rows={7}
               value={calib.flops}
               onChange={(e) => handleUpdateCalib({ ...calib, flops: e.target.value })}
-              placeholder="Um por linha"
+              placeholder={t("tools.calib.one_per_line", {}, "Um por linha")}
             />
             <div className="mt-2 font-mono text-[10px] tracking-[0.12em] text-ink-400 uppercase">
-              {allFlops.length}/5 preenchidos
+              {t("tools.calib.filled_count", { count: allFlops.length, total: 5 }, `${allFlops.length}/5 preenchidos`)}
             </div>
           </Card>
-          <Card title="CTR médio do canal" accent="signal">
+          <Card
+            title={t("tools.calib.channel_ctr_title", {}, "CTR médio do canal")}
+            accent="signal"
+          >
             <div className="flex items-center gap-3">
               <Input
                 value={calib.ctr}
@@ -685,29 +721,32 @@ export function Calibracao({
               <div className="flex-1">
                 <Meter value={parseFloat(calib.ctr.replace(",", ".")) || 0} max={12} accent="mint" showValue={false} />
                 <div className="mt-1 flex justify-between font-mono text-[9px] text-ink-500">
-                  <span>0</span><span>4–7 bom</span><span>12</span>
+                  <span>0</span><span>{t("tools.calib.ctr_good_range", {}, "4–7 bom")}</span><span>12</span>
                 </div>
               </div>
             </div>
             <p className="mt-3 text-[11.5px] leading-relaxed text-ink-400">
-              O CTR médio vira a linha de base do Gerador de Títulos: as projeções são calculadas como múltiplo desse número.
+              {t("tools.calib.ctr_explanation", {}, "O CTR médio vira a linha de base do Gerador de Títulos: as projeções são calculadas como múltiplo desse número.")}
             </p>
           </Card>
-          <Card title="Prova e repertório" accent="sky">
-            <Label>Vídeos com prova visível na tela</Label>
+          <Card
+            title={t("tools.calib.proof_and_rep", {}, "Prova e repertório")}
+            accent="sky"
+          >
+            <Label>{t("tools.calib.proof_label", {}, "Vídeos com prova visível na tela")}</Label>
             <Textarea
               rows={3}
               value={calib.prova}
               onChange={(e) => handleUpdateCalib({ ...calib, prova: e.target.value })}
-              placeholder="Ex.: extrato, planilha, gráfico, teste ao vivo"
+              placeholder={t("tools.calib.proof_placeholder", {}, "Ex.: extrato, planilha, gráfico, teste ao vivo")}
             />
             <div className="mt-3">
-              <Label>Histórias próprias ou livros que costuma contar</Label>
+              <Label>{t("tools.calib.stories_label", {}, "Histórias próprias ou livros que costuma contar")}</Label>
               <Textarea
                 rows={3}
                 value={calib.historias}
                 onChange={(e) => handleUpdateCalib({ ...calib, historias: e.target.value })}
-                placeholder="Ex.: Psicologia Financeira, minha época de estagiário…"
+                placeholder={t("tools.calib.stories_placeholder", {}, "Ex.: Psicologia Financeira, minha época de estagiário…")}
               />
             </div>
           </Card>
@@ -730,8 +769,8 @@ export function Calibracao({
                     <Icon name="plus" className="h-3.5 w-3.5 text-signal-400" strokeWidth={2} />
                   </div>
                   <div>
-                    <h2 className="font-display text-lg font-bold text-bone-50">Novo Perfil de Calibração</h2>
-                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">Canal ou projeto</p>
+                    <h2 className="font-display text-lg font-bold text-bone-50">{t("tools.calib.modal_new_title", {}, "Novo Perfil de Calibração")}</h2>
+                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">{t("tools.calib.modal_new_sub", {}, "Canal ou projeto")}</p>
                   </div>
                 </div>
                 <button
@@ -747,13 +786,13 @@ export function Calibracao({
             <form onSubmit={handleCreateProfile} className="p-6">
               <div className="mb-5">
                 <label className="mb-2 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Nome do Perfil / Canal
+                  {t("tools.calib.profile_name_label", {}, "Nome do Perfil / Canal")}
                 </label>
                 <input
                   type="text"
                   value={newProfileName}
                   onChange={(e) => setNewProfileName(e.target.value)}
-                  placeholder="Ex: Canal Secundário / Cortes / Tech"
+                  placeholder={t("tools.calib.profile_name_ph", {}, "Ex: Canal Secundário / Cortes / Tech")}
                   autoFocus
                   className="w-full rounded-lg border border-ink-800/60 bg-ink-950/50 px-4 py-3 text-[14px] text-bone-100 placeholder:text-ink-400 transition-colors focus:border-signal-400/60 focus:outline-none focus:ring-1 focus:ring-signal-400/20"
                   required
@@ -764,7 +803,7 @@ export function Calibracao({
                 <VipRgbColorPicker
                   value={newProfileColor}
                   onChange={setNewProfileColor}
-                  label="Cor de Identificação"
+                  label={t("tools.calib.color_label", {}, "Cor de Identificação")}
                   palette={CALIB_PALETTE}
                 />
               </div>
@@ -792,7 +831,7 @@ export function Calibracao({
                     />
                   </div>
                   <span className="text-[12.5px] text-bone-300 transition-colors group-hover:text-bone-100">
-                    Copiar respostas do perfil atual ({currentProfile.name}) como base
+                    {t("tools.calib.clone_label", { name: currentProfile.name }, `Copiar respostas do perfil atual (${currentProfile.name}) como base`)}
                   </span>
                 </label>
               </div>
@@ -803,14 +842,14 @@ export function Calibracao({
                   onClick={() => setShowNewModal(false)}
                   className="flex-1 rounded-lg border border-ink-800/60 bg-ink-900 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase transition-colors hover:bg-ink-800 cursor-pointer"
                 >
-                  Cancelar
+                  {t("common.cancel", {}, "Cancelar")}
                 </button>
                 <button
                   type="submit"
                   disabled={!newProfileName.trim()}
                   className="flex-1 rounded-lg bg-signal-400 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.14em] text-ink-950 uppercase transition-all duration-200 hover:bg-signal-400/90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                 >
-                  Criar e Ativar
+                  {t("tools.calib.create_and_activate", {}, "Criar e Ativar")}
                 </button>
               </div>
             </form>
@@ -834,8 +873,8 @@ export function Calibracao({
                     <Icon name="edit" className="h-3.5 w-3.5 text-signal-400" strokeWidth={2} />
                   </div>
                   <div>
-                    <h2 className="font-display text-lg font-bold text-bone-50">Editar Perfil de Calibração</h2>
-                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">Ajustar identificação</p>
+                    <h2 className="font-display text-lg font-bold text-bone-50">{t("tools.calib.modal_edit_title", {}, "Editar Perfil de Calibração")}</h2>
+                    <p className="font-mono text-[9px] tracking-[0.14em] text-bone-300 uppercase">{t("tools.calib.modal_edit_sub", {}, "Ajustar identificação")}</p>
                   </div>
                 </div>
                 <button
@@ -851,13 +890,13 @@ export function Calibracao({
             <form onSubmit={handleSaveEditProfile} className="p-6">
               <div className="mb-5">
                 <label className="mb-2 block font-mono text-[10px] tracking-[0.14em] text-ink-300 uppercase">
-                  Nome do Perfil
+                  {t("tools.calib.profile_name", {}, "Nome do Perfil")}
                 </label>
                 <input
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  placeholder="Nome do perfil"
+                  placeholder={t("tools.calib.profile_name_ph_edit", {}, "Nome do perfil")}
                   autoFocus
                   className="w-full rounded-lg border border-ink-800/60 bg-ink-950/50 px-4 py-3 text-[14px] text-bone-100 placeholder:text-ink-400 transition-colors focus:border-signal-400/60 focus:outline-none focus:ring-1 focus:ring-signal-400/20"
                   required
@@ -868,7 +907,7 @@ export function Calibracao({
                 <VipRgbColorPicker
                   value={editColor}
                   onChange={setEditColor}
-                  label="Cor"
+                  label={t("tools.calib.color", {}, "Cor")}
                   palette={CALIB_PALETTE}
                 />
               </div>
@@ -885,7 +924,7 @@ export function Calibracao({
                     className="flex w-full items-center justify-center gap-2 rounded-lg border border-signal-400/30 bg-signal-400/10 py-2.5 font-mono text-[10.5px] font-bold uppercase text-signal-300 hover:bg-signal-400/20 transition-colors cursor-pointer"
                   >
                     <Icon name="check" className="h-3.5 w-3.5 text-signal-400" />
-                    Definir como Perfil Ativo
+                    {t("tools.calib.set_active", {}, "Definir como Perfil Ativo")}
                   </button>
                 )}
 
@@ -898,27 +937,27 @@ export function Calibracao({
                         className="flex w-full items-center justify-center gap-2 rounded-lg py-2 font-mono text-[10px] uppercase text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                       >
                         <Icon name="trash" className="h-3.5 w-3.5" />
-                        Excluir este perfil
+                        {t("tools.calib.delete_profile", {}, "Excluir este perfil")}
                       </button>
                     ) : (
                       <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-center">
                         <p className="text-[12px] text-red-200 mb-2">
-                          Tem certeza? Os dados deste perfil serão removidos permanentemente.
+                          {t("tools.calib.delete_confirm_msg", {}, "Tem certeza? Os dados deste perfil serão removidos permanentemente.")}
                         </p>
                         <div className="flex gap-2">
                           <button
                             type="button"
                             onClick={() => setShowDeleteConfirm(false)}
-                            className="flex-1 rounded bg-ink-800 py-1.5 font-mono text-[9.5px] text-bone-300 uppercase hover:bg-ink-700"
+                            className="flex-1 rounded bg-ink-800 py-1.5 font-mono text-[9.5px] text-bone-300 uppercase hover:bg-ink-700 cursor-pointer"
                           >
-                            Cancelar
+                            {t("common.cancel", {}, "Cancelar")}
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteProfile(editingProfile.id)}
-                            className="flex-1 rounded bg-red-600 py-1.5 font-mono text-[9.5px] font-bold text-white uppercase hover:bg-red-500"
+                            className="flex-1 rounded bg-red-600 py-1.5 font-mono text-[9.5px] font-bold text-white uppercase hover:bg-red-500 cursor-pointer"
                           >
-                            Confirmar Exclusão
+                            {t("tools.calib.confirm_delete", {}, "Confirmar Exclusão")}
                           </button>
                         </div>
                       </div>
@@ -933,14 +972,14 @@ export function Calibracao({
                   onClick={() => setEditingProfile(null)}
                   className="flex-1 rounded-lg border border-ink-800/60 bg-ink-900 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.14em] text-bone-300 uppercase transition-colors hover:bg-ink-800 cursor-pointer"
                 >
-                  Cancelar
+                  {t("common.cancel", {}, "Cancelar")}
                 </button>
                 <button
                   type="submit"
                   disabled={!editName.trim()}
                   className="flex-1 rounded-lg bg-signal-400 px-4 py-3 font-mono text-[10px] font-bold tracking-[0.14em] text-ink-950 uppercase transition-all duration-200 hover:bg-signal-400/90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                 >
-                  Salvar
+                  {t("common.save", {}, "Salvar")}
                 </button>
               </div>
             </form>
@@ -964,6 +1003,7 @@ function ModelCombobox({
   placeholder: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -1100,7 +1140,7 @@ function ModelCombobox({
           {options.length ? (
             <>
               <div className="border-b border-ink-700 px-3 py-2 font-mono text-[9px] tracking-[0.16em] text-ink-400 uppercase select-none">
-                Modelos sugeridos · {options.length}
+                {t("tools.config.suggested_models", { count: options.length }, `Modelos sugeridos · ${options.length}`)}
               </div>
               <div className="max-h-52 overflow-y-auto p-1 font-mono text-[12px]">
                 {options.map((option, index) => (
@@ -1123,7 +1163,7 @@ function ModelCombobox({
                     <span>{option}</span>
                     {option === value && (
                       <span className="text-[9px] uppercase tracking-wider text-signal-400 font-bold shrink-0 ml-2">
-                        selecionado
+                        {t("tools.config.selected", {}, "selecionado")}
                       </span>
                     )}
                   </button>
@@ -1131,7 +1171,7 @@ function ModelCombobox({
               </div>
             </>
           ) : (
-            <p className="px-3 py-2.5 text-[11px] text-ink-400">Digite o ID do modelo do seu provedor.</p>
+            <p className="px-3 py-2.5 text-[11px] text-ink-400">{t("tools.config.type_model_id", {}, "Digite o ID do modelo do seu provedor.")}</p>
           )}
         </div>,
         document.body
@@ -1153,6 +1193,7 @@ export function Config({
   onSettingsChange: (settings: Partial<AISettings>) => void;
   onGo?: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const [apiKey, setApiKey] = useState(initialConfig.apiKey);
   const [provider, setProvider] = useState(initialConfig.provider);
   const [model, setModel] = useState(() => {
@@ -1188,7 +1229,7 @@ export function Config({
 
   const refreshModels = async () => {
     if (!apiKey.trim()) {
-      setModelListMessage("Informe a chave para consultar os modelos disponíveis.");
+      setModelListMessage(t("tools.config.enter_key_to_query", {}, "Informe a chave para consultar os modelos disponíveis."));
       return;
     }
     setRefreshingModels(true);
@@ -1197,10 +1238,10 @@ export function Config({
       const models = await listAvailableModels({ provider, model, apiKey, baseUrl, temperature: temp });
       setKeyModels(models);
       setModelListMessage(models.length
-        ? `${models.length} modelos encontrados para esta chave.`
-        : "Não foi possível obter modelos para esta chave. Confira a chave ou tente novamente.");
+        ? t("tools.config.models_found", { count: models.length }, `${models.length} modelos encontrados para esta chave.`)
+        : t("tools.config.no_models_found", {}, "Não foi possível obter modelos para esta chave. Confira a chave ou tente novamente."));
     } catch {
-      setModelListMessage("Não foi possível consultar o provedor. Confira a chave e tente novamente.");
+      setModelListMessage(t("tools.config.provider_query_error", {}, "Não foi possível consultar o provedor. Confira a chave e tente novamente."));
     } finally {
       setRefreshingModels(false);
     }
@@ -1209,7 +1250,7 @@ export function Config({
   const test = async () => {
     if (!apiKey.trim() && provider !== "custom") {
       setStatus("fail");
-      setTestError("Informe a chave de API antes de testar.");
+      setTestError(t("tools.config.enter_key_before_test", {}, "Informe a chave de API antes de testar."));
       return;
     }
     setStatus("testing");
@@ -1218,19 +1259,19 @@ export function Config({
     try {
       await requestAI(
         { provider, model, apiKey, baseUrl, temperature: temp },
-        "Responda somente com a palavra OK.",
-        "Teste de conexão.",
+        t("tools.config.test_prompt", {}, "Responda somente com a palavra OK."),
+        t("tools.config.test_system", {}, "Teste de conexão."),
         { maxTokens: 24 }
       );
       setStatus("ok");
     } catch (error) {
       setStatus("fail");
       if (error instanceof AIModelUnavailableError) {
-        setTestError(`O modelo "${model}" não está disponível para esta chave.`);
+        setTestError(t("tools.config.model_not_available", { model }, `O modelo "${model}" não está disponível para esta chave.`));
         setModelSuggestions(error.availableModels);
         setKeyModels(error.availableModels);
       } else {
-        setTestError(error instanceof Error ? error.message : "Não foi possível conectar ao provedor.");
+        setTestError(error instanceof Error ? error.message : t("tools.config.connect_error", {}, "Não foi possível conectar ao provedor."));
         setModelSuggestions([]);
       }
     }
@@ -1239,14 +1280,14 @@ export function Config({
   return (
     <ToolShell
       id="config"
-      title="Provedor de IA"
+      title={t("tools.config.title", {}, "Provedor de IA")}
       accent="mint"
-      lede="O painel é seu: você traz a chave e ela nunca sai do seu navegador. Escolha o provedor, o modelo e o nível de temperatura adequado para cada tipo de ferramenta."
+      lede={t("tools.config.lede", {}, "O painel é seu: você traz a chave e ela nunca sai do seu navegador. Escolha o provedor, o modelo e o nível de temperatura adequado para cada tipo de ferramenta.")}
       meta={[
-        { k: "Provedor", v: current.label },
-        { k: "Modelo", v: model.split("-")[0] },
-        { k: "Temp.", v: temp.toFixed(1) },
-        { k: "Chave", v: apiKey ? "ok" : "—" },
+        { k: t("tools.config.meta_provider", {}, "Provedor"), v: current.label },
+        { k: t("tools.config.meta_model", {}, "Modelo"), v: model.split("-")[0] },
+        { k: t("tools.config.meta_temp", {}, "Temp."), v: temp.toFixed(1) },
+        { k: t("tools.config.meta_key", {}, "Chave"), v: apiKey ? "ok" : "—" },
       ]}
       onBack={onBack}
       aside={
@@ -1255,22 +1296,21 @@ export function Config({
             <div className="mb-1.5 flex items-center gap-2">
               <Icon name="lock" className="h-4 w-4 text-mint-400" />
               <span className="font-mono text-[9.5px] tracking-[0.18em] text-mint-400 uppercase">
-                Privacidade
+                {t("tools.config.privacy_title", {}, "Privacidade")}
               </span>
             </div>
             <p className="text-[12.5px] leading-relaxed text-bone-200">
-              Sua chave fica salva <strong className="text-bone-50">apenas no seu navegador local</strong>.
-              Ela nunca é enviada para os nossos servidores.
+              {t("tools.config.privacy_desc", {}, "Sua chave fica salva apenas no seu navegador local. Ela nunca é enviada para os nossos servidores.")}
             </p>
           </div>
 
-          <Card title="Temperatura recomendada" accent="signal">
+          <Card title={t("tools.config.rec_temp_title", {}, "Temperatura recomendada")} accent="signal">
             <ul className="space-y-2.5">
               {[
-                ["Rank / Score", "0.2 — leitura estável e repetível"],
-                ["Títulos / Hooks", "0.9 — variação criativa"],
-                ["Roteiro", "0.6 — voz preservada"],
-                ["Humanizador", "0.3 — sem invenção"],
+                [t("tools.config.temp_rank", {}, "Rank / Score"), t("tools.config.temp_rank_desc", {}, "0.2 — leitura estável e repetível")],
+                [t("tools.config.temp_titles", {}, "Títulos / Hooks"), t("tools.config.temp_titles_desc", {}, "0.9 — variação criativa")],
+                [t("tools.config.temp_script", {}, "Roteiro"), t("tools.config.temp_script_desc", {}, "0.6 — voz preservada")],
+                [t("tools.config.temp_humanizer", {}, "Humanizador"), t("tools.config.temp_humanizer_desc", {}, "0.3 — sem invenção")],
               ].map(([k, v]) => (
                 <li key={k} className="flex items-baseline justify-between gap-3 border-b border-ink-800 pb-2 last:border-0">
                   <span className="text-[12.5px] text-bone-200">{k}</span>
@@ -1280,16 +1320,15 @@ export function Config({
             </ul>
           </Card>
 
-          <Card title="Histórico & Lixeira" note="v2.5" accent="oxide">
+          <Card title={t("tools.config.history_trash_title", {}, "Histórico & Lixeira")} note="v2.5" accent="oxide">
             <p className="text-[12px] leading-relaxed text-bone-400">
-              As execuções das ferramentas viram registros restauráveis. Itens apagados ficam na
-              lixeira pela retenção configurada antes do purge permanente.
+              {t("tools.config.history_trash_desc", {}, "As execuções das ferramentas viram registros restauráveis. Itens apagados ficam na lixeira pela retenção configurada antes do purge permanente.")}
             </p>
             <button
               onClick={() => onGo?.("historico")}
-              className="group mt-3 flex items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] text-oxide-400 uppercase transition-colors hover:text-oxide-500"
+              className="group mt-3 flex items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] text-oxide-400 uppercase transition-colors hover:text-oxide-500 cursor-pointer"
             >
-              abrir histórico & lixeira
+              {t("tools.config.open_history_trash", {}, "abrir histórico & lixeira")}
               <Icon name="arrow" className="h-3 w-3 transition-transform group-hover:translate-x-1" strokeWidth={2.4} />
             </button>
           </Card>
@@ -1297,10 +1336,10 @@ export function Config({
       }
     >
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card title="Conexão" note="chave local" accent="mint">
+        <Card title={t("tools.config.conn_title", {}, "Conexão")} note={t("tools.config.conn_note", {}, "chave local")} accent="mint">
           <div className="space-y-4">
             <div>
-              <Label>Provedor de IA</Label>
+              <Label>{t("tools.config.provider_label", {}, "Provedor de IA")}</Label>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {AI_PROVIDERS.map((p) => (
                   <button
@@ -1317,7 +1356,7 @@ export function Config({
                       setModelListMessage("");
                     }}
                     className={cn(
-                      "rounded-md border px-3 py-2.5 text-left transition-all duration-200",
+                      "rounded-md border px-3 py-2.5 text-left transition-all duration-200 cursor-pointer",
                       provider === p.id
                         ? "border-mint-400/60 bg-mint-400/10 text-mint-300"
                         : "border-ink-700 bg-ink-950/60 text-bone-300 hover:border-ink-500 hover:text-bone-50"
@@ -1325,7 +1364,7 @@ export function Config({
                   >
                     <span className="block text-[13px] font-semibold">{p.label}</span>
                     <span className="block font-mono text-[9.5px] text-ink-400">
-                      {p.models.length ? `${p.models.length} modelos` : "URL e modelo próprios"}
+                      {p.models.length ? t("tools.config.models_count", { count: p.models.length }, `${p.models.length} modelos`) : t("tools.config.custom_url_model", {}, "URL e modelo próprios")}
                     </span>
                   </button>
                 ))}
@@ -1333,7 +1372,7 @@ export function Config({
             </div>
 
             <div>
-              <Label hint="localStorage">Chave de API</Label>
+              <Label hint="localStorage">{t("tools.config.api_key_label", {}, "Chave de API")}</Label>
               <div className="flex gap-2">
                 <Input
                   type={show ? "text" : "password"}
@@ -1349,8 +1388,8 @@ export function Config({
                   placeholder="sk-…"
                   className="font-mono text-[12.5px]"
                 />
-                <Button variant="outline" size="sm" onClick={() => setShow((s) => !s)} className="shrink-0">
-                  {show ? "ocultar" : "mostrar"}
+                <Button variant="outline" size="sm" onClick={() => setShow((s) => !s)} className="shrink-0 cursor-pointer">
+                  {show ? t("tools.config.hide_key", {}, "ocultar") : t("tools.config.show_key", {}, "mostrar")}
                 </Button>
               </div>
               {current.keyUrl && (
@@ -1360,20 +1399,20 @@ export function Config({
                   rel="noopener noreferrer"
                   className="group mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.08em] text-mint-400 transition-colors hover:text-mint-300"
                 >
-                  Obter chave da {current.label}
+                  {t("tools.config.get_key_from", { provider: current.label }, `Obter chave da ${current.label}`)}
                   <Icon name="arrow" className="h-3 w-3 transition-transform group-hover:translate-x-0.5" strokeWidth={2.2} />
                 </a>
               )}
               {apiKey && (
                 <p className="mt-2 font-mono text-[10.5px] text-ink-400">
-                  salva como <span className="text-mint-400">{masked}</span>
+                  {t("tools.config.saved_as", {}, "salva como")} <span className="text-mint-400">{masked}</span>
                 </p>
               )}
             </div>
 
             {provider === "custom" && (
               <div>
-                <Label hint="OpenAI-compatible">URL base da API</Label>
+                <Label hint="OpenAI-compatible">{t("tools.config.base_url_label", {}, "URL base da API")}</Label>
                 <Input
                   type="url"
                   value={baseUrl}
@@ -1388,13 +1427,13 @@ export function Config({
                   className="font-mono text-[12.5px]"
                 />
                 <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
-                  A URL deve aceitar o formato de chat completions. O painel acrescenta /chat/completions se necessário.
+                  {t("tools.config.base_url_help", {}, "A URL deve aceitar o formato de chat completions. O painel acrescenta /chat/completions se necessário.")}
                 </p>
               </div>
             )}
 
             <div>
-              <Label hint="Escolha uma sugestão ou digite">Modelo</Label>
+              <Label hint={t("tools.config.model_hint", {}, "Escolha uma sugestão ou digite")}>{t("tools.config.model_label", {}, "Modelo")}</Label>
               {provider !== "custom" && (
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <p className="min-h-4 text-[10px] text-ink-400" aria-live="polite">{modelListMessage}</p>
@@ -1402,16 +1441,16 @@ export function Config({
                     type="button"
                     onClick={refreshModels}
                     disabled={refreshingModels}
-                    className="shrink-0 font-mono text-[9.5px] tracking-[0.08em] text-mint-400 transition-colors hover:text-mint-300 disabled:cursor-wait disabled:opacity-60"
+                    className="shrink-0 font-mono text-[9.5px] tracking-[0.08em] text-mint-400 transition-colors hover:text-mint-300 disabled:cursor-wait disabled:opacity-60 cursor-pointer"
                   >
-                    {refreshingModels ? "consultando…" : "buscar modelos da chave ↻"}
+                    {refreshingModels ? t("tools.config.querying", {}, "consultando…") : t("tools.config.fetch_models_key", {}, "buscar modelos da chave ↻")}
                   </button>
                 </div>
               )}
               <ModelCombobox
                 value={model}
                 options={modelOptions}
-                placeholder={provider === "custom" ? "ID exato do modelo" : "Selecione ou digite o ID do modelo"}
+                placeholder={provider === "custom" ? t("tools.config.exact_model_id", {}, "ID exato do modelo") : t("tools.config.select_or_type_model", {}, "Selecione ou digite o ID do modelo")}
                 onChange={(value) => {
                   setModel(value);
                   onSettingsChange({ model: value });
@@ -1423,7 +1462,7 @@ export function Config({
             </div>
 
             <div>
-              <Label hint={`${temp.toFixed(1)}`}>Temperatura</Label>
+              <Label hint={`${temp.toFixed(1)}`}>{t("tools.config.temperature_label", {}, "Temperatura")}</Label>
               <input
                 type="range" min={0} max={1.5} step={0.1} value={temp}
                 onChange={(e) => {
@@ -1433,16 +1472,16 @@ export function Config({
                   setStatus("idle");
                 }}
                 className="h-1 w-full cursor-pointer appearance-none rounded-full bg-ink-700 accent-mint-400"
-                aria-label="Temperatura"
+                aria-label={t("tools.config.temperature_label", {}, "Temperatura")}
               />
               <div className="mt-1 flex justify-between font-mono text-[9px] text-ink-500">
-                <span>determinístico</span><span>criativo</span>
+                <span>{t("tools.config.deterministic", {}, "determinístico")}</span><span>{t("tools.config.creative", {}, "criativo")}</span>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 border-t border-ink-800 pt-4">
               <Button icon="bolt" onClick={test} disabled={status === "testing"}>
-                {status === "testing" ? "Testando…" : "Testar conexão"}
+                {status === "testing" ? t("tools.config.testing", {}, "Testando…") : t("tools.config.test_connection", {}, "Testar conexão")}
               </Button>
               <span
                 className={cn(
@@ -1454,7 +1493,7 @@ export function Config({
                 )}
               >
                 <span className={cn("h-1.5 w-1.5 rounded-full", status === "ok" ? "bg-mint-400" : status === "fail" ? "bg-oxide-400" : status === "testing" ? "bg-signal-400 anim-blink" : "bg-ink-600")} />
-                {status === "ok" ? `conectado · ${model}` : status === "fail" ? "falha na conexão" : status === "testing" ? "negociando…" : "aguardando teste"}
+                {status === "ok" ? t("tools.config.status_connected", { model }, `conectado · ${model}`) : status === "fail" ? t("tools.config.status_fail", {}, "falha na conexão") : status === "testing" ? t("tools.config.status_negotiating", {}, "negociando…") : t("tools.config.status_waiting", {}, "aguardando teste")}
               </span>
             </div>
             {testError && (
@@ -1463,7 +1502,7 @@ export function Config({
                 {modelSuggestions.length > 0 && (
                   <div className="mt-3 rounded border border-mint-400/20 bg-mint-400/[0.04] p-3">
                     <p className="mb-2 font-mono text-[9.5px] tracking-[0.14em] text-mint-300 uppercase">
-                      Modelos que sua chave pode usar
+                      {t("tools.config.models_can_use", {}, "Modelos que sua chave pode usar")}
                     </p>
                     <div className="flex max-h-44 flex-wrap gap-2 overflow-y-auto pr-1">
                       {modelSuggestions.map((suggestion) => (
@@ -1477,14 +1516,14 @@ export function Config({
                             setTestError("");
                             setModelSuggestions([]);
                           }}
-                          className="rounded border border-ink-600 bg-ink-950 px-2.5 py-1.5 font-mono text-[10.5px] text-bone-200 transition-colors hover:border-mint-400/60 hover:text-mint-300"
+                          className="rounded border border-ink-600 bg-ink-950 px-2.5 py-1.5 font-mono text-[10.5px] text-bone-200 transition-colors hover:border-mint-400/60 hover:text-mint-300 cursor-pointer"
                         >
                           {suggestion}
                         </button>
                       ))}
                     </div>
                     <p className="mt-2 text-[10.5px] leading-relaxed text-ink-400">
-                      Selecione uma opção para trocar o modelo e teste a conexão novamente.
+                      {t("tools.config.select_model_retest", {}, "Selecione uma opção para trocar o modelo e teste a conexão novamente.")}
                     </p>
                   </div>
                 )}
@@ -1493,15 +1532,14 @@ export function Config({
           </div>
         </Card>
 
-        <Card title="Seus dados no painel" note="exportar / limpar" accent="bone">
+        <Card title={t("tools.config.data_title", {}, "Seus dados no painel")} note={t("tools.config.data_note", {}, "exportar / limpar")} accent="bone">
           <p className="text-[12.5px] leading-relaxed text-bone-400">
-            Calibração, chave e preferências vivem em <span className="font-mono text-bone-200">localStorage</span>.
-            Exporte um JSON para levar para outra máquina — ou apague tudo e recomece do zero.
+            {t("tools.config.data_desc", {}, "Calibração, chave e preferências vivem em localStorage. Exporte um JSON para levar para outra máquina — ou apague tudo e recomece do zero.")}
           </p>
           <div className="mt-4 space-y-2">
             <Button
               variant="outline"
-              className="w-full justify-start"
+              className="w-full justify-start cursor-pointer"
               icon="copy"
               onClick={() => {
                 const data = { provider, model, temperature: temp, apiKey, baseUrl, exportedAt: new Date().toISOString() };
@@ -1514,31 +1552,31 @@ export function Config({
                 URL.revokeObjectURL(url);
               }}
             >
-              Exportar configuração (.json)
+              {t("tools.config.export_config", {}, "Exportar configuração (.json)")}
             </Button>
             <Button
               variant="ghost"
-              className="w-full justify-start text-oxide-400 hover:bg-oxide-400/10 hover:text-oxide-400"
+              className="w-full justify-start text-oxide-400 hover:bg-oxide-400/10 hover:text-oxide-400 cursor-pointer"
               icon="close"
               onClick={() => {
                 setKey("");
                 setStatus("idle");
               }}
             >
-              Apagar chave salva
+              {t("tools.config.delete_saved_key", {}, "Apagar chave salva")}
             </Button>
           </div>
 
           <div className="mt-5 rounded-md border border-ink-800 bg-ink-950/60 p-3">
             <div className="mb-2 font-mono text-[9.5px] tracking-[0.16em] text-ink-400 uppercase">
-              O que sai do navegador
+              {t("tools.config.what_leaves_browser", {}, "O que sai do navegador")}
             </div>
             <ul className="space-y-1.5">
               {[
-                ["Chave de API", "direto ao provedor escolhido", true],
-                ["Textos das ferramentas", "direto ao provedor escolhido", true],
-                ["Calibração do canal", "nunca sai — fica local", false],
-                ["Telemetria / analytics", "não existe neste painel", false],
+                [t("tools.config.data_api_key", {}, "Chave de API"), t("tools.config.data_direct_provider", {}, "direto ao provedor escolhido"), true],
+                [t("tools.config.data_tool_texts", {}, "Textos das ferramentas"), t("tools.config.data_direct_provider", {}, "direto ao provedor escolhido"), true],
+                [t("tools.config.data_channel_calib", {}, "Calibração do canal"), t("tools.config.data_never_leaves", {}, "nunca sai — fica local"), false],
+                [t("tools.config.data_telemetry", {}, "Telemetria / analytics"), t("tools.config.data_no_telemetry", {}, "não existe neste painel"), false],
               ].map(([k, v, out]) => (
                 <li key={k as string} className="flex items-baseline justify-between gap-3 text-[11.5px]">
                   <span className="text-bone-300">{k as string}</span>

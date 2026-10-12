@@ -10,6 +10,7 @@ create table if not exists public.profiles (
   links jsonb default '{}'::jsonb,
   card_visibility jsonb default '{"stats": true, "projects": true, "video": true, "achievements": true}'::jsonb,
   featured_video jsonb default '{}'::jsonb,
+  language text default 'system',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

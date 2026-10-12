@@ -9,6 +9,8 @@ import { type Calib } from "../calibration";
 import { CalibrationNotice } from "../components/CalibrationNotice";
 import { VipRgbColorPicker } from "../components/VipRgbColorPicker";
 import { SaveToProjectModal } from "../components/SaveToProjectModal";
+import { useI18n } from "../i18n";
+import { getLocalizedToolExamples } from "../i18n/examples";
 
 /* ----------------------------------------------------------- ARQUÉTIPOS */
 
@@ -187,6 +189,7 @@ function ThumbnailCanvas({
   faceExpression,
   isMobile = false,
 }: ThumbnailCanvasProps) {
+  const { t } = useI18n();
   return (
     <div className="relative aspect-video w-full overflow-hidden select-none">
       {/* Plano de fundo dinâmico com vinheta */}
@@ -224,10 +227,10 @@ function ThumbnailCanvas({
                     className={cn("rounded-full", isMobile ? "h-1 w-1" : "h-1.5 w-1.5")}
                     style={{ background: rimHex }}
                   />
-                  {slotType} · Foco 100%
+                  {t(`tools.thumb.proof_types.${slotType}`, {}, slotType)} · {t("tools.thumb.focus_100", {}, "Foco 100%")}
                 </div>
                 <span className="font-mono text-[9px] text-ink-400 uppercase tracking-widest">
-                  Estilo Sem Apresentador
+                  {t("tools.thumb.faceless_style", {}, "Estilo Sem Apresentador")}
                 </span>
               </div>
 
@@ -259,7 +262,7 @@ function ThumbnailCanvas({
               >
                 <div className="flex items-center justify-center gap-1.5 font-mono uppercase tracking-wider text-ink-300 text-[10px]">
                   <Icon name={getProofIcon(slotType)} className="h-4 w-4" style={{ color: rimHex }} />
-                  <span>{slotType} em destaque máximo</span>
+                  <span>{t(`tools.thumb.proof_types.${slotType}`, {}, slotType)} {t("tools.thumb.max_highlight", {}, "em destaque máximo")}</span>
                 </div>
                 <p className={cn("mt-1 font-bold text-bone-100", isMobile ? "text-[9.5px]" : "text-[13px]")}>
                   {slotDetail}
@@ -289,7 +292,7 @@ function ThumbnailCanvas({
                     )}
                   >
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: rimHex }} />
-                    Apresentador Central + {slotType}
+                    {t("tools.thumb.central_presenter", {}, "Apresentador Central")} + {t(`tools.thumb.proof_types.${slotType}`, {}, slotType)}
                   </div>
                 )}
               </div>
@@ -306,7 +309,7 @@ function ThumbnailCanvas({
                 {!isMobile && (
                   <div className="absolute bottom-12 sm:bottom-14 flex flex-col items-center pointer-events-none z-10">
                     <span className="rounded bg-black/90 border border-ink-600/80 px-2.5 py-0.5 font-mono text-[8.5px] uppercase tracking-wider text-bone-100 shadow-md">
-                      Apresentador no Centro
+                      {t("tools.thumb.presenter_in_center", {}, "Apresentador no Centro")}
                     </span>
                     <span className="mt-1 font-mono text-[8.5px] text-bone-300 bg-black/75 px-2 py-0.5 rounded border border-ink-800 shadow">
                       {faceExpression.slice(0, 26)}…
@@ -328,7 +331,7 @@ function ThumbnailCanvas({
                 >
                   <div className={cn("flex items-center gap-1 font-mono uppercase text-ink-300", isMobile ? "text-[7.5px]" : "text-[9.5px]")}>
                     <Icon name={getProofIcon(slotType)} className={isMobile ? "h-2.5 w-2.5" : "h-3.5 w-3.5"} style={{ color: rimHex }} />
-                    {slotType}
+                    {t(`tools.thumb.proof_types.${slotType}`, {}, slotType)}
                   </div>
                   <p className={cn("mt-0.5 line-clamp-2 font-medium text-bone-200 leading-tight", isMobile ? "text-[8.5px]" : "text-[11.5px]")}>
                     {slotDetail}
@@ -359,7 +362,7 @@ function ThumbnailCanvas({
                       className={cn("rounded-full", isMobile ? "h-1 w-1" : "h-1.5 w-1.5")}
                       style={{ background: rimHex }}
                     />
-                    {slotType} focal
+                    {t(`tools.thumb.proof_types.${slotType}`, {}, slotType)} {t("tools.thumb.focal", {}, "focal")}
                   </div>
 
                   {thumbText.trim() && (
@@ -402,7 +405,7 @@ function ThumbnailCanvas({
                       className={isMobile ? "h-2.5 w-2.5" : "h-3.5 w-3.5"}
                       style={{ color: rimHex }}
                     />
-                    {slotType}
+                    {t(`tools.thumb.proof_types.${slotType}`, {}, slotType)}
                   </div>
                   <p
                     className={cn(
@@ -428,7 +431,7 @@ function ThumbnailCanvas({
                   {!isMobile && (
                     <div className="absolute bottom-12 sm:bottom-14 flex flex-col items-center pointer-events-none z-10">
                       <span className="rounded bg-black/90 border border-ink-600/80 px-2.5 py-0.5 font-mono text-[8.5px] uppercase tracking-wider text-bone-100 shadow-md">
-                        {facePosition === "esquerda" ? "Criador à Esquerda" : "Criador à Direita"}
+                        {facePosition === "esquerda" ? t("tools.thumb.creator_on_left", {}, "Criador à Esquerda") : t("tools.thumb.creator_on_right", {}, "Criador à Direita")}
                       </span>
                       <span className="mt-1 font-mono text-[8.5px] text-bone-300 bg-black/75 px-2 py-0.5 rounded border border-ink-800 shadow">
                         {faceExpression.slice(0, 26)}…
@@ -458,7 +461,7 @@ function ThumbnailCanvas({
                   isMobile ? "px-1 py-0.2 text-[7px]" : "px-2 py-0.5 text-[9px]"
                 )}
               >
-                {isMobile ? "Erro / Antes" : "Lado A · O Erro / Antes"}
+                {isMobile ? t("tools.thumb.mockup_err_mobile", {}, "Erro / Antes") : t("tools.thumb.mockup_side_a", {}, "Lado A · O Erro / Antes")}
               </span>
               <p
                 className={cn(
@@ -466,7 +469,7 @@ function ThumbnailCanvas({
                   isMobile ? "mt-1 text-[8.5px]" : "mt-2 text-[12px]"
                 )}
               >
-                {isMobile ? "Situação comum" : "Situação comum ou produto barato"}
+                {isMobile ? t("tools.thumb.mockup_common_situation", {}, "Situação comum") : t("tools.thumb.mockup_common_situation_full", {}, "Situação comum ou produto barato")}
               </p>
             </div>
             <div
@@ -475,7 +478,7 @@ function ThumbnailCanvas({
                 isMobile ? "p-1 text-[8px]" : "p-2.5 text-[11px]"
               )}
             >
-              [Elemento ruim]
+              [{t("tools.thumb.bad_element", {}, "Elemento ruim")}]
             </div>
           </div>
 
@@ -507,7 +510,7 @@ function ThumbnailCanvas({
                 )}
                 style={{ borderColor: rimHex, background: `${rimHex}22`, color: rimHex }}
               >
-                {isMobile ? "Método / Depois" : "Lado B · O Método / Depois"}
+                {isMobile ? t("tools.thumb.mockup_method_mobile", {}, "Método / Depois") : t("tools.thumb.mockup_side_b", {}, "Lado B · O Método / Depois")}
               </span>
               {thumbText.trim() && (
                 <p
@@ -594,7 +597,7 @@ function ThumbnailCanvas({
               isMobile ? "text-[7.5px]" : "text-[9px]"
             )}
           >
-            Holofote central 100% no herói
+            {t("tools.thumb.hero_spotlight", {}, "Holofote central 100% no herói")}
           </span>
         </div>
       )}
@@ -616,7 +619,7 @@ function ThumbnailCanvas({
               <span className="h-1.5 w-1.5 rounded-full bg-red-400 inline-block mr-0.5" />
               <span className="h-1.5 w-1.5 rounded-full bg-yellow-400 inline-block mr-0.5" />
               <span className="h-1.5 w-1.5 rounded-full bg-green-400 inline-block mr-1" />
-              Tela / Sistema
+              {t("tools.thumb.screen_system", {}, "Tela / Sistema")}
             </div>
             {thumbText.trim() && (
               <span
@@ -649,7 +652,7 @@ function ThumbnailCanvas({
                   isMobile ? "px-1 py-0.2 text-[7px]" : "px-2 py-0.5 text-[9px]"
                 )}
               >
-                Zoom 200%
+                {t("tools.thumb.zoom_badge", {}, "Zoom 200%")}
               </span>
               <p
                 className={cn(
@@ -668,7 +671,7 @@ function ThumbnailCanvas({
               isMobile ? "text-[7.5px]" : "text-[9px]"
             )}
           >
-            Micro-avatar no canto inferior
+            {t("tools.thumb.micro_avatar_corner", {}, "Micro-avatar no canto inferior")}
           </div>
         </div>
       )}
@@ -687,7 +690,7 @@ function ThumbnailCanvas({
                 isMobile ? "text-[7.5px]" : "text-[9px]"
               )}
             >
-              Cena Narrativa
+              {t("tools.thumb.narrative_scene", {}, "Cena Narrativa")}
             </span>
             {thumbText.trim() && (
               <p
@@ -708,7 +711,7 @@ function ThumbnailCanvas({
                 isMobile ? "p-1 text-[7.5px]" : "p-2.5 text-[10px]"
               )}
             >
-              1. Contexto
+              1. {t("tools.thumb.context_label", {}, "Contexto")}
             </div>
             <div
               className={cn(
@@ -722,7 +725,7 @@ function ThumbnailCanvas({
                 className={isMobile ? "h-2.5 w-2.5" : "h-4 w-4"}
                 style={{ color: rimHex }}
               />
-              <span className="truncate">2. {slotType}</span>
+              <span className="truncate">2. {t(`tools.thumb.proof_types.${slotType}`, {}, slotType)}</span>
             </div>
             <div
               className={cn(
@@ -730,7 +733,7 @@ function ThumbnailCanvas({
                 isMobile ? "p-1 text-[7.5px]" : "p-2.5 text-[10px]"
               )}
             >
-              3. Sujeito
+              3. {t("tools.thumb.subject_label", {}, "Sujeito")}
             </div>
           </div>
 
@@ -740,7 +743,7 @@ function ThumbnailCanvas({
               isMobile ? "text-[7.5px]" : "text-[9px]"
             )}
           >
-            Equilíbrio triangular
+            {t("tools.thumb.triangular_balance", {}, "Equilíbrio triangular")}
           </span>
         </div>
       )}
@@ -763,7 +766,7 @@ function ThumbnailCanvas({
         {!isMobile && (
           <div className="hidden sm:flex items-center gap-1 rounded bg-red-950/80 border border-red-500/40 px-2 py-0.5 font-mono text-[8px] uppercase tracking-wider text-red-300">
             <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-            Zona do player (não coloque nada aqui)
+            {t("tools.thumb.player_zone_warning", {}, "Zona do player (não coloque nada aqui)")}
           </div>
         )}
       </div>
@@ -784,32 +787,39 @@ export function Thumbnail({
   profileName?: string;
   profileColor?: string;
 }) {
+  const { t, resolvedLanguage } = useI18n();
   const examples = useExampleMode();
+  const toolExamples = getLocalizedToolExamples(resolvedLanguage);
 
   /* Form States */
   const [tema, setTema] = useState(
-    examples ? "FIIs com R$100 não valem mais a pena" : calib?.niche ? calib.niche.slice(0, 50) : ""
+    examples ? toolExamples.thumbnailTopic : calib?.niche ? calib.niche.slice(0, 50) : ""
   );
   const [ctr, setCtr] = useState(examples ? "4.8" : calib?.ctr || "");
   const [archetypeId, setArchetypeId] = useState("rosto-prova");
-  const [thumbText, setThumbText] = useState(examples ? "NÃO FAÇA ISSO" : "");
+  const [thumbText, setThumbText] = useState(examples ? t("tools.thumb.default_thumb_text", {}, "NÃO FAÇA ISSO") : "");
   const [slotType, setSlotType] = useState(examples ? "extrato" : "print");
   const [slotDetail, setSlotDetail] = useState(
-    examples ? "Extrato de rendimentos caindo de R$1.200 para R$120 com seta vermelha" : "Print ou objeto de prova com número evidente"
+    examples ? toolExamples.thumbnailStyle : t("tools.thumb.slot_detail_default", {}, "Print ou objeto de prova com número evidente")
   );
   const [facePosition, setFacePosition] = useState<"direita" | "esquerda" | "centro" | "sem-rosto">("direita");
   const [faceExpression, setFaceExpression] = useState(
-    examples ? "Meio-corpo, olhar direcionado para o extrato, expressão de alerta contido" : "Expressão alinhada ao tom do vídeo"
+    examples ? t("tools.thumb.default_expression_sample", {}, "Meio-corpo, olhar direcionado para o extrato, expressão de alerta contido") : t("tools.thumb.default_expression", {}, "Expressão alinhada ao tom do vídeo")
   );
   const [bgHex, setBgHex] = useState("#0d0f13");
   const [rimHex, setRimHex] = useState("#f7b733");
-  const [topThumbs, setTopThumbs] = useState(
-    examples
-      ? "Print de extrato + rosto à direita\nGráfico caindo + expressão neutra"
-      : calib?.tops && calib.tops.length > 0
-      ? calib.tops.slice(0, 3).map((t) => `Estilo do top: ${t}`).join("\n")
-      : ""
-  );
+  const [topThumbs, setTopThumbs] = useState(() => {
+    if (examples) {
+      return t("tools.thumb.default_top_thumbs", {}, "Print de extrato + rosto à direita\nGráfico caindo + expressão neutra");
+    }
+    const topsList = calib?.tops
+      ? calib.tops.split(/[\n,]/).map((s: string) => s.trim()).filter(Boolean)
+      : [];
+    if (topsList.length > 0) {
+      return topsList.slice(0, 3).map((top: string) => `${t("tools.thumb.top_style_prefix", {}, "Estilo do top:")} ${top}`).join("\n");
+    }
+    return "";
+  });
 
   /* View Modes */
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
@@ -827,11 +837,14 @@ export function Thumbnail({
     if (calib) {
       if (!ctr && calib.ctr) setCtr(calib.ctr);
       if (!tema && calib.niche) setTema(calib.niche.slice(0, 50));
-      if (!topThumbs && calib.tops && calib.tops.length > 0) {
-        setTopThumbs(calib.tops.slice(0, 3).map((t) => `Estilo do top: ${t}`).join("\n"));
+      if (!topThumbs && calib.tops) {
+        const topsList = calib.tops.split(/[\n,]/).map((s: string) => s.trim()).filter(Boolean);
+        if (topsList.length > 0) {
+          setTopThumbs(topsList.slice(0, 3).map((top: string) => `${t("tools.thumb.top_style_prefix", {}, "Estilo do top:")} ${top}`).join("\n"));
+        }
       }
     }
-  }, [calib]);
+  }, [calib, t]);
 
   /* State restore */
   useToolRestore("thumbnail", (payload) => {
@@ -855,14 +868,14 @@ export function Thumbnail({
     if (!thumbText.trim()) {
       return {
         status: "neutral",
-        message: "Capa sem texto. Funciona muito bem quando o elemento visual é autoexplicativo.",
+        message: t("tools.thumb.comp_neutral", {}, "Capa sem texto. Funciona muito bem quando o elemento visual é autoexplicativo."),
       };
     }
     const words = thumbText.trim().split(/\s+/);
     if (words.length > 4) {
       return {
         status: "warning",
-        message: "Texto longo (mais de 4 palavras). No feed mobile do YouTube, palavras em excesso reduzem a legibilidade e o clique.",
+        message: t("tools.thumb.comp_warning", {}, "Texto longo (mais de 4 palavras). No feed mobile do YouTube, palavras em excesso reduzem a legibilidade e o clique."),
       };
     }
     if (tema.trim()) {
@@ -874,57 +887,57 @@ export function Thumbnail({
       if (overlapWords.length >= 2 || lowerTema.startsWith(lowerThumb)) {
         return {
           status: "alert",
-          message: "Atenção: A thumb está repetindo o título do vídeo. O título entrega a promessa racional; a thumb deve abrir uma lacuna de curiosidade complementar.",
+          message: t("tools.thumb.comp_alert", {}, "Atenção: A thumb está repetindo o título do vídeo. O título entrega a promessa racional; a thumb deve abrir uma lacuna de curiosidade complementar."),
         };
       }
     }
     return {
       status: "success",
-      message: "Excelente! Texto de apoio conciso e com alto potencial de curiosity gap.",
+      message: t("tools.thumb.comp_success", {}, "Excelente! Texto de apoio conciso e com alto potencial de curiosity gap."),
     };
-  }, [thumbText, tema]);
+  }, [thumbText, tema, t]);
 
   /* Geração do Briefing Técnico para Designer */
   const designerBrief = useMemo(() => {
-    return `BRIEFING DE THUMBNAIL — ${tema || "Sem título definido"}
-Canal: ${profileName || "Canal Principal"} | CTR Base: ${ctr ? `${ctr}%` : "Não informado"}
+    return `${t("tools.thumb.brief_header", { topic: tema || t("tools.thumb.no_title", {}, "Sem título definido") }, `BRIEFING DE THUMBNAIL — ${tema || "Sem título definido"}`)}
+${t("tools.thumb.channel_label", {}, "Canal")}: ${profileName || t("tools.thumb.main_channel", {}, "Canal Principal")} | ${t("tools.thumb.ctr_base_label", {}, "CTR Base")}: ${ctr ? `${ctr}%` : t("tools.thumb.not_reported", {}, "Não informado")}
 
-1. ARQUÉTIPO & ENQUADRAMENTO
+${t("tools.thumb.sec_1", {}, "1. ARQUÉTIPO & ENQUADRAMENTO")}
 - Layout: ${currentArchetype.name} (${currentArchetype.tag})
-- Proporção: 16:9 (1280 × 720 px, renderizado em sRGB)
-- Foco: ${currentArchetype.description}
+- ${t("tools.thumb.aspect_ratio_label", {}, "Proporção")}: 16:9 (1280 × 720 px, renderizado em sRGB)
+- ${t("tools.thumb.focus_label", {}, "Foco")}: ${currentArchetype.description}
 
-2. ELEMENTO PRINCIPAL DE PROVA (${slotType.toUpperCase()})
-- O que colocar: ${slotDetail}
-- Regra de legibilidade: O elemento deve ser compreendido em 1 segundo em uma tela de 300px.
-- Zonas de segurança: Manter margem livre de 15% no canto inferior direito (onde o YouTube projeta o timecode de duração).
+${t("tools.thumb.sec_2", {}, "2. ELEMENTO PRINCIPAL DE PROVA")} (${slotType.toUpperCase()})
+- ${t("tools.thumb.what_to_put", {}, "O que colocar")}: ${slotDetail}
+- ${t("tools.thumb.readability_rule", {}, "Regra de legibilidade")}: ${t("tools.thumb.readability_desc", {}, "O elemento deve ser compreendido em 1 segundo em uma tela de 300px.")}
+- ${t("tools.thumb.safety_zones", {}, "Zonas de segurança")}: ${t("tools.thumb.safety_zones_desc", {}, "Manter margem livre de 15% no canto inferior direito (onde o YouTube projeta o timecode de duração).")}
 
-3. APRESENTADOR & FOTO DO CRIADOR
-- Posição: ${
+${t("tools.thumb.sec_3", {}, "3. APRESENTADOR & FOTO DO CRIADOR")}
+- ${t("tools.thumb.position_label", {}, "Posição")}: ${
       facePosition === "sem-rosto"
-        ? "Sem rosto nesta capa (foco 100% no elemento/interface)"
+        ? t("tools.thumb.pos_faceless", {}, "Sem rosto nesta capa (foco 100% no elemento/interface)")
         : facePosition === "direita"
-        ? "Recorte de meio-corpo no terço direito"
+        ? t("tools.thumb.pos_right", {}, "Recorte de meio-corpo no terço direito")
         : facePosition === "esquerda"
-        ? "Recorte de meio-corpo no terço esquerdo"
-        : "Recorte centralizado"
+        ? t("tools.thumb.pos_left", {}, "Recorte de meio-corpo no terço esquerdo")
+        : t("tools.thumb.pos_center", {}, "Recorte centralizado")
     }
-- Expressão & Olhar: ${faceExpression}
-- Iluminação de contorno (Rim Light): Luz de recorte na cor ${rimHex} para separar o criador do fundo escuro.
-- Regra de Ouro: Sempre compor por cima da foto real. Nunca substituir ou regenerar o rosto com IA.
+- ${t("tools.thumb.expression_look", {}, "Expressão & Olhar")}: ${faceExpression}
+- ${t("tools.thumb.rim_lighting", {}, "Iluminação de contorno (Rim Light)")}: ${t("tools.thumb.rim_desc", { color: rimHex }, `Luz de recorte na cor ${rimHex} para separar o criador do fundo escuro.`)}
+- ${t("tools.thumb.golden_rule_label", {}, "Regra de Ouro")}: ${t("tools.thumb.golden_rule_camera", {}, "Sempre compor por cima da foto real. Nunca substituir ou regenerar o rosto com IA.")}
 
-4. TEXTO NA CAPA (COPY VISUAL)
-- Texto exato: ${thumbText.trim() ? `"${thumbText.toUpperCase()}"` : "[SEM TEXTO NA CAPA — FOCO VISUAL PURO]"}
-- Hierarquia: Tipografia bold/black sem serifa, alto contraste, sem sobrepor o elemento focal.
-- Complementaridade: Não repetir as palavras do título do vídeo.
+${t("tools.thumb.sec_4", {}, "4. TEXTO NA CAPA (COPY VISUAL)")}
+- ${t("tools.thumb.exact_text", {}, "Texto exato")}: ${thumbText.trim() ? `"${thumbText.toUpperCase()}"` : `[${t("tools.thumb.no_cover_text", {}, "SEM TEXTO NA CAPA — FOCO VISUAL PURO")}]`}
+- ${t("tools.thumb.hierarchy", {}, "Hierarquia")}: ${t("tools.thumb.hierarchy_desc", {}, "Tipografia bold/black sem serifa, alto contraste, sem sobrepor o elemento focal.")}
+- ${t("tools.thumb.complementarity", {}, "Complementaridade")}: ${t("tools.thumb.complementarity_desc", {}, "Não repetir as palavras do título do vídeo.")}
 
-5. PALETA & ATMOSFERA
-- Fundo: ${bgHex} (atmosfera de estúdio escuro com vinheta/profundidade)
-- Luz de Destaque / Rim Light: ${rimHex}
-- Contraste: Alto contraste entre sujeito, elemento e fundo.
+${t("tools.thumb.sec_5", {}, "5. PALETA & ATMOSFERA")}
+- ${t("tools.thumb.bg_label", {}, "Fundo")}: ${bgHex} (${t("tools.thumb.bg_atmosphere", {}, "atmosfera de estúdio escuro com vinheta/profundidade")})
+- ${t("tools.thumb.rim_light_accent", {}, "Luz de Destaque / Rim Light")}: ${rimHex}
+- ${t("tools.thumb.contrast_label", {}, "Contraste")}: ${t("tools.thumb.contrast_desc", {}, "Alto contraste entre sujeito, elemento e fundo.")}
 
-6. HISTÓRICO DE THUMBS COM ALTO CTR NO CANAL
-${topThumbs || "Sem histórico registrado"}`;
+${t("tools.thumb.sec_6", {}, "6. HISTÓRICO DE THUMBS COM ALTO CTR NO CANAL")}
+${topThumbs || t("tools.thumb.no_history_recorded", {}, "Sem histórico registrado")}`;
   }, [
     tema,
     profileName,
@@ -938,6 +951,7 @@ ${topThumbs || "Sem histórico registrado"}`;
     thumbText,
     bgHex,
     topThumbs,
+    t,
   ]);
 
   /* Geração do Prompt Estruturado para IA (Midjourney / Flux / Firefly) */
@@ -957,9 +971,17 @@ ${topThumbs || "Sem histórico registrado"}`;
 
   const currentBriefOutput = activeTab === "designer" ? designerBrief : aiPrompt;
 
-  const friendlySummary = `Briefing de Thumbnail (${currentArchetype.name}) · Destaque: ${slotType} · ${
-    thumbText ? `Copy: "${thumbText}"` : "Sem texto"
-  }`;
+  const friendlySummary = t(
+    "tools.thumb.friendly_summary",
+    {
+      arch: currentArchetype.name,
+      slot: slotType,
+      copy: thumbText ? `Copy: "${thumbText}"` : t("tools.thumb.no_text", {}, "Sem texto"),
+    },
+    `Briefing de Thumbnail (${currentArchetype.name}) · Destaque: ${slotType} · ${
+      thumbText ? `Copy: "${thumbText}"` : "Sem texto"
+    }`
+  );
 
   const currentSavePayload = useMemo(() => {
     const itemTitle = tema.trim()
@@ -971,7 +993,7 @@ ${topThumbs || "Sem histórico registrado"}`;
     return {
       type: "thumbnail",
       group: "Criação" as const,
-      toolName: "Briefing Thumbnail",
+      toolName: t("tools.thumb.title", {}, "Briefing Thumbnail"),
       title: itemTitle,
       summary: friendlySummary,
       tag: currentArchetype.name,
@@ -1005,32 +1027,33 @@ ${topThumbs || "Sem histórico registrado"}`;
     bgHex,
     rimHex,
     topThumbs,
+    t,
   ]);
 
   useAutosave(
     () => ({
       tool: "thumbnail",
-      toolName: "Briefing Thumbnail",
+      toolName: t("tools.thumb.title", {}, "Briefing Thumbnail"),
       title: currentSavePayload.title,
       summary: friendlySummary,
       tag: currentArchetype.name,
       content: designerBrief,
     }),
-    [designerBrief, currentSavePayload.title, friendlySummary, currentArchetype.name],
+    [designerBrief, currentSavePayload.title, friendlySummary, currentArchetype.name, t],
     8
   );
 
   return (
     <ToolShell
       id="thumbnail"
-      title="Briefing Thumbnail"
+      title={t("tools.thumb.title", {}, "Briefing Thumbnail")}
       accent="plum"
-      lede="Engenharia visual de CTR: composição por arquétipos reais, validação de curiosity gap e briefing executável para designer ou IA, livre de dogmas engessados."
+      lede={t("tools.thumb.lede", {}, "Engenharia visual de CTR: composição por arquétipos reais, validação de curiosity gap e briefing executável para designer ou IA, livre de dogmas engessados.")}
       meta={[
-        { k: "Proporção", v: "16:9" },
-        { k: "Arquétipo", v: currentArchetype.tag },
-        { k: "Texto na capa", v: thumbText ? `${thumbText.split(/\s+/).length} pal.` : "0" },
-        { k: "CTR Base", v: ctr ? `${ctr}%` : "—" },
+        { k: t("tools.thumb.aspect_ratio", {}, "Proporção"), v: "16:9" },
+        { k: t("tools.thumb.archetype", {}, "Arquétipo"), v: currentArchetype.tag },
+        { k: t("tools.thumb.text_on_cover", {}, "Texto na capa"), v: thumbText ? `${thumbText.split(/\s+/).length} ${t("tools.thumb.words_short", {}, "pal.")}` : "0" },
+        { k: t("tools.thumb.ctr_base", {}, "CTR Base"), v: ctr ? `${ctr}%` : "—" },
       ]}
       onBack={onBack}
       onGo={onGo}
@@ -1038,47 +1061,47 @@ ${topThumbs || "Sem histórico registrado"}`;
       aside={
         <div className="space-y-4 xl:sticky xl:top-6">
           {/* Princípios de Alto CTR */}
-          <Card title="Princípios de Alto CTR" note="métricas reais" accent="plum">
+          <Card title={t("tools.thumb.high_ctr_principles", {}, "Princípios de Alto CTR")} note={t("tools.thumb.real_metrics", {}, "métricas reais")} accent="plum">
             <ul className="space-y-2.5 text-[12px] leading-relaxed text-bone-300">
               <li className="flex items-start gap-2">
                 <Icon name="check" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-plum-400" strokeWidth={2.4} />
                 <span>
-                  <strong className="text-bone-100">Complementaridade:</strong> A thumb e o título formam uma história de duas partes. A thumb nunca repete o título.
+                  <strong className="text-bone-100">{t("tools.thumb.principle_1_strong", {}, "Complementaridade:")}</strong> {t("tools.thumb.principle_1_span", {}, "A thumb e o título formam uma história de duas partes. A thumb nunca repete o título.")}
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <Icon name="check" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-plum-400" strokeWidth={2.4} />
                 <span>
-                  <strong className="text-bone-100">Teste de 1 segundo:</strong> Em uma tela pequena de celular, o espectador precisa entender o assunto sem ler nada.
+                  <strong className="text-bone-100">{t("tools.thumb.principle_2_strong", {}, "Teste de 1 segundo:")}</strong> {t("tools.thumb.principle_2_span", {}, "Em uma tela pequena de celular, o espectador precisa entender o assunto sem ler nada.")}
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <Icon name="check" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-plum-400" strokeWidth={2.4} />
                 <span>
-                  <strong className="text-bone-100">Luz de Contorno (Rim Light):</strong> Isola o sujeito do fundo escuro e garante que a imagem não vire uma massa cinzenta.
+                  <strong className="text-bone-100">{t("tools.thumb.principle_3_strong", {}, "Luz de Contorno (Rim Light):")}</strong> {t("tools.thumb.principle_3_span", {}, "Isola o sujeito do fundo escuro e garante que a imagem não vire uma massa cinzenta.")}
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <Icon name="check" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-plum-400" strokeWidth={2.4} />
                 <span>
-                  <strong className="text-bone-100">Zonas Cegas:</strong> O timecode do YouTube cobre cerca de 15% do canto inferior direito no mobile e desktop.
+                  <strong className="text-bone-100">{t("tools.thumb.principle_4_strong", {}, "Zonas Cegas:")}</strong> {t("tools.thumb.principle_4_span", {}, "O timecode do YouTube cobre cerca de 15% do canto inferior direito no mobile e desktop.")}
                 </span>
               </li>
             </ul>
           </Card>
 
           {/* Paleta Ativa */}
-          <Card title="Paleta da Composição" accent="signal">
+          <Card title={t("tools.thumb.palette_title", {}, "Paleta da Composição")} accent="signal">
             <div className="space-y-3">
               <div className="flex items-center justify-between text-[11.5px]">
-                <span className="text-bone-400 font-mono text-[11px]">Fundo:</span>
+                <span className="text-bone-400 font-mono text-[11px]">{t("tools.thumb.background_label", {}, "Fundo:")}</span>
                 <div className="flex items-center gap-2">
                   <span className="h-4 w-4 rounded-full border border-ink-600" style={{ background: bgHex }} />
                   <span className="font-mono text-[10.5px] text-bone-200">{bgHex}</span>
                 </div>
               </div>
               <div className="flex items-center justify-between text-[11.5px]">
-                <span className="text-bone-400 font-mono text-[11px]">Luz de recorte (Rim):</span>
+                <span className="text-bone-400 font-mono text-[11px]">{t("tools.thumb.rim_light_label", {}, "Luz de recorte (Rim):")}</span>
                 <div className="flex items-center gap-2">
                   <span className="h-4 w-4 rounded-full border border-ink-600 shadow-[0_0_8px_currentColor]" style={{ background: rimHex, color: rimHex }} />
                   <span className="font-mono text-[10.5px] text-signal-300 font-semibold">{rimHex}</span>
@@ -1092,11 +1115,11 @@ ${topThumbs || "Sem histórico registrado"}`;
             <div className="mb-1.5 flex items-center gap-2">
               <Icon name="eye" className="h-4 w-4 text-oxide-400" />
               <span className="font-mono text-[9.5px] tracking-[0.18em] text-oxide-400 uppercase">
-                Regra Inviolável
+                {t("tools.thumb.golden_rule_tag", {}, "Regra Inviolável")}
               </span>
             </div>
             <p className="text-[12px] leading-relaxed text-bone-200">
-              Nunca substitua seu rosto por IA. O público do YouTube clica na confiança e na expressão humana real. Use IA apenas para gerar fundos, objetos ou texturas.
+              {t("tools.thumb.golden_rule_desc", {}, "Nunca substitua seu rosto por IA. O público do YouTube clica na confiança e na expressão humana real. Use IA apenas para gerar fundos, objetos ou texturas.")}
             </p>
           </div>
         </div>
@@ -1106,13 +1129,13 @@ ${topThumbs || "Sem histórico registrado"}`;
         calib={calib}
         profileName={profileName}
         profileColor={profileColor}
-        toolName="Briefing Thumbnail"
+        toolName={t("tools.thumb.title", {}, "Briefing Thumbnail")}
         onGo={onGo}
         onGoCalib={() => onGo("calibracao")}
       />
 
       {/* ------------------------------------------------ SELETOR DE ARQUÉTIPOS */}
-      <Card title="Arquétipo de Composição" note="escolha a estrutura visual" accent="plum">
+      <Card title={t("tools.thumb.archetype_selector", {}, "Arquétipo de Composição")} note={t("tools.thumb.choose_structure", {}, "escolha a estrutura visual")} accent="plum">
         <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {ARCHETYPES.map((arch) => {
             const isSelected = arch.id === archetypeId;
@@ -1131,18 +1154,18 @@ ${topThumbs || "Sem histórico registrado"}`;
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <span className={cn("font-display text-[13.5px] font-bold", isSelected ? "text-plum-300" : "text-bone-100")}>
-                      {arch.name}
+                      {t(`tools.thumb.archetypes.${arch.id}.name`, {}, arch.name)}
                     </span>
                     <span className="rounded bg-ink-800 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-ink-300">
-                      {arch.tag}
+                      {t(`tools.thumb.archetypes.${arch.id}.tag`, {}, arch.tag)}
                     </span>
                   </div>
                   <p className="mt-1.5 text-[11.5px] leading-relaxed text-bone-400">
-                    {arch.description}
+                    {t(`tools.thumb.archetypes.${arch.id}.desc`, {}, arch.description)}
                   </p>
                 </div>
                 <div className="mt-3 border-t border-ink-800/60 pt-2 font-mono text-[9px] tracking-wider text-ink-400 uppercase">
-                  Ideal p/: <span className="text-bone-300">{arch.bestFor}</span>
+                  {t("tools.thumb.ideal_for", {}, "Ideal p/:")} <span className="text-bone-300">{t(`tools.thumb.archetypes.${arch.id}.best_for`, {}, arch.bestFor)}</span>
                 </div>
               </button>
             );
@@ -1152,8 +1175,8 @@ ${topThumbs || "Sem histórico registrado"}`;
 
       {/* ------------------------------------------- MOCKUP DE COMPOSIÇÃO DINÂMICO */}
       <Card
-        title="Layout de Composição & Mockup Visual"
-        note="prévia em escala real"
+        title={t("tools.thumb.mockup_title", {}, "Layout de Composição & Mockup Visual")}
+        note={t("tools.thumb.mockup_note", {}, "prévia em escala real")}
         accent="signal"
         className="mt-6"
       >
@@ -1161,14 +1184,14 @@ ${topThumbs || "Sem histórico registrado"}`;
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-ink-800/80 pb-3">
           <div className="flex items-center gap-2">
             <span className="font-mono text-[10px] uppercase tracking-wider text-ink-400">
-              Modo de Visualização:
+              {t("tools.thumb.view_mode", {}, "Modo de Visualização:")}
             </span>
             <Segmented
               value={previewMode}
               onChange={(v) => setPreviewMode(v as "desktop" | "mobile")}
               options={[
-                { id: "desktop", label: "Desktop (16:9)" },
-                { id: "mobile", label: "Feed Mobile (Teste 1s)" },
+                { id: "desktop", label: t("tools.thumb.desktop_opt", {}, "Desktop (16:9)") },
+                { id: "mobile", label: t("tools.thumb.mobile_opt", {}, "Feed Mobile (Teste 1s)") },
               ]}
             />
           </div>
@@ -1184,7 +1207,7 @@ ${topThumbs || "Sem histórico registrado"}`;
             )}
           >
             <Icon name="frame" className="h-3 w-3" />
-            {showGuides ? "Guias Ativas (Regra dos Terços)" : "Ocultar Guias"}
+            {showGuides ? t("tools.thumb.guides_active", {}, "Guias Ativas (Regra dos Terços)") : t("tools.thumb.guides_hide", {}, "Ocultar Guias")}
           </button>
         </div>
 
@@ -1273,16 +1296,16 @@ ${topThumbs || "Sem histórico registrado"}`;
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="line-clamp-2 text-[11.5px] font-bold leading-snug text-white">
-                          {tema || "Título do vídeo otimizado para o algoritmo do YouTube"}
+                          {tema || t("tools.thumb.default_video_title_mobile", {}, "Título do vídeo otimizado para o algoritmo do YouTube")}
                         </h4>
                         <div className="mt-1 flex items-center gap-1 text-[9px] text-ink-400 font-mono">
                           <span className="truncate max-w-[100px] text-bone-300 font-medium">
-                            {profileName || "Seu Canal"}
+                            {profileName || t("tools.thumb.your_channel", {}, "Seu Canal")}
                           </span>
                           <span>•</span>
-                          <span>128 mil views</span>
+                          <span>{t("tools.thumb.views_sample", {}, "128 mil views")}</span>
                           <span>•</span>
-                          <span>há 1 dia</span>
+                          <span>{t("tools.thumb.date_sample", {}, "há 1 dia")}</span>
                         </div>
                       </div>
                       <button type="button" className="text-ink-400 hover:text-bone-200 text-sm font-bold px-0.5">
@@ -1296,22 +1319,22 @@ ${topThumbs || "Sem histórico registrado"}`;
                 <div className="mt-2.5 flex items-center justify-around border-t border-ink-800/80 pt-2 pb-1 text-ink-400 text-[8.5px] font-mono uppercase tracking-wider select-none">
                   <div className="flex flex-col items-center gap-0.5 text-white font-bold">
                     <span className="text-[11px]">🏠</span>
-                    <span>Início</span>
+                    <span>{t("tools.thumb.nav_home", {}, "Início")}</span>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
                     <span className="text-[11px]">⚡</span>
-                    <span>Shorts</span>
+                    <span>{t("tools.thumb.nav_shorts", {}, "Shorts")}</span>
                   </div>
                   <div className="flex h-5 w-5 items-center justify-center rounded-full border border-bone-300 text-white font-bold text-[11px]">
                     +
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
                     <span className="text-[11px]">🔔</span>
-                    <span>Inscrições</span>
+                    <span>{t("tools.thumb.nav_subs", {}, "Inscrições")}</span>
                   </div>
                   <div className="flex flex-col items-center gap-0.5">
                     <span className="text-[11px]">👤</span>
-                    <span>Você</span>
+                    <span>{t("tools.thumb.nav_you", {}, "Você")}</span>
                   </div>
                 </div>
               </div>
@@ -1323,7 +1346,7 @@ ${topThumbs || "Sem histórico registrado"}`;
                     <div className="flex items-center gap-2">
                       <Icon name="gauge" className="h-4 w-4 text-signal-400" />
                       <h4 className="font-mono text-[11px] font-bold uppercase tracking-wider text-bone-100">
-                        Auditoria de 1 Segundo no Feed
+                        {t("tools.thumb.audit_title", {}, "Auditoria de 1 Segundo no Feed")}
                       </h4>
                     </div>
                     <span className="font-mono text-[10px] text-signal-400 font-bold bg-signal-400/10 px-2 py-0.5 rounded border border-signal-400/30">
@@ -1336,7 +1359,7 @@ ${topThumbs || "Sem histórico registrado"}`;
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-semibold text-bone-100 flex items-center gap-1.5">
                           <span className="h-2 w-2 rounded-full bg-signal-400" />
-                          1. Legibilidade do Texto (Copy)
+                          {t("tools.thumb.audit_copy_title", {}, "1. Legibilidade do Texto (Copy)")}
                         </span>
                         <span
                           className={cn(
@@ -1348,15 +1371,15 @@ ${topThumbs || "Sem histórico registrado"}`;
                               : "bg-ink-800 text-bone-400"
                           )}
                         >
-                          {thumbText ? `${thumbText.split(/\s+/).length} palavras` : "Sem texto"}
+                          {thumbText ? `${thumbText.split(/\s+/).length} ${t("tools.thumb.words_short", {}, "palavras")}` : t("tools.thumb.no_text", {}, "Sem texto")}
                         </span>
                       </div>
                       <p className="text-ink-400 text-[11px]">
                         {thumbText
                           ? thumbText.split(/\s+/).length <= 4
-                            ? "Excelente: o texto é curto o suficiente para ser lido em fração de segundo enquanto o usuário rola o feed."
-                            : "Atenção: textos longos viram ruído visual no celular. Mantenha em 1 a 4 palavras."
-                          : "Sem texto na capa: toda a conversão dependerá da força do elemento visual e do título."}
+                            ? t("tools.thumb.audit_copy_good", {}, "Excelente: o texto é curto o suficiente para ser lido em fração de segundo enquanto o usuário rola o feed.")
+                            : t("tools.thumb.audit_copy_warn", {}, "Atenção: textos longos viram ruído visual no celular. Mantenha em 1 a 4 palavras.")
+                          : t("tools.thumb.audit_copy_none", {}, "Sem texto na capa: toda a conversão dependerá da força do elemento visual e do título.")}
                       </p>
                     </div>
 
@@ -1364,7 +1387,7 @@ ${topThumbs || "Sem histórico registrado"}`;
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-semibold text-bone-100 flex items-center gap-1.5">
                           <span className="h-2 w-2 rounded-full" style={{ background: rimHex }} />
-                          2. Destaque Visual & Rim Light
+                          {t("tools.thumb.audit_highlight_title", {}, "2. Destaque Visual & Rim Light")}
                         </span>
                         <span
                           className="font-mono text-[9px] uppercase px-1.5 py-0.2 rounded font-bold"
@@ -1374,7 +1397,7 @@ ${topThumbs || "Sem histórico registrado"}`;
                         </span>
                       </div>
                       <p className="text-ink-400 text-[11px]">
-                        O contorno de recorte em <strong style={{ color: rimHex }}>{rimHex}</strong> garante que a silhueta ou o objeto <strong className="text-bone-200">({slotType})</strong> não desapareçam no fundo escuro do YouTube móvel.
+                        {t("tools.thumb.audit_highlight_desc", { color: rimHex, slot: slotType }, `O contorno de recorte em ${rimHex} garante que a silhueta ou o objeto (${slotType}) não desapareçam no fundo escuro do YouTube móvel.`)}
                       </p>
                     </div>
 
@@ -1382,14 +1405,14 @@ ${topThumbs || "Sem histórico registrado"}`;
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-semibold text-bone-100 flex items-center gap-1.5">
                           <span className="h-2 w-2 rounded-full bg-mint-400" />
-                          3. Zona Cega do Timecode (14:28)
+                          {t("tools.thumb.audit_blindzone_title", {}, "3. Zona Cega do Timecode (14:28)")}
                         </span>
                         <span className="font-mono text-[9px] uppercase px-1.5 py-0.2 rounded font-bold bg-mint-400/20 text-mint-300">
-                          Verificado
+                          {t("tools.thumb.verified", {}, "Verificado")}
                         </span>
                       </div>
                       <p className="text-ink-400 text-[11px]">
-                        A badge oficial de tempo do YouTube sobrepõe o canto inferior direito. Certifique-se no mockup de que rostos ou textos críticos não estão nessa área.
+                        {t("tools.thumb.audit_blindzone_desc", {}, "A badge oficial de tempo do YouTube sobrepõe o canto inferior direito. Certifique-se no mockup de que rostos ou textos críticos não estão nessa área.")}
                       </p>
                     </div>
 
@@ -1397,14 +1420,14 @@ ${topThumbs || "Sem histórico registrado"}`;
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-semibold text-bone-100 flex items-center gap-1.5">
                           <span className="h-2 w-2 rounded-full bg-plum-400" />
-                          4. Complementaridade (Capa + Título)
+                          {t("tools.thumb.audit_gap_title", {}, "4. Complementaridade (Capa + Título)")}
                         </span>
                         <span className="font-mono text-[9px] uppercase px-1.5 py-0.2 rounded font-bold bg-plum-400/20 text-plum-300">
                           Curiosity Gap
                         </span>
                       </div>
                       <p className="text-ink-400 text-[11px]">
-                        A thumbnail chama a atenção sensorial; o título explica a proposta de valor. Juntos, eles geram a urgência do clique no feed.
+                        {t("tools.thumb.audit_gap_desc", {}, "A thumbnail chama a atenção sensorial; o título explica a proposta de valor. Juntos, eles geram a urgência do clique no feed.")}
                       </p>
                     </div>
                   </div>
@@ -1418,26 +1441,28 @@ ${topThumbs || "Sem histórico registrado"}`;
       {/* ------------------------------------------- CONFIGURAÇÃO DETALHADA */}
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         {/* Card: Elemento de Prova & Copy */}
-        <Card title="Gatilhos Visuais & Copy" note="elementos da capa" accent="mint">
+        <Card title={t("tools.thumb.triggers_and_copy", {}, "Gatilhos Visuais & Copy")} note={t("tools.thumb.cover_elements", {}, "elementos da capa")} accent="mint">
           <div className="space-y-4">
             {/* Tema ou Título do Vídeo */}
             <div>
               <div className="flex items-center justify-between">
-                <Label hint="contexto e título do vídeo">Tema ou Título do Vídeo</Label>
+                <Label hint={t("tools.thumb.topic_hint", {}, "contexto e título do vídeo")}>
+                  {t("tools.thumb.topic_label", {}, "Tema ou Título do Vídeo")}
+                </Label>
                 {tema && (
                   <button
                     type="button"
                     onClick={() => setTema("")}
                     className="font-mono text-[10px] text-ink-400 hover:text-bone-200 cursor-pointer"
                   >
-                    limpar
+                    {t("tools.thumb.clear", {}, "limpar")}
                   </button>
                 )}
               </div>
               <Input
                 value={tema}
                 onChange={(e) => setTema(e.target.value)}
-                placeholder="Ex: Como começar a investir em 2026, Análise completa..."
+                placeholder={t("tools.thumb.topic_ph", {}, "Ex: Como começar a investir em 2026, Análise completa...")}
                 className="font-medium text-[13px]"
               />
             </div>
@@ -1445,21 +1470,23 @@ ${topThumbs || "Sem histórico registrado"}`;
             {/* Texto da Capa */}
             <div>
               <div className="flex items-center justify-between">
-                <Label hint="máx 3 a 4 palavras">Texto na Capa (Copy da Thumb)</Label>
+                <Label hint={t("tools.thumb.max_words_hint", {}, "máx 3 a 4 palavras")}>
+                  {t("tools.thumb.cover_text_label", {}, "Texto na Capa (Copy da Thumb)")}
+                </Label>
                 {thumbText && (
                   <button
                     type="button"
                     onClick={() => setThumbText("")}
                     className="font-mono text-[10px] text-ink-400 hover:text-bone-200"
                   >
-                    limpar (sem texto)
+                    {t("tools.thumb.clear_no_text", {}, "limpar (sem texto)")}
                   </button>
                 )}
               </div>
               <Input
                 value={thumbText}
                 onChange={(e) => setThumbText(e.target.value)}
-                placeholder="Ex: NÃO FAÇA ISSO, R$ 0 A R$ 10k..."
+                placeholder={t("tools.thumb.cover_text_ph", {}, "Ex: NÃO FAÇA ISSO, R$ 0 A R$ 10k...")}
                 className="font-display text-[15px] font-bold uppercase tracking-tight"
               />
 
@@ -1483,26 +1510,31 @@ ${topThumbs || "Sem histórico registrado"}`;
               {/* Chips Rápidos de Inspiração */}
               <div className="mt-2.5">
                 <span className="block font-mono text-[9.5px] uppercase tracking-wider text-ink-400 mb-1.5">
-                  Sugestões de Curiosity Gap:
+                  {t("tools.thumb.curiosity_gap_sugg", {}, "Sugestões de Curiosity Gap:")}
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {QUICK_TEXT_CHIPS.map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => setThumbText(chip)}
-                      className="rounded border border-ink-800 bg-ink-950/60 px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-wider text-bone-300 transition-colors hover:border-signal-400/50 hover:text-signal-300"
-                    >
-                      {chip}
-                    </button>
-                  ))}
+                  {QUICK_TEXT_CHIPS.map((chip, chipIdx) => {
+                    const localizedChip = t(`tools.thumb.quick_chips.${chipIdx}`, {}, chip);
+                    return (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => setThumbText(localizedChip)}
+                        className="rounded border border-ink-800 bg-ink-950/60 px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-wider text-bone-300 transition-colors hover:border-signal-400/50 hover:text-signal-300"
+                      >
+                        {localizedChip}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
             {/* Elemento de Prova */}
             <div>
-              <Label hint="o que o olho busca primeiro">Tipo de Elemento Central</Label>
+              <Label hint={t("tools.thumb.element_eye_hint", {}, "o que o olho busca primeiro")}>
+                {t("tools.thumb.central_element_type", {}, "Tipo de Elemento Central")}
+              </Label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {PROOF_TYPES.map((pt) => (
                   <button
@@ -1517,46 +1549,52 @@ ${topThumbs || "Sem histórico registrado"}`;
                     )}
                   >
                     <Icon name={getProofIcon(pt.id)} className="h-3.5 w-3.5 shrink-0" />
-                    <span>{pt.label}</span>
+                    <span>{t(`tools.thumb.proof_types.${pt.id}`, {}, pt.label)}</span>
                   </button>
                 ))}
               </div>
             </div>
 
             <div>
-              <Label hint="específico e concreto">Detalhe do Elemento Central</Label>
+              <Label hint={t("tools.thumb.element_spec_hint", {}, "específico e concreto")}>
+                {t("tools.thumb.central_element_detail", {}, "Detalhe do Elemento Central")}
+              </Label>
               <Textarea
                 rows={2}
                 value={slotDetail}
                 onChange={(e) => setSlotDetail(e.target.value)}
-                placeholder="Ex: Print do extrato bancário com rendimentos em queda e seta vermelha apontando..."
+                placeholder={t("tools.thumb.element_detail_ph", {}, "Ex: Print do extrato bancário com rendimentos em queda e seta vermelha apontando...")}
               />
             </div>
           </div>
         </Card>
 
         {/* Card: Direção do Criador & Cores */}
-        <Card title="Criador & Iluminação" note="foto e iluminação" accent="signal">
+        <Card title={t("tools.thumb.creator_lighting", {}, "Criador & Iluminação")} note={t("tools.thumb.photo_lighting", {}, "foto e iluminação")} accent="signal">
           <div className="space-y-4">
             {/* Tema do Vídeo */}
             <div>
-              <Label hint="para conferir complementaridade">Título / Tema do Vídeo</Label>
+              <Label hint={t("tools.thumb.check_comp_hint", {}, "para conferir complementaridade")}>
+                {t("tools.thumb.video_topic_label", {}, "Título / Tema do Vídeo")}
+              </Label>
               <Input
                 value={tema}
                 onChange={(e) => setTema(e.target.value)}
-                placeholder="Ex: FIIs com R$100 não valem mais a pena"
+                placeholder={t("tools.thumb.video_topic_ph", {}, "Ex: FIIs com R$100 não valem mais a pena")}
               />
             </div>
 
             {/* Posição do Apresentador */}
             <div>
-              <Label hint="enquadramento no canvas">Posição do Apresentador</Label>
+              <Label hint={t("tools.thumb.framing_hint", {}, "enquadramento no canvas")}>
+                {t("tools.thumb.presenter_position", {}, "Posição do Apresentador")}
+              </Label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                 {[
-                  { id: "direita", label: "Direita", tag: "40%" },
-                  { id: "esquerda", label: "Esquerda", tag: "40%" },
-                  { id: "centro", label: "Centro", tag: "Foco" },
-                  { id: "sem-rosto", label: "Sem Rosto", tag: "100% Prova" },
+                  { id: "direita", label: t("tools.thumb.pos_btn_right", {}, "Direita"), tag: "40%" },
+                  { id: "esquerda", label: t("tools.thumb.pos_btn_left", {}, "Esquerda"), tag: "40%" },
+                  { id: "centro", label: t("tools.thumb.pos_btn_center", {}, "Centro"), tag: t("tools.thumb.pos_tag_focus", {}, "Foco") },
+                  { id: "sem-rosto", label: t("tools.thumb.pos_btn_faceless", {}, "Sem Rosto"), tag: t("tools.thumb.pos_tag_proof", {}, "100% Prova") },
                 ].map((pos) => {
                   const isSel = facePosition === pos.id;
                   return (
@@ -1586,11 +1624,13 @@ ${topThumbs || "Sem histórico registrado"}`;
             {/* Expressão do Apresentador */}
             {facePosition !== "sem-rosto" && (
               <div>
-                <Label hint="como o criador deve posar">Expressão & Olhar da Foto</Label>
+                <Label hint={t("tools.thumb.pose_hint", {}, "como o criador deve posar")}>
+                  {t("tools.thumb.expression_label", {}, "Expressão & Olhar da Foto")}
+                </Label>
                 <Input
                   value={faceExpression}
                   onChange={(e) => setFaceExpression(e.target.value)}
-                  placeholder="Ex: Meio-corpo, olhar fixo para o gráfico, sobrancelha franzida..."
+                  placeholder={t("tools.thumb.expression_ph", {}, "Ex: Meio-corpo, olhar fixo para o gráfico, sobrancelha franzida...")}
                 />
               </div>
             )}
@@ -1601,7 +1641,7 @@ ${topThumbs || "Sem histórico registrado"}`;
                 <VipRgbColorPicker
                   value={bgHex}
                   onChange={setBgHex}
-                  label="Fundo da Capa"
+                  label={t("tools.thumb.bg_picker_label", {}, "Fundo da Capa")}
                   palette={BG_SWATCHES.map((s) => s.hex)}
                 />
               </div>
@@ -1610,7 +1650,7 @@ ${topThumbs || "Sem histórico registrado"}`;
                 <VipRgbColorPicker
                   value={rimHex}
                   onChange={setRimHex}
-                  label="Luz de Contorno (Rim)"
+                  label={t("tools.thumb.rim_picker_label", {}, "Luz de Contorno (Rim)")}
                   palette={RIM_LIGHT_SWATCHES.map((s) => s.hex)}
                 />
               </div>
@@ -1621,8 +1661,8 @@ ${topThumbs || "Sem histórico registrado"}`;
 
       {/* ------------------------------------------- BRIEFING EXECUTÁVEL FINAL */}
       <Card
-        title="Briefing Executável"
-        note="saída para produção"
+        title={t("tools.thumb.exec_briefing", {}, "Briefing Executável")}
+        note={t("tools.thumb.prod_output", {}, "saída para produção")}
         accent="plum"
         className="mt-6"
       >
@@ -1638,7 +1678,7 @@ ${topThumbs || "Sem histórico registrado"}`;
                   : "bg-ink-900 text-bone-400 hover:text-bone-100"
               )}
             >
-              Para Designer (Humano)
+              {t("tools.thumb.tab_for_designer", {}, "Para Designer (Humano)")}
             </button>
             <button
               type="button"
@@ -1650,12 +1690,12 @@ ${topThumbs || "Sem histórico registrado"}`;
                   : "bg-ink-900 text-bone-400 hover:text-bone-100"
               )}
             >
-              Prompt para IA (Midjourney / Flux)
+              {t("tools.thumb.tab_for_ai", {}, "Prompt para IA (Midjourney / Flux)")}
             </button>
           </div>
 
           <span className="font-mono text-[10px] text-ink-400 hidden sm:inline">
-            {activeTab === "designer" ? "Guia sem reuniões" : "Geração de Assets / Fundo"}
+            {activeTab === "designer" ? t("tools.thumb.guide_no_meetings", {}, "Guia sem reuniões") : t("tools.thumb.assets_gen", {}, "Geração de Assets / Fundo")}
           </span>
         </div>
 
@@ -1666,19 +1706,19 @@ ${topThumbs || "Sem histórico registrado"}`;
         <div className="mt-4 flex flex-wrap items-center gap-2.5">
           <Button
             size="sm"
-            variant="default"
+            variant="solid"
             icon="bookmark"
             onClick={() => setSaveModalOpen(true)}
             className="cursor-pointer"
           >
-            Salvar no Projeto
+            {t("tools.thumb.save_to_project", {}, "Salvar no Projeto")}
           </Button>
           <CopyButton text={currentBriefOutput} />
           <Button size="sm" variant="outline" icon="mic" onClick={() => onGo("roteiro")}>
-            Ir para Roteiro
+            {t("tools.thumb.go_to_script", {}, "Ir para Roteiro")}
           </Button>
           <Button size="sm" variant="ghost" icon="type" onClick={() => onGo("titulos")}>
-            Ajustar Títulos
+            {t("tools.thumb.adjust_titles", {}, "Ajustar Títulos")}
           </Button>
         </div>
       </Card>

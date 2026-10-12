@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../utils/cn";
 import { Icon, Meter, useCountUp } from "./ui";
+import { useI18n } from "../i18n";
 
 /* ------------------------------------------------------------ waveform */
 
@@ -111,7 +112,7 @@ function Counter({
           accent === "sky" && "text-sky-400"
         )}
       >
-        {v.toLocaleString("pt-BR")}
+        {v.toLocaleString()}
       </div>
       <div className="mt-2.5">
         <Meter value={meter} max={100} accent={accent} showValue={false} />
@@ -123,25 +124,26 @@ function Counter({
 
 /* ------------------------------------------------------------ pipeline */
 
-const STAGES = [
-  { k: "01", label: "Ideia", tool: "rank" },
-  { k: "02", label: "Título", tool: "titulos" },
-  { k: "03", label: "Hook", tool: "hooks" },
-  { k: "04", label: "Roteiro", tool: "roteiro" },
-  { k: "05", label: "Thumb", tool: "thumbnail" },
-  { k: "06", label: "Post", tool: "score" },
-];
-
 function Pipeline({ onGo }: { onGo: (id: string) => void }) {
+  const { t } = useI18n();
+  const stages = [
+    { k: "01", label: t("console.stage_rank", undefined, "Ideia"), tool: "rank" },
+    { k: "02", label: t("console.stage_titulos", undefined, "Título"), tool: "titulos" },
+    { k: "03", label: t("console.stage_hooks", undefined, "Hook"), tool: "hooks" },
+    { k: "04", label: t("console.stage_roteiro", undefined, "Roteiro"), tool: "roteiro" },
+    { k: "05", label: t("console.stage_thumbnail", undefined, "Thumb"), tool: "thumbnail" },
+    { k: "06", label: t("console.stage_score", undefined, "Post"), tool: "score" },
+  ];
+
   const [active, setActive] = useState(0);
   useEffect(() => {
-    const id = window.setInterval(() => setActive((a) => (a + 1) % STAGES.length), 1800);
+    const id = window.setInterval(() => setActive((a) => (a + 1) % stages.length), 1800);
     return () => window.clearInterval(id);
-  }, []);
+  }, [stages.length]);
 
   return (
     <div className="flex flex-wrap items-stretch gap-px overflow-hidden rounded-md border border-ink-700/80 bg-ink-700/40">
-      {STAGES.map((s, i) => (
+      {stages.map((s, i) => (
         <button
           key={s.k}
           onClick={() => onGo(s.tool)}
@@ -190,6 +192,7 @@ export function Console({
   stats: { ideias: number; roteiros: number; posts: number; humanizados: number };
   demo?: boolean;
 }) {
+  const { t } = useI18n();
   const [l, setL] = useState({ l: 0.55, r: 0.68 });
   useEffect(() => {
     const id = window.setInterval(
@@ -199,19 +202,19 @@ export function Console({
     return () => window.clearInterval(id);
   }, []);
 
-    const ticker = useMemo(
+  const ticker = useMemo(
     () => [
-      "24 FRAMEWORKS ATIVOS",
-      "MOTOR DE VOZ: CALIBRADO",
-      "RÉGUA DE IDEIA 0–10",
-      "SCORE DE POST 0–50",
-      "ANTI-IA: DICIONÁRIO v3",
-      "TELEPROMPTER ONLINE",
-      "HISTÓRICO ATIVO · v2.5",
-      "LIXEIRA: RETENÇÃO LOCAL",
-      "CHAVE LOCAL: NUNCA ENVIADA",
+      t("console.ticker_1", undefined, "24 FRAMEWORKS ATIVOS"),
+      t("console.ticker_2", undefined, "MOTOR DE VOZ: CALIBRADO"),
+      t("console.ticker_3", undefined, "RÉGUA DE IDEIA 0–10"),
+      t("console.ticker_4", undefined, "SCORE DE POST 0–50"),
+      t("console.ticker_5", undefined, "ANTI-IA: DICIONÁRIO v3"),
+      t("console.ticker_6", undefined, "TELEPROMPTER ONLINE"),
+      t("console.ticker_7", undefined, "HISTÓRICO ATIVO · v2.5"),
+      t("console.ticker_8", undefined, "LIXEIRA: RETENÇÃO LOCAL"),
+      t("console.ticker_9", undefined, "CHAVE LOCAL: NUNCA ENVIADA"),
     ],
-    []
+    [t]
   );
 
   return (
@@ -229,15 +232,17 @@ export function Console({
               <Icon name="logo" className="h-5 w-5" strokeWidth={1.5} />
             </span>
             <span className="font-mono text-[11px] tracking-[0.28em] text-bone-300 uppercase">
-              Sistema operacional do criador
+              {t("console.creator_os", undefined, "Sistema operacional do criador")}
             </span>
           </div>
 
           <h1 className="anim-rise font-display text-[clamp(3rem,10.5vw,7.5rem)] leading-[0.82] font-extrabold tracking-[-0.045em] text-bone-50" style={{ animationDelay: "60ms" }}>
-            Estúdio
+            {t("console.studio", undefined, "Estúdio")}
             <br />
             <span className="relative inline-block">
-              <span className="relative z-10 text-signal-400">em operação</span>
+              <span className="relative z-10 text-signal-400">
+                {t("console.in_operation", undefined, "em operação")}
+              </span>
               <span className="absolute inset-x-0 bottom-[0.14em] z-0 h-[0.14em] bg-oxide-400/70" />
             </span>
           </h1>
@@ -246,8 +251,7 @@ export function Console({
             className="anim-rise mt-6 max-w-xl text-[16.5px] leading-relaxed text-bone-300"
             style={{ animationDelay: "140ms" }}
           >
-            Doze ferramentas ligadas ao mesmo cérebro: o seu canal calibrado. Da ideia crua ao post
-            publicado — com régua, número e critério em cada etapa. Nada de achismo.
+            {t("console.hero_desc", undefined, "Doze ferramentas ligadas ao mesmo cérebro: o seu canal calibrado. Da ideia crua ao post publicado — com régua, número e critério em cada etapa. Nada de achismo.")}
           </p>
 
           <div className="anim-rise mt-8 flex flex-wrap items-center gap-3" style={{ animationDelay: "200ms" }}>
@@ -256,7 +260,7 @@ export function Console({
               className="group relative inline-flex items-center gap-2.5 overflow-hidden rounded-md bg-signal-400 px-6 py-3 text-[14.5px] font-bold text-ink-950 shadow-[0_18px_40px_-18px_rgba(247,183,51,0.95)] transition-all duration-200 hover:bg-signal-300 active:scale-[0.98]"
             >
               <span className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 skew-x-[-18deg] bg-white/40 opacity-0 transition-opacity group-hover:opacity-100 group-hover:[animation:sweep_0.75s_ease-out]" />
-              Avaliar uma ideia agora
+              {t("console.evaluate_idea", undefined, "Avaliar uma ideia agora")}
               <Icon name="arrow" className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" strokeWidth={2} />
             </button>
             <button
@@ -264,7 +268,7 @@ export function Console({
               className="inline-flex items-center gap-2 rounded-md border border-ink-600 bg-ink-900/70 px-5 py-3 text-[14.5px] font-semibold text-bone-200 transition-all duration-200 hover:border-bone-300/40 hover:bg-ink-800"
             >
               <Icon name="dial" className="h-4 w-4 text-signal-400" />
-              Calibrar meu canal
+              {t("console.calibrate_channel", undefined, "Calibrar meu canal")}
             </button>
           </div>
 
@@ -284,7 +288,7 @@ export function Console({
                 <span className="h-2 w-2 rounded-full bg-mint-400/80" />
               </div>
               <span className="font-mono text-[9.5px] tracking-[0.22em] text-ink-400 uppercase">
-                Monitor de saída
+                {t("console.output_monitor", undefined, "Monitor de saída")}
               </span>
               <Icon name="sound" className="h-3.5 w-3.5 text-ink-400" />
             </div>
@@ -298,10 +302,10 @@ export function Console({
 
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { k: "CTR alvo", v: "6.4%", a: "text-mint-300" },
-                  { k: "Retenção", v: "48%", a: "text-signal-300" },
-                  { k: "Ideias/ciclo", v: "12", a: "text-sky-400" },
-                  { k: "Nota média", v: "43/50", a: "text-bone-100" },
+                  { k: t("console.target_ctr", undefined, "CTR alvo"), v: "6.4%", a: "text-mint-300" },
+                  { k: t("console.retention", undefined, "Retenção"), v: "48%", a: "text-signal-300" },
+                  { k: t("console.ideas_per_cycle", undefined, "Ideias/ciclo"), v: "12", a: "text-sky-400" },
+                  { k: t("console.avg_score", undefined, "Nota média"), v: "43/50", a: "text-bone-100" },
                 ].map((m) => (
                   <div
                     key={m.k}
@@ -331,13 +335,13 @@ export function Console({
             </div>
             <div>
               <div className="font-mono text-[9.5px] tracking-[0.18em] text-ink-400 uppercase">
-                Última ideia ranqueada
+                {t("console.last_ranked_idea", undefined, "Última ideia ranqueada")}
               </div>
               <div className="font-display text-[15px] font-semibold text-bone-100">
-                “Parei de aportar R$100 em FIIs”
+                {t("console.last_idea_title", undefined, "“Parei de aportar R$100 em FIIs”")}
               </div>
               <div className="mt-1 font-mono text-[10.5px] text-mint-400">
-                POTENCIAL ALTO · PRODUZIR
+                {t("console.last_idea_verdict", undefined, "POTENCIAL ALTO · PRODUZIR")}
               </div>
             </div>
           </div>
@@ -347,19 +351,43 @@ export function Console({
       {/* counters */}
       <div className="relative border-t border-ink-700/70 bg-ink-950/60">
         <div className="mx-auto flex max-w-[1400px] flex-col sm:flex-row">
-          <Counter value={stats.ideias} label="Ideias no banco" sub={demo ? "número fictício · entre para salvar seus dados" : "rank + novas ideias regeneradas"} accent="signal" meter={Math.min(100, stats.ideias * 9)} />
-          <Counter value={stats.roteiros} label="Roteiros criados" sub={demo ? "número fictício · entre para salvar seus dados" : "montados na aba blocos"} accent="sky" meter={Math.min(100, stats.roteiros * 12)} />
-          <Counter value={stats.posts} label="Posts avaliados" sub={demo ? "número fictício · entre para salvar seus dados" : "laudos de 0 a 50 emitidos"} accent="mint" meter={Math.min(100, stats.posts * 8)} />
-          <Counter value={stats.humanizados} label="Textos humanizados" sub={demo ? "número fictício · entre para salvar seus dados" : "filtro anti-ia aplicado"} accent="oxide" meter={Math.min(100, stats.humanizados * 11)} />
+          <Counter 
+            value={stats.ideias} 
+            label={t("console.ideas_in_bank", undefined, "Ideias no banco")} 
+            sub={demo ? t("console.demo_sub", undefined, "número fictício · entre para salvar seus dados") : t("console.sub_ideas", undefined, "rank + novas ideias regeneradas")} 
+            accent="signal" 
+            meter={Math.min(100, stats.ideias * 9)} 
+          />
+          <Counter 
+            value={stats.roteiros} 
+            label={t("console.scripts_created", undefined, "Roteiros criados")} 
+            sub={demo ? t("console.demo_sub", undefined, "número fictício · entre para salvar seus dados") : t("console.sub_scripts", undefined, "montados na aba blocos")} 
+            accent="sky" 
+            meter={Math.min(100, stats.roteiros * 12)} 
+          />
+          <Counter 
+            value={stats.posts} 
+            label={t("console.posts_evaluated", undefined, "Posts avaliados")} 
+            sub={demo ? t("console.demo_sub", undefined, "número fictício · entre para salvar seus dados") : t("console.sub_posts", undefined, "laudos de 0 a 50 emitidos")} 
+            accent="mint" 
+            meter={Math.min(100, stats.posts * 8)} 
+          />
+          <Counter 
+            value={stats.humanizados} 
+            label={t("console.texts_humanized", undefined, "Textos humanizados")} 
+            sub={demo ? t("console.demo_sub", undefined, "número fictício · entre para salvar seus dados") : t("console.sub_humanized", undefined, "filtro anti-ia aplicado")} 
+            accent="oxide" 
+            meter={Math.min(100, stats.humanizados * 11)} 
+          />
         </div>
       </div>
 
       {/* ticker */}
       <div className="relative overflow-hidden border-t border-ink-700/70 bg-ink-900/80 py-2">
         <div className="anim-marquee flex w-max gap-8 whitespace-nowrap">
-          {[...ticker, ...ticker, ...ticker, ...ticker].map((t, i) => (
+          {[...ticker, ...ticker, ...ticker, ...ticker].map((tk, i) => (
             <span key={i} className="flex items-center gap-8 font-mono text-[10px] tracking-[0.22em] text-ink-400 uppercase">
-              <span className={cn(i % 3 === 0 && "text-signal-400/80")}>{t}</span>
+              <span className={cn(i % 3 === 0 && "text-signal-400/80")}>{tk}</span>
               <span className="text-ink-600">◆</span>
             </span>
           ))}

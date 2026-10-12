@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="nl" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light only">
+  <title>Aster Account &bull; StudioOS — Aster Account • Bevestig je e-mail om StudioOS te activeren</title>
+  <style>
+    :root { color-scheme: light only; }
+    body {
+      margin: 0; padding: 0; background-color: #08080a;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #ffffff; -webkit-font-smoothing: antialiased;
+    }
+    table { border-collapse: separate; }
+    a { text-decoration: none; }
+    .btn-gold:hover {
+      background: linear-gradient(135deg, #ffd466 0%, #e6a728 100%) !important;
+      box-shadow: 0 0 25px rgba(242, 179, 61, 0.5) !important;
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 40px 15px; background-color: #08080a; background-image: linear-gradient(#08080a, #08080a); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #08080a; background-image: linear-gradient(#08080a, #08080a);">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 560px; background-color: #0e0e12; background-image: linear-gradient(#0e0e12, #0e0e12); border: 1px solid #232328; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.7);">
+          <tr>
+            <td height="3" style="background: linear-gradient(90deg, #F2604C 0%, #F2B33D 50%, #2FD4A0 100%); font-size: 1px; line-height: 1px;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="padding: 36px 40px 22px 40px; text-align: center;">
+              <div style="display: inline-block; background-color: rgba(242, 179, 61, 0.08); border: 1px solid rgba(242, 179, 61, 0.3); border-radius: 20px; padding: 5px 14px; margin-bottom: 14px;">
+                <span style="font-family: 'SF Mono', Consolas, Monaco, monospace; font-size: 10px; font-weight: 700; color: #F2B33D; letter-spacing: 0.14em; text-transform: uppercase;">
+                  ASTER ACCOUNT • STUDIOOS
+                </span>
+              </div>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                <tr>
+                  <td style="background-color: #17171d; border: 1px solid #282830; border-radius: 12px; padding: 10px 20px; text-align: center;">
+                    <span style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 19px; font-weight: 900; letter-spacing: -0.5px; color: #ffffff;">
+                      <span style="color: #F2B33D;">Studio</span>OS
+                    </span>
+                  </td>
+                </tr>
+              </table>
+              <div style="font-family: 'SF Mono', Consolas, Monaco, monospace; font-size: 9.5px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.16em; margin-top: 10px;">
+                CENTRALE IDENTITEIT VAN HET ASTERDEV ECOSYSTEEM
+              </div>
+              <h1 style="margin: 18px 0 0 0; font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: -0.6px; line-height: 1.25;">
+                Welkom in de studio. Bevestig je e-mailadres.
+              </h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0 40px 36px 40px; text-align: left;">
+              <p style="margin: 0 0 24px 0; font-size: 14.5px; line-height: 1.6; color: #d4d4d8; text-align: center;">
+                Je Aster Account inloggegevens zijn succesvol aangemaakt voor StudioOS. Bevestig je adres om je werkruimte veilig te activeren:
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 28px;">
+                <tr>
+                  <td align="center">
+                    <a href="{{ .ConfirmationURL }}" class="btn-gold" style="display: inline-block; background: linear-gradient(135deg, #F2B33D 0%, #D89824 100%); color: #08080a !important; font-size: 14.5px; font-weight: 800; text-align: center; padding: 15px 38px; border-radius: 12px; letter-spacing: 0.02em; box-shadow: 0 4px 20px rgba(242, 179, 61, 0.35); text-decoration: none;">
+                      E-mail bevestigen & Account activeren →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <div style="background-color: #121217; background-image: linear-gradient(#121217, #121217); border: 1px dashed #282832; border-radius: 12px; padding: 16px 20px; text-align: center; margin-bottom: 28px;">
+                <div style="font-size: 10.5px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.12em; font-family: monospace; margin-bottom: 6px;">
+                  Of gebruik de 6-cijferige verificatiecode:
+                </div>
+                <div style="font-family: monospace; font-size: 24px; font-weight: 800; letter-spacing: 0.35em; color: #F2B33D;">
+                  {{ .Token }}
+                </div>
+              </div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top: 1px solid #1c1c22; padding-top: 24px; margin-bottom: 12px;">
+                <tr>
+                  <td style="font-size: 11.5px; color: #a1a1aa; line-height: 1.6; text-align: left;">
+                    <div style="color: #ffffff; font-weight: 700; margin-bottom: 6px;">Wat je Aster Account ontgrendelt:</div>
+                    &bull; Toegang tot de StudioOS Video & Project Kanban Pipeline<br>
+                    &bull; AI Creatielaboratorium (Hooks, Titels en Scripts)<br>
+                    &bull; Veilige centrale inlog binnen alle AsterDev oplossingen
+                  </td>
+                </tr>
+              </table>
+              <div style="margin-top: 20px; font-size: 11px; color: #71717a; text-align: center; line-height: 1.4;">
+                Als je dit account niet hebt aangemaakt, kun je dit bericht negeren.
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #0a0a0d; background-image: linear-gradient(#0a0a0d, #0a0a0d); border-top: 1px solid #18181e; padding: 24px 40px; text-align: center; font-size: 10.5px; color: #71717a; font-family: monospace;">
+              Aster Account • StudioOS Creators Platform • asterdev.me
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

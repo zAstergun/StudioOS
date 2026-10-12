@@ -11,6 +11,35 @@ Este diretório contém os templates HTML de e-mail oficiais do **StudioOS** int
 | `confirm-signup.html` | Confirmação de Cadastro e Verificação | **Authentication > Email Templates > Confirm sign up** | `{{ .ConfirmationURL }}`, `{{ .Token }}` |
 | `change-email.html` | Mudança de E-mail do Usuário | **Authentication > Email Templates > Change email address** | `{{ .ConfirmationURL }}`, `{{ .Token }}`, `{{ .Email }}`, `{{ .NewEmail }}` |
 | `reset-password.html` | Recuperação e Redefinição de Senha | **Authentication > Email Templates > Reset password** | `{{ .ConfirmationURL }}`, `{{ .Token }}` |
+| `email-changed-notification.html` | Alerta de Segurança de E-mail Alterado | Notificação Transacional | `{{ .OldEmail }}`, `{{ .Email }}` |
+
+---
+
+## 🌍 Suporte Multilíngue (15 Idiomas Disponíveis)
+
+Todos os e-mails estão traduzidos e disponíveis em `emails/locales/<idioma>/` para uso direto no Supabase ou provedor de e-mail:
+
+* 🇧🇷 **Português (Brasil)**: `emails/locales/pt-BR/`
+* 🇺🇸 **English**: `emails/locales/en/`
+* 🇪🇸 **Español**: `emails/locales/es/`
+* 🇨🇳 **中文 (简体)**: `emails/locales/zh-CN/`
+* 🇫🇷 **Français**: `emails/locales/fr/`
+* 🇩🇪 **Deutsch**: `emails/locales/de/`
+* 🇮🇹 **Italiano**: `emails/locales/it/`
+* 🇸🇦 **العربية (RTL)**: `emails/locales/ar/`
+* 🇮🇩 **Bahasa Indonesia**: `emails/locales/id/`
+* 🇯🇵 **日本語**: `emails/locales/ja/`
+* 🇰🇷 **한국어**: `emails/locales/ko/`
+* 🇳🇱 **Nederlands**: `emails/locales/nl/`
+* 🇵🇹 **Português (Portugal)**: `emails/locales/pt-PT/`
+* 🇷🇺 **Русский**: `emails/locales/ru/`
+* 🇻🇳 **Tiếng Việt**: `emails/locales/vi/`
+
+Para regenerar todos os templates em lote, execute:
+```bash
+npx tsx emails/build-localized-emails.js
+```
+
 
 ---
 
