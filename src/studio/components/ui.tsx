@@ -2,6 +2,7 @@ import {
   Children,
   forwardRef,
   isValidElement,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -382,16 +383,12 @@ export function Select({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
+  const isKeyboardNavRef = useRef(false);
   const [open, setOpen] = useState(false);
   const [opensUp, setOpensUp] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [mounted, setMounted] = useState(false);
-  const [coords, setCoords] = useState<{ top: number; left: number; width: number; bottom: number }>({
-    top: 0,
-    left: 0,
-    width: 0,
-    bottom: 0,
-  });
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; bottom: number } | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -414,39 +411,57 @@ export function Select({
 
   const currentValue = isControlled ? String(value) : internalValue;
 
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) {
+      setOpen(false);
+      return;
+    }
+    const desiredHeight = Math.min(240, options.length * 36 + 42);
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+    const shouldOpenUp = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
+
+    setOpensUp(shouldOpenUp);
+    setCoords({
+      top: Math.round(rect.bottom + 6),
+      bottom: Math.round(window.innerHeight - rect.top + 6),
+      left: Math.round(rect.left),
+      width: Math.round(rect.width),
+    });
+  }, [options.length]);
+
+  const toggleOpen = () => {
+    if (disabled) return;
+    if (!open) {
+      updatePosition();
+      setOpen(true);
+    } else {
+      setOpen(false);
+      setActiveIndex(-1);
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
 
-    const updatePosition = () => {
-      const trigger = triggerRef.current;
-      if (!trigger) return;
-      const rect = trigger.getBoundingClientRect();
-      if (rect.bottom < 0 || rect.top > window.innerHeight) {
-        setOpen(false);
+    const handleScroll = (e: Event) => {
+      // Do not recalculate if user is scrolling inside the options list itself
+      if (listboxRef.current && listboxRef.current.contains(e.target as Node)) {
         return;
       }
-      const desiredHeight = Math.min(240, options.length * 36 + 42);
-      const spaceBelow = window.innerHeight - rect.bottom - 8;
-      const spaceAbove = rect.top - 8;
-      const shouldOpenUp = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
-
-      setOpensUp(shouldOpenUp);
-      setCoords({
-        top: rect.bottom + 6,
-        bottom: window.innerHeight - rect.top + 6,
-        left: rect.left,
-        width: rect.width,
-      });
+      updatePosition();
     };
 
-    updatePosition();
     window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("scroll", handleScroll, true);
     return () => {
       window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("scroll", handleScroll, true);
     };
-  }, [open, options.length]);
+  }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -470,7 +485,7 @@ export function Select({
   }, [open]);
 
   useEffect(() => {
-    if (open && activeIndex >= 0 && listRef.current) {
+    if (open && activeIndex >= 0 && listRef.current && isKeyboardNavRef.current) {
       const activeEl = listRef.current.children[activeIndex] as HTMLElement | undefined;
       if (activeEl) {
         activeEl.scrollIntoView({ block: "nearest" });
@@ -502,7 +517,9 @@ export function Select({
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
+      isKeyboardNavRef.current = true;
       if (!open) {
+        updatePosition();
         setOpen(true);
         const currIdx = options.findIndex((o) => o.value === currentValue);
         setActiveIndex(currIdx >= 0 ? currIdx : 0);
@@ -517,7 +534,9 @@ export function Select({
       }
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      isKeyboardNavRef.current = true;
       if (!open) {
+        updatePosition();
         setOpen(true);
         const currIdx = options.findIndex((o) => o.value === currentValue);
         setActiveIndex(currIdx >= 0 ? currIdx : 0);
@@ -533,6 +552,7 @@ export function Select({
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       if (!open) {
+        updatePosition();
         setOpen(true);
         const currIdx = options.findIndex((o) => o.value === currentValue);
         setActiveIndex(currIdx >= 0 ? currIdx : 0);
@@ -572,9 +592,13 @@ export function Select({
       ref={containerRef}
       className={cn("relative", widthClass || "w-full")}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          setOpen(false);
+        if (
+          event.currentTarget.contains(event.relatedTarget as Node | null) ||
+          listboxRef.current?.contains(event.relatedTarget as Node | null)
+        ) {
+          return;
         }
+        setOpen(false);
       }}
     >
       <button
@@ -585,7 +609,7 @@ export function Select({
         aria-haspopup="listbox"
         aria-disabled={disabled}
         disabled={disabled}
-        onClick={() => !disabled && setOpen((prev) => !prev)}
+        onClick={toggleOpen}
         onKeyDown={handleKeyDown}
         className={cn(
           fieldBase,
@@ -630,7 +654,7 @@ export function Select({
         {children}
       </select>
 
-      {open && mounted && typeof document !== "undefined" && createPortal(
+      {open && mounted && coords && typeof document !== "undefined" && createPortal(
         <div
           ref={listboxRef}
           role="listbox"
@@ -646,7 +670,10 @@ export function Select({
               : `${Math.min(240, Math.max(100, window.innerHeight - coords.top - 12))}px`,
             zIndex: 9999,
           }}
-          className="overflow-hidden rounded-md border border-ink-600 bg-ink-900 shadow-[0_18px_44px_-18px_rgba(0,0,0,0.95)] animate-in fade-in-0 zoom-in-95 duration-100"
+          className={cn(
+            "overflow-hidden rounded-md border border-ink-600 bg-ink-900 shadow-[0_18px_44px_-18px_rgba(0,0,0,0.95)]",
+            opensUp ? "dropdown-menu-animate-up" : "dropdown-menu-animate-down"
+          )}
         >
           <div className="border-b border-ink-700/80 px-3 py-2 font-mono text-[9px] tracking-[0.16em] text-ink-400 uppercase select-none flex items-center justify-between">
             <span>
@@ -665,7 +692,9 @@ export function Select({
                   aria-selected={isSelected}
                   disabled={opt.disabled}
                   onMouseDown={(e) => e.preventDefault()}
-                  onMouseEnter={() => !opt.disabled && setActiveIndex(index)}
+                  onMouseMove={() => {
+                    isKeyboardNavRef.current = false;
+                  }}
                   onClick={() => {
                     if (!opt.disabled) selectOption(opt.value);
                   }}

@@ -758,13 +758,51 @@ as $$
     coalesce((select count(*) from public.studioos_projects pr where pr.owner_id = p.id and (pr.status = 'completed' or pr.progress >= 100)), ((p.stats->>'projetos_concluidos')::bigint), 0::bigint) as completed_projects,
     coalesce((select count(*) from public.studioos_projects pr where pr.owner_id = p.id and pr.status != 'trashed'), ((p.stats->>'projetos')::bigint), 0::bigint) as total_projects,
     coalesce(((p.stats->>'ideias_ranqueadas')::bigint), 0::bigint) as ideias_ranqueadas,
-    coalesce(((p.stats->>'total_runs')::bigint), 0::bigint) as total_runs,
-    coalesce(((p.stats->>'streak')::bigint), 0::bigint) as streak
+    greatest(coalesce((select count(*) from public.studioos_history h where h.user_id = p.id and h.deleted_at is null), 0::bigint), coalesce(((p.stats->>'total_runs')::bigint), 0::bigint)) as total_runs,
+    coalesce(((p.stats->>'streak')::bigint), 1::bigint) as streak
   from public.profiles p
   order by likes_count desc, completed_projects desc, ideias_ranqueadas desc;
 $$;
 
 grant execute on function public.studioos_get_creators_ranking() to anon, authenticated;
+
+create or replace function public.studioos_get_creators_ranking_v2()
+returns table (
+  id uuid,
+  full_name text,
+  channel text,
+  avatar_url text,
+  bio text,
+  likes_count bigint,
+  completed_projects bigint,
+  total_projects bigint,
+  ideias_ranqueadas bigint,
+  total_runs bigint,
+  streak bigint,
+  is_vip boolean
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    p.id,
+    coalesce(nullif(trim(p.full_name), ''), 'Criador StudioOS') as full_name,
+    coalesce(nullif(trim(p.channel), ''), 'user_' || substr(p.id::text, 1, 6)) as channel,
+    p.avatar_url,
+    p.bio,
+    coalesce((select count(*) from public.studioos_profile_likes l where l.target_user_id = p.id), ((p.stats->>'likes_count')::bigint), 0::bigint) as likes_count,
+    coalesce((select count(*) from public.studioos_projects pr where pr.owner_id = p.id and (pr.status = 'completed' or pr.progress >= 100)), ((p.stats->>'projetos_concluidos')::bigint), 0::bigint) as completed_projects,
+    coalesce((select count(*) from public.studioos_projects pr where pr.owner_id = p.id and pr.status != 'trashed'), ((p.stats->>'projetos')::bigint), 0::bigint) as total_projects,
+    coalesce(((p.stats->>'ideias_ranqueadas')::bigint), 0::bigint) as ideias_ranqueadas,
+    greatest(coalesce((select count(*) from public.studioos_history h where h.user_id = p.id and h.deleted_at is null), 0::bigint), coalesce(((p.stats->>'total_runs')::bigint), 0::bigint)) as total_runs,
+    coalesce(((p.stats->>'streak')::bigint), 1::bigint) as streak,
+    coalesce(p.is_vip, false) as is_vip
+  from public.profiles p
+  order by likes_count desc, completed_projects desc, ideias_ranqueadas desc;
+$$;
+
+grant execute on function public.studioos_get_creators_ranking_v2() to anon, authenticated;
 
 -- ==============================================================================
 -- StudioOS · Sistema de Comentários de Perfis

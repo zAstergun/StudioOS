@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../utils/cn";
 import { Button, Icon, Input, Label, Meter, Select, Textarea } from "../components/ui";
@@ -1006,54 +1006,62 @@ function ModelCombobox({
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
+  const isKeyboardNavRef = useRef(false);
   const [open, setOpen] = useState(false);
   const [opensUp, setOpensUp] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [mounted, setMounted] = useState(false);
-  const [coords, setCoords] = useState<{ top: number; left: number; width: number; bottom: number }>({
-    top: 0,
-    left: 0,
-    width: 0,
-    bottom: 0,
-  });
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; bottom: number } | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  const updatePosition = useCallback(() => {
+    const input = containerRef.current?.querySelector("input");
+    if (!input) return;
+    const rect = input.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) {
+      setOpen(false);
+      return;
+    }
+    const desiredHeight = Math.min(230, options.length * 36 + 42);
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+    const shouldOpenUp = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
+
+    setOpensUp(shouldOpenUp);
+    setCoords({
+      top: Math.round(rect.bottom + 6),
+      bottom: Math.round(window.innerHeight - rect.top + 6),
+      left: Math.round(rect.left),
+      width: Math.round(rect.width),
+    });
+  }, [options.length]);
+
+  const handleOpen = () => {
+    updatePosition();
+    setOpen(true);
+  };
+
   useEffect(() => {
     if (!open) return;
 
-    const updatePosition = () => {
-      const input = containerRef.current?.querySelector("input");
-      if (!input) return;
-      const rect = input.getBoundingClientRect();
-      if (rect.bottom < 0 || rect.top > window.innerHeight) {
-        setOpen(false);
+    const handleScroll = (e: Event) => {
+      // Do not recalculate if user is scrolling inside the options list itself
+      if (listboxRef.current && listboxRef.current.contains(e.target as Node)) {
         return;
       }
-      const desiredHeight = Math.min(230, options.length * 36 + 42);
-      const spaceBelow = window.innerHeight - rect.bottom - 8;
-      const spaceAbove = rect.top - 8;
-      const shouldOpenUp = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
-
-      setOpensUp(shouldOpenUp);
-      setCoords({
-        top: rect.bottom + 6,
-        bottom: window.innerHeight - rect.top + 6,
-        left: rect.left,
-        width: rect.width,
-      });
+      updatePosition();
     };
 
-    updatePosition();
     window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("scroll", handleScroll, true);
     return () => {
       window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("scroll", handleScroll, true);
     };
-  }, [open, options.length]);
+  }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -1091,20 +1099,23 @@ function ModelCombobox({
         aria-controls="studioos-model-options"
         aria-activedescendant={activeIndex >= 0 ? `studioos-model-option-${activeIndex}` : undefined}
         value={value}
-        onFocus={() => setOpen(true)}
+        onFocus={handleOpen}
+        onClick={handleOpen}
         onChange={(event) => {
           onChange(event.target.value);
-          setOpen(true);
+          handleOpen();
           setActiveIndex(-1);
         }}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" && options.length) {
             event.preventDefault();
-            setOpen(true);
+            isKeyboardNavRef.current = true;
+            handleOpen();
             setActiveIndex((index) => (index + 1) % options.length);
           } else if (event.key === "ArrowUp" && options.length) {
             event.preventDefault();
-            setOpen(true);
+            isKeyboardNavRef.current = true;
+            handleOpen();
             setActiveIndex((index) => (index <= 0 ? options.length - 1 : index - 1));
           } else if (event.key === "Enter" && open && activeIndex >= 0) {
             event.preventDefault();
@@ -1118,7 +1129,7 @@ function ModelCombobox({
         className="font-mono text-[12.5px]"
       />
 
-      {open && mounted && typeof document !== "undefined" && createPortal(
+      {open && mounted && coords && typeof document !== "undefined" && createPortal(
         <div
           ref={listboxRef}
           id="studioos-model-options"
@@ -1135,7 +1146,10 @@ function ModelCombobox({
               : `${Math.min(230, Math.max(100, window.innerHeight - coords.top - 12))}px`,
             zIndex: 9999,
           }}
-          className="overflow-hidden rounded-md border border-ink-600 bg-ink-900 shadow-[0_18px_44px_-18px_rgba(0,0,0,0.95)] animate-in fade-in-0 zoom-in-95 duration-100"
+          className={cn(
+            "overflow-hidden rounded-md border border-ink-600 bg-ink-900 shadow-[0_18px_44px_-18px_rgba(0,0,0,0.95)]",
+            opensUp ? "dropdown-menu-animate-up" : "dropdown-menu-animate-down"
+          )}
         >
           {options.length ? (
             <>
@@ -1151,7 +1165,9 @@ function ModelCombobox({
                     role="option"
                     aria-selected={option === value}
                     onMouseDown={(event) => event.preventDefault()}
-                    onMouseEnter={() => setActiveIndex(index)}
+                    onMouseMove={() => {
+                      isKeyboardNavRef.current = false;
+                    }}
                     onClick={() => choose(option)}
                     className={cn(
                       "flex w-full items-center justify-between rounded px-3 py-2 text-left font-mono text-[12px] transition-colors select-none",

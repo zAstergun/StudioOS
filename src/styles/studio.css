@@ -298,6 +298,41 @@
   animation: sweep 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
+/* ---- Dropdown menu animations ---- */
+@keyframes dropdownOpenDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dropdownOpenUp {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dropdown-menu-animate-down {
+  transform-origin: top center;
+  animation: dropdownOpenDown 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform;
+}
+
+.dropdown-menu-animate-up {
+  transform-origin: bottom center;
+  animation: dropdownOpenUp 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

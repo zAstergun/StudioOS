@@ -999,6 +999,7 @@ export default function PerfilScreen({
   }, [jokerTitle, jokerProject, user, mounted]);
 
   const [userStats, setUserStats] = useState<Record<string, any>>({});
+  const [userStatsLoaded, setUserStatsLoaded] = useState(false);
   const [historyTick, setHistoryTick] = useState(0);
 
   useEffect(() => {
@@ -1012,16 +1013,16 @@ export default function PerfilScreen({
   }, []);
 
   const accountMetrics = useMemo(() => {
-    // 1. Ideias reais
+    // 1. Ideias reais (mescla com userStats salvo na nuvem para evitar perda por cache local vazio)
     let ideas: any[] = [];
     try {
       const raw = localStorage.getItem("studioos.ideas.v1");
       if (raw) ideas = JSON.parse(raw);
     } catch {}
-    const ideasCount = ideas.length;
+    const ideasCount = Math.max(ideas.length, Number(userStats['ideias_ranqueadas']) || 0);
 
     // 2. Projetos concluídos reais do usuário
-    const projectsCount = completedProjectsCount;
+    const projectsCount = Math.max(completedProjectsCount, Number(userStats['projetos_concluidos']) || 0);
 
     // 3. Histórico de execuções de ferramentas
     const historyEntries: {
@@ -1107,7 +1108,7 @@ export default function PerfilScreen({
       }
     } catch {}
 
-    const totalRuns = historyEntries.length;
+    const totalRuns = Math.max(historyEntries.length, Number(userStats['total_runs']) || 0);
 
     // 4. Mapeamento de ferramentas mais usadas
     const resolveToolKey = (key: string, name?: string): string => {
@@ -1253,6 +1254,9 @@ export default function PerfilScreen({
     }
     if (streak === 0 && (totalRuns > 0 || ideasCount > 0 || ongoingProjects.length > 0 || completedProjectsCount > 0)) {
       streak = Number(userStats['streak']) || 1;
+    }
+    if (userStats['streak']) {
+      streak = Math.max(streak, Number(userStats['streak']) || 1);
     }
 
     // 9. Nota média (escala de 0.0 a 5.0 estrelas)
@@ -1401,27 +1405,36 @@ export default function PerfilScreen({
   };
   const effectiveOngoingProjects = isViewingOther ? targetProjects : ongoingProjects;
 
-  // Sincroniza estatísticas reais no Supabase
+  // Sincroniza estatísticas reais no Supabase de forma segura e não destrutiva
   useEffect(() => {
-    if (user && supabase && accountMetrics && !isViewingOther) {
+    if (user && supabase && accountMetrics && !isViewingOther && userStatsLoaded) {
+      const currentStats = userStats || {};
+      const newTotalRuns = Math.max(accountMetrics.totalRuns, Number(currentStats.total_runs) || 0);
+      const newIdeas = Math.max(accountMetrics.ideasCount, Number(currentStats.ideias_ranqueadas) || 0);
+      const newProjects = Math.max(accountMetrics.projectsCount, Number(currentStats.projetos) || 0);
+      const newCompleted = Math.max(accountMetrics.completedProjectsCount, Number(currentStats.projetos_concluidos) || 0);
+      const newStreak = Math.max(accountMetrics.streak, Number(currentStats.streak) || 1);
+      const newLikes = Math.max(likesCount, Number(currentStats.likes_count ?? currentStats.curtidas_recebidas) || 0);
+
       const payload = {
-        total_runs: accountMetrics.totalRuns,
-        ideias_ranqueadas: accountMetrics.ideasCount,
-        projetos: accountMetrics.projectsCount,
-        projetos_concluidos: accountMetrics.completedProjectsCount,
-        streak: accountMetrics.streak,
-        studio_minutes: accountMetrics.studioMinutes,
+        ...currentStats,
+        total_runs: newTotalRuns,
+        ideias_ranqueadas: newIdeas,
+        projetos: newProjects,
+        projetos_concluidos: newCompleted,
+        streak: newStreak,
+        studio_minutes: Math.max(accountMetrics.studioMinutes, Number(currentStats.studio_minutes) || 0),
         dow_totals: accountMetrics.dowCounts,
         days_56: accountMetrics.days56,
-        tool_breakdown: accountMetrics.toolsList,
-        avg_rating: accountMetrics.avgRatingStr,
+        tool_breakdown: accountMetrics.toolsList.length > 0 ? accountMetrics.toolsList : (currentStats.tool_breakdown || []),
+        avg_rating: accountMetrics.avgRatingStr !== "-" ? accountMetrics.avgRatingStr : (currentStats.avg_rating || "5.0/5"),
         best_dow: accountMetrics.bestDowName,
-        likes_count: likesCount,
-        curtidas_recebidas: likesCount
+        likes_count: newLikes,
+        curtidas_recebidas: newLikes
       };
       supabase.from('profiles').update({ stats: payload }).eq('id', user.id).then();
     }
-  }, [user, accountMetrics, isViewingOther, likesCount]);
+  }, [user, accountMetrics, isViewingOther, likesCount, userStatsLoaded]);
 
   // Carrega e calcula posição do perfil no Ranking Global de Criadores (Top 10)
   const [userRank, setUserRank] = useState<number | null>(null);
@@ -1436,25 +1449,30 @@ export default function PerfilScreen({
         if (!supabase) return;
 
         let list: any[] = [];
-        const { data, error } = await supabase.rpc("studioos_get_creators_ranking");
-        if (!error && Array.isArray(data) && data.length > 0) {
-          list = data;
+        const { data: v2Data, error: v2Error } = await supabase.rpc("studioos_get_creators_ranking_v2");
+        if (!v2Error && Array.isArray(v2Data) && v2Data.length > 0) {
+          list = v2Data;
         } else {
-          const { data: profs } = await supabase
-            .from("profiles")
-            .select("id, full_name, channel, stats");
-          if (profs && Array.isArray(profs)) {
-            list = profs.map((p: any) => {
-              const stats = p.stats || {};
-              return {
-                id: p.id,
-                likes_count: Number(stats.likes_count ?? stats.curtidas_recebidas) || 0,
-                completed_projects: Number(stats.projetos_concluidos) || 0,
-                ideias_ranqueadas: Number(stats.ideias_ranqueadas) || 0,
-                total_runs: Number(stats.total_runs) || 0,
-                streak: Number(stats.streak) || 0,
-              };
-            });
+          const { data, error } = await supabase.rpc("studioos_get_creators_ranking");
+          if (!error && Array.isArray(data) && data.length > 0) {
+            list = data;
+          } else {
+            const { data: profs } = await supabase
+              .from("profiles")
+              .select("id, full_name, channel, stats");
+            if (profs && Array.isArray(profs)) {
+              list = profs.map((p: any) => {
+                const stats = p.stats || {};
+                return {
+                  id: p.id,
+                  likes_count: Number(stats.likes_count ?? stats.curtidas_recebidas) || 0,
+                  completed_projects: Number(stats.projetos_concluidos) || 0,
+                  ideias_ranqueadas: Number(stats.ideias_ranqueadas) || 0,
+                  total_runs: Number(stats.total_runs) || 0,
+                  streak: Number(stats.streak) || 0,
+                };
+              });
+            }
           }
         }
 
@@ -1475,7 +1493,20 @@ export default function PerfilScreen({
               streak = Math.max(streak, accountMetrics.streak);
             }
 
-            const score = likes * 15 + completed * 25 + ideas * 6 + runs * 2 + streak * 4;
+            // Ponderação oficial StudioOS idêntica ao RankingScreen:
+            // - Projetos Concluídos (Execução e entrega real): peso 30
+            // - Curtidas no Perfil (Reputação da comunidade): peso 15
+            // - Ideias Ranqueadas (Potencial e ideação ativa): peso 10
+            // - Bônus de Atividade no Estúdio (Execuções úteis): até 20 pts
+            // - Bônus de Streak / Consistência: até 10 pts
+            const activityBonus = Math.min(20, Math.floor(runs * 0.5));
+            const streakBonus = Math.min(10, (streak || 1) * 2);
+            const score =
+              completed * 30 +
+              likes * 15 +
+              ideas * 10 +
+              activityBonus +
+              streakBonus;
             return { id: item.id, score };
           });
 
@@ -1632,8 +1663,12 @@ export default function PerfilScreen({
             if (data.featured_video.id) setJokerProject(data.featured_video.id);
           }
         }
+        setUserStatsLoaded(true);
+      }).catch(() => {
+        setUserStatsLoaded(true);
       });
     } else if (user) {
+      setUserStatsLoaded(true);
       // Fallback local storage
       const savedCover = localStorage.getItem(`studioos.cover.${user.id}`);
       if (savedCover) {

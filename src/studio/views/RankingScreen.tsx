@@ -240,18 +240,20 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
 
   // Cálculo de Score Global StudioOS
   const calculateScore = useCallback((item: CreatorRankItem) => {
-    // Ponderação calculada:
-    // - Curtidas no Perfil (Reputação social): peso 15
-    // - Projetos Concluídos (Execução e entrega): peso 25
-    // - Ideias Ranqueadas (Potencial e ideação ativa): peso 6
-    // - Uso de Ferramentas (Horas/execuções no estúdio): peso 2
-    // - Streak / Consistência: peso 4
+    // Ponderação oficial StudioOS:
+    // - Projetos Concluídos (Execução e entrega real): peso 30
+    // - Curtidas no Perfil (Reputação da comunidade): peso 15
+    // - Ideias Ranqueadas (Potencial e ideação ativa): peso 10
+    // - Bônus de Atividade no Estúdio (Execuções úteis): até 20 pts
+    // - Bônus de Streak / Consistência: até 10 pts
+    const activityBonus = Math.min(20, Math.floor((item.total_runs || 0) * 0.5));
+    const streakBonus = Math.min(10, (item.streak || 1) * 2);
     const score =
-      item.likes_count * 15 +
-      item.completed_projects * 25 +
-      item.ideias_ranqueadas * 6 +
-      item.total_runs * 2 +
-      item.streak * 4;
+      (item.completed_projects || 0) * 30 +
+      (item.likes_count || 0) * 15 +
+      (item.ideias_ranqueadas || 0) * 10 +
+      activityBonus +
+      streakBonus;
     return score;
   }, []);
 
