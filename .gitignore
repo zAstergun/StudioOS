@@ -34,8 +34,17 @@ ehthumbs.db
 playwright-report/
 test-results/
 
-# Cloudflare Workers
+# Cloudflare Workers & local dev vars
 .wrangler/
+.dev.vars
+.dev.vars.*
+
+# Scratch & temporary query files
+scratch/
+test_query.sql
+*.tmp.sql
+test_*.sql
+temp_*.sql
 
 # Contextos
 contexto
