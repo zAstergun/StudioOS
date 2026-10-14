@@ -67,7 +67,7 @@ const FALLBACK_CREATORS: CreatorRankItem[] = [
 
 export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => void }) {
   const { user } = useAuth();
-  const { t, language } = useI18n();
+  const { t, resolvedLanguage } = useI18n();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creators, setCreators] = useState<CreatorRankItem[]>([]);
@@ -85,7 +85,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
   const fetchRanking = useCallback(async () => {
     setLoading(true);
     if (!supabase) {
-      setCreators(getLocalizedFallbackCreators(language));
+      setCreators(getLocalizedFallbackCreators(resolvedLanguage));
       setLoading(false);
       return;
     }
@@ -146,7 +146,7 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
           });
           setCreators(mapped);
         } else {
-          setCreators(getLocalizedFallbackCreators(language));
+          setCreators(getLocalizedFallbackCreators(resolvedLanguage));
         }
       }
 
@@ -166,11 +166,11 @@ export function RankingScreen({ onGo }: { onGo: (id: string, extra?: string) => 
         }
       }
     } catch {
-      setCreators(FALLBACK_CREATORS);
+      setCreators(getLocalizedFallbackCreators(resolvedLanguage));
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, resolvedLanguage]);
 
   useEffect(() => {
     fetchRanking();

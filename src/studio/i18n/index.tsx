@@ -87,6 +87,8 @@ export function detectBrowserLanguage(): SupportedLanguage {
 interface I18nContextValue {
   languageSetting: LanguageSetting;
   resolvedLanguage: SupportedLanguage;
+  /** Alias for resolvedLanguage */
+  language: SupportedLanguage;
   isRtl: boolean;
   dict: TranslationDictionary;
   setLanguageSetting: (setting: LanguageSetting, syncToProfile?: boolean) => Promise<void>;
@@ -282,13 +284,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         // ignore
       }
 
-      if (syncToProfile && supabase) {
+      const client = supabase;
+      if (syncToProfile && client) {
         try {
           const {
             data: { user },
-          } = await supabase.auth.getUser();
+          } = await client.auth.getUser();
           if (user) {
-            await supabase
+            await client
               .from("profiles")
               .update({ language: setting })
               .eq("id", user.id);
@@ -303,13 +306,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   // Sync with profile if user is already logged in and profile has a saved language
   useEffect(() => {
-    if (!supabase) return;
+    const client = supabase;
+    if (!client) return;
     let mounted = true;
 
-    supabase.auth.getUser().then(async ({ data }) => {
+    client.auth.getUser().then(async ({ data }) => {
       if (!mounted || !data?.user) return;
       try {
-        const { data: prof } = await supabase
+        const { data: prof } = await client
           .from("profiles")
           .select("language")
           .eq("id", data.user.id)
@@ -364,6 +368,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     () => ({
       languageSetting,
       resolvedLanguage,
+      language: resolvedLanguage,
       isRtl,
       dict,
       setLanguageSetting,
