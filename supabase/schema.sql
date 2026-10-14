@@ -53,19 +53,22 @@ create or replace function public.get_email_by_channel(p_channel text)
 returns text
 language plpgsql
 security definer set search_path = public
-as $$
+as $
 declare
   v_email text;
+  v_clean text;
 begin
+  v_clean := lower(trim(regexp_replace(p_channel, '^@+', '')));
+
   select u.email into v_email
   from auth.users u
   join public.profiles p on u.id = p.id
-  where p.channel = p_channel
+  where lower(trim(regexp_replace(coalesce(p.channel, ''), '^@+', ''))) = v_clean
   limit 1;
   
   return v_email;
 end;
-$$;
+$;
 
 -- Cria o perfil automaticamente no cadastro, usando os metadados enviados
 -- pelo formulário (full_name, channel), pelo Google (name, avatar_url, picture)
@@ -73,32 +76,80 @@ $$;
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
-security definer set search_path = public
-as $$
+security definer set search_path = public, auth
+as $
+declare
+  v_name text;
+  v_channel text;
 begin
-  insert into public.profiles (id, full_name, channel, avatar_url)
+  v_name := coalesce(
+    new.raw_user_meta_data ->> 'full_name',
+    new.raw_user_meta_data ->> 'name',
+    new.raw_user_meta_data -> 'custom_claims' ->> 'global_name',
+    new.raw_user_meta_data ->> 'user_name',
+    split_part(coalesce(new.email, 'criador@local'), '@', 1)
+  );
+
+  -- Formata o canal com @ ou null se vazio
+  v_channel := coalesce(
+    nullif(trim(new.raw_user_meta_data ->> 'channel'), ''),
+    nullif('@' || trim(coalesce(new.raw_user_meta_data ->> 'user_name', '')), '@')
+  );
+
+  if v_channel is not null and not (v_channel ~ '^@') then
+    v_channel := '@' || v_channel;
+  end if;
+
+  -- Se o canal já existir em outro perfil, evita quebrar a transação de criação
+  if v_channel is not null and exists (
+    select 1 from public.profiles 
+    where lower(trim(regexp_replace(coalesce(channel, ''), '^@+', ''))) = lower(trim(regexp_replace(v_channel, '^@+', '')))
+      and id != new.id
+  ) then
+    if coalesce((new.raw_user_meta_data ->> 'is_temporary')::boolean, false) = true then
+      v_channel := v_channel || '_' || substr(md5(random()::text), 1, 4);
+    else
+      v_channel := null;
+    end if;
+  end if;
+
+  -- Se for conta de teste temporária ou conta criada por username, garante confirmação imediata do e-mail
+  if coalesce((new.raw_user_meta_data ->> 'is_temporary')::boolean, false) = true
+     or coalesce((new.raw_user_meta_data ->> 'registered_with_username')::boolean, false) = true then
+    update auth.users
+    set email_confirmed_at = coalesce(email_confirmed_at, now()),
+        confirmed_at = coalesce(confirmed_at, now())
+    where id = new.id and email_confirmed_at is null;
+  end if;
+
+  insert into public.profiles (id, full_name, channel, avatar_url, is_vip)
   values (
     new.id,
-    coalesce(
-      new.raw_user_meta_data ->> 'full_name',
-      new.raw_user_meta_data ->> 'name',
-      new.raw_user_meta_data -> 'custom_claims' ->> 'global_name',
-      new.raw_user_meta_data ->> 'user_name',
-      split_part(coalesce(new.email, 'criador@local'), '@', 1)
-    ),
-    coalesce(
-      new.raw_user_meta_data ->> 'channel',
-      nullif('@' || coalesce(new.raw_user_meta_data ->> 'user_name', ''), '@')
-    ),
+    v_name,
+    v_channel,
     coalesce(
       new.raw_user_meta_data ->> 'avatar_url',
       new.raw_user_meta_data ->> 'picture'
+    ),
+    coalesce(
+      (new.raw_app_meta_data ->> 'is_vip')::boolean,
+      (new.raw_user_meta_data ->> 'is_vip')::boolean,
+      false
     )
   )
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    full_name = coalesce(excluded.full_name, profiles.full_name),
+    channel = coalesce(excluded.channel, profiles.channel),
+    avatar_url = coalesce(excluded.avatar_url, profiles.avatar_url),
+    is_vip = coalesce(
+      (new.raw_app_meta_data ->> 'is_vip')::boolean,
+      (new.raw_user_meta_data ->> 'is_vip')::boolean,
+      profiles.is_vip,
+      false
+    );
   return new;
 end;
-$$;
+$;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created

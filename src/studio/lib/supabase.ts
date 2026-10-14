@@ -19,7 +19,7 @@ export const createSupabaseClient = (
             secure: !import.meta.env.DEV,
             httpOnly: false,
             sameSite: 'lax',
-            domain: import.meta.env.DEV ? undefined : '.asterdev.me',
+            domain: options?.domain || (import.meta.env.DEV ? undefined : '.asterdev.me'),
           });
         } catch (error) {
           // Ignorado intencionalmente no ambiente de servidor Astro
@@ -30,7 +30,7 @@ export const createSupabaseClient = (
           cookies.delete(key, {
             ...options,
             path: '/',
-            domain: import.meta.env.DEV ? undefined : '.asterdev.me',
+            domain: options?.domain || (import.meta.env.DEV ? undefined : '.asterdev.me'),
           });
         } catch (error) {
           // Ignorado intencionalmente no ambiente de servidor Astro

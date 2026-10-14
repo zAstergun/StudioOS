@@ -12,12 +12,21 @@ import { createBrowserClient } from "@supabase/ssr";
 const url = import.meta.env.PUBLIC_SUPABASE_URL?.trim();
 const anonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY?.trim();
 
+const getCookieDomain = () => {
+  if (typeof window === "undefined") return undefined;
+  const hostname = window.location.hostname;
+  if (hostname.endsWith("asterdev.me")) {
+    return ".asterdev.me";
+  }
+  return undefined;
+};
+
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
 export const supabase = isSupabaseConfigured
   ? createBrowserClient(url!, anonKey!, {
       cookieOptions: {
-        domain: import.meta.env.DEV ? undefined : '.asterdev.me',
+        domain: getCookieDomain(),
         path: '/',
         sameSite: 'lax',
       }
@@ -120,6 +129,8 @@ function translate(msg: string): string {
   if (m.includes("identity not found"))
     return "Identidade externa não encontrada ou já desvinculada.";
   if (m.includes("oauth")) return "Não foi possível iniciar o login externo. Tente de novo.";
+  if (m.includes("duplicate key") || m.includes("profiles_channel_key"))
+    return "Este nome de usuário (@) já está em uso por outro criador. Escolha outro.";
   return msg;
 }
 
@@ -205,7 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [recovering, setRecovering] = useState(false);
   const demo = !isSupabaseConfigured;
 
-  const syncUserWithProfile = useCallback(async (baseUser: StudioUser | null): Promise<StudioUser | null> => {
+  const syncUserWithProfile = useCallback(async (baseUser: StudioUser): Promise<StudioUser> => {
     if (!baseUser || !supabase) return baseUser;
     try {
       const { data: prof } = await supabase
@@ -284,11 +295,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const redirectTo = typeof window !== "undefined" ? window.location.origin + window.location.pathname : undefined;
 
   const signIn = useCallback<AuthCtx["signIn"]>(async (identifier, password) => {
+    const rawIdentifier = (identifier || "").trim();
+    if (!rawIdentifier || !password) {
+      return { ok: false, error: "Informe seu e-mail/usuário e sua senha." };
+    }
+
     if (!supabase) {
       await wait(650);
-      const isEmail = identifier.includes("@") && !identifier.startsWith("@");
+      const isEmail = rawIdentifier.includes("@") && !rawIdentifier.startsWith("@");
       const rec = demoUsers().find((u) => 
-        isEmail ? u.email.toLowerCase() === identifier.toLowerCase() : (u.channel || "").toLowerCase() === identifier.replace(/^@/, "").toLowerCase()
+        isEmail ? u.email.toLowerCase() === rawIdentifier.toLowerCase() : (u.channel || "").toLowerCase().replace(/^@/, "") === rawIdentifier.toLowerCase().replace(/^@/, "")
       );
       if (!rec || rec.password !== password) return { ok: false, error: "Usuário, e-mail ou senha incorretos." };
       const u = demoUserFrom(rec);
@@ -297,11 +313,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { ok: true };
     }
 
-    let email = identifier;
+    let email = rawIdentifier;
     
-    // Se não for um e-mail válido (não tem @ no meio), assumimos que é um username
-    if (!identifier.includes("@") || identifier.startsWith("@")) {
-      const channelStr = identifier.replace(/^@/, "").trim();
+    // Se não for um e-mail válido (não tem @ no meio), assumimos que é um username (@usuario ou usuario)
+    if (!rawIdentifier.includes("@") || rawIdentifier.startsWith("@")) {
+      const channelStr = rawIdentifier.replace(/^@/, "").trim();
       const { data, error } = await supabase.rpc("get_email_by_channel", { p_channel: channelStr });
       
       if (error || !data) {
@@ -310,10 +326,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email = data;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { ok: false, error: translate(error.message) };
+
+    if (data?.user) {
+      let u = mapUser(data.user as SbUser);
+      u = await syncUserWithProfile(u);
+      setUser(u);
+    }
+
     return { ok: true };
-  }, []);
+  }, [syncUserWithProfile]);
 
   const signUp = useCallback<AuthCtx["signUp"]>(
     async ({ email, password, name, channel }) => {
@@ -321,7 +344,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const isUsernameOnly = !email || !email.trim();
       const targetEmail = isUsernameOnly
         ? `${cleanChannel}@user.asterdev.me`
-        : email.trim();
+        : email.trim().toLowerCase();
 
       if (!cleanChannel && isUsernameOnly) {
         return { ok: false, error: "Informe seu e-mail ou seu nome de usuário." };
@@ -345,6 +368,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(u);
         return { ok: true };
       }
+
+      // Se informou um canal (@username), verificar antes se já não está em uso
+      if (cleanChannel) {
+        const { data: existingProfiles } = await supabase
+          .from("profiles")
+          .select("id, channel")
+          .or(`channel.eq.@${cleanChannel},channel.eq.${cleanChannel}`)
+          .limit(1);
+
+        if (existingProfiles && existingProfiles.length > 0) {
+          return { ok: false, error: "Este nome de usuário (@) já está em uso por outro criador. Escolha outro." };
+        }
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email: targetEmail,
         password,
@@ -368,6 +405,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password
         });
         if (loginRes.error) return { ok: false, error: translate(loginRes.error.message) };
+        if (loginRes.data?.user) {
+          let u = mapUser(loginRes.data.user as SbUser);
+          u = await syncUserWithProfile(u);
+          setUser(u);
+        }
         return { ok: true };
       }
 
@@ -377,9 +419,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           needsConfirmation: true,
           message: `Enviamos um link de confirmação para ${targetEmail}.`,
         };
+
+      if (data.user) {
+        let u = mapUser(data.user as SbUser);
+        u = await syncUserWithProfile(u);
+        setUser(u);
+      }
+
       return { ok: true };
     },
-    [redirectTo]
+    [redirectTo, syncUserWithProfile]
   );
 
   const signInWithOAuth = useCallback<AuthCtx["signInWithOAuth"]>(
@@ -468,10 +517,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password: tempPassword,
       });
       if (loginRes.error) return { ok: false, error: translate(loginRes.error.message) };
+      if (loginRes.data?.user) {
+        let u = mapUser(loginRes.data.user as SbUser);
+        u = await syncUserWithProfile(u);
+        setUser(u);
+      }
+    } else if (data.user) {
+      let u = mapUser(data.user as SbUser);
+      u = await syncUserWithProfile(u);
+      setUser(u);
     }
 
     return { ok: true };
-  }, []);
+  }, [syncUserWithProfile]);
 
   const sendMagicLink = useCallback<AuthCtx["sendMagicLink"]>(
     async (email) => {

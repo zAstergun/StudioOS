@@ -379,8 +379,11 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
   };
 
   const pw = strength(password, t);
+  const channelClean = channel.trim().replace(/^@/, '');
   const channelErr =
-    touched && mode === "signup" && signupMethod === "username" && (!channel.trim() || channel.trim().replace(/^@/, '').length < 3)
+    touched && mode === "signup" && signupMethod === "username" && (!channel.trim() || channelClean.length < 3)
+      ? t("auth.err_username_min", {}, "Informe um nome de usuário com pelo menos 3 caracteres.")
+      : touched && mode === "signup" && signupMethod === "email" && channel.trim() && channelClean.length < 3
       ? t("auth.err_username_min", {}, "Informe um nome de usuário com pelo menos 3 caracteres.")
       : undefined;
 
@@ -438,7 +441,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
       run(() => auth.signIn(em, password));
     } else if (mode === "signup") {
       if (signupMethod === "email") {
-        if (!EMAIL_RE.test(em) || password.length < 8 || confirm !== password || name.trim().length < 2 || !terms) return;
+        if (!EMAIL_RE.test(em) || password.length < 8 || confirm !== password || name.trim().length < 2 || !terms || (channel.trim() && channelClean.length < 3)) return;
       } else {
         const cleanChan = channel.replace(/^@/, "").trim();
         if (cleanChan.length < 3 || (em && !EMAIL_RE.test(em)) || password.length < 8 || confirm !== password || name.trim().length < 2 || !terms) return;
@@ -890,7 +893,7 @@ export function AuthScreen({ accessRequired = false }: { accessRequired?: boolea
                             }}
                           />
                         </div>
-                        {mode === "login" && (
+                        {(mode === "login" || mode === "signup") && (
                           <div className="pt-2 text-center">
                             <button
                               type="button"
