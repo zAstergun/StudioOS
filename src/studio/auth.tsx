@@ -673,7 +673,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!user) return { ok: false, error: "Não autenticado." };
 
-    const { error } = await supabase.auth.updateUser({ email: newEmail });
+    const { error } = await supabase.auth.updateUser(
+      { email: newEmail },
+      { emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined }
+    );
     
     if (error) return { ok: false, error: translate(error.message) };
     return { ok: true, message: "Enviamos um link de confirmação para o novo e-mail." };
