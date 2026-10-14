@@ -25,10 +25,10 @@ type SortTab = "global" | "likes" | "projects" | "ideas";
 // Fallback inicial enriquecido para garantir interface viva mesmo se offline
 const FALLBACK_CREATORS: CreatorRankItem[] = [
   {
-    id: "e6790a1d-e66a-4541-ae21-682254a87a49",
+    id: "creator-dirwen",
     full_name: "Diruen",
     channel: "dirwen",
-    avatar_url: "https://yofvcyarznuvqntgslep.supabase.co/storage/v1/object/public/avatars/e6790a1d-e66a-4541-ae21-682254a87a49-0.7857135771586806.jpg",
+    avatar_url: null,
     bio: "Criador audiovisual & estrategista de canais no StudioOS.",
     likes_count: 12,
     completed_projects: 4,
@@ -38,10 +38,10 @@ const FALLBACK_CREATORS: CreatorRankItem[] = [
     streak: 8,
   },
   {
-    id: "3fc81e66-3040-4cb7-9ed3-e4680c61a11c",
+    id: "creator-astertest",
     full_name: "Aster Test",
     channel: "astertest",
-    avatar_url: "https://yofvcyarznuvqntgslep.supabase.co/storage/v1/object/public/avatars/3fc81e66-3040-4cb7-9ed3-e4680c61a11c-0.4603541136560517.jpg",
+    avatar_url: null,
     bio: "Testando fluxos de produção, retenção e roteiros neurais.",
     likes_count: 8,
     completed_projects: 3,
@@ -51,7 +51,7 @@ const FALLBACK_CREATORS: CreatorRankItem[] = [
     streak: 5,
   },
   {
-    id: "1c697110-ce0d-498b-88cb-5e1597676d57",
+    id: "creator-ratoratulho",
     full_name: "Rato Ratulho",
     channel: "ratoratulho",
     avatar_url: null,
