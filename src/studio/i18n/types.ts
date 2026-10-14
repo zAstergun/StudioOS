@@ -15,6 +15,8 @@ export type SupportedLanguage =
   | "ru"
   | "vi";
 
+export type Language = SupportedLanguage;
+
 export type LanguageSetting = "system" | SupportedLanguage;
 
 export interface LanguageOption {
