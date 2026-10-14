@@ -117,8 +117,7 @@ begin
   if coalesce((new.raw_user_meta_data ->> 'is_temporary')::boolean, false) = true
      or coalesce((new.raw_user_meta_data ->> 'registered_with_username')::boolean, false) = true then
     update auth.users
-    set email_confirmed_at = coalesce(email_confirmed_at, now()),
-        confirmed_at = coalesce(confirmed_at, now())
+    set email_confirmed_at = coalesce(email_confirmed_at, now())
     where id = new.id and email_confirmed_at is null;
   end if;
 
